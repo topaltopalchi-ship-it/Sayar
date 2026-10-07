@@ -194,7 +194,7 @@ export async function updateTransaction(id: string, input: {
       if ((stock.get(line.productId) ?? 0) < line.quantity) throw new Error("موجودی کالا برای این فروش کافی نیست");
     }
   }
-  const amount = transactionTotal(input.lines);
+  const amount = current.type === "receipt" || current.type === "payment" ? Math.max(0, Math.round(input.paid)) : transactionTotal(input.lines);
   const updated: Transaction = { ...current, date: input.date, partyId: input.partyId, accountId: input.accountId, description: input.description, lines: input.lines, paid: Math.max(0, input.paid), amount };
   if (updated.type === "sale") updated.costOfGoods = calculateHistoricalCOGS((await listTransactions()).filter(t => t.id !== id).concat(updated), products).get(id) ?? 0;
   const entries = await listAccountEntries();
