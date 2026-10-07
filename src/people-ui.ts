@@ -140,6 +140,25 @@ async function renderReport(from = 0, to = Date.now(), label = "همه دوره"
   const cogs = calculateHistoricalCOGS(transactions, products);
   const grossProfit = sales.reduce((sum,t)=>sum+t.amount-(cogs.get(t.id) ?? t.costOfGoods ?? 0),0);
   const netProfit = grossProfit - expensesTotal;
+  const productMap = new Map(products.map(p => [p.id, p]));
+  const productStats = new Map<string, { quantity: number; sales: number; cogs: number }>();
+  for (const sale of sales) {
+    const saleCogs = cogs.get(sale.id) ?? sale.costOfGoods ?? 0;
+    const saleBase = sale.amount || 1;
+    for (const line of sale.lines) {
+      const item = productStats.get(line.productId) ?? { quantity: 0, sales: 0, cogs: 0 };
+      const share = lineTotal(line) / saleBase;
+      item.quantity += line.quantity;
+      item.sales += lineTotal(line);
+      item.cogs += saleCogs * share;
+      productStats.set(line.productId, item);
+    }
+  }
+  const productRows = [...productStats.entries()].sort((a,b) => (b[1].sales - b[1].cogs) - (a[1].sales - a[1].cogs)).map(([id,s]) => {
+    const product = productMap.get(id);
+    const profit = s.sales - s.cogs;
+    return `<div class="product-profit-row"><span><b>${product?.name || "کالای حذف‌شده"}</b><small>${money.format(s.quantity)} ${product?.unit || "واحد"} · فروش ${rial(s.sales)}</small></span><strong>${rial(profit)}</strong></div>`;
+  }).join("");
 
   const anchor = view.querySelector(".report-list");
   const parent = anchor?.parentElement;
@@ -164,6 +183,10 @@ async function renderReport(from = 0, to = Date.now(), label = "همه دوره"
       <article class="stat-card warning"><span>خرید</span><strong>${rial(purchasesTotal)}</strong></article>
       <article class="stat-card success"><span>دریافت</span><strong>${rial(receiptsTotal)}</strong></article>
       <article class="stat-card danger"><span>هزینه</span><strong>${rial(expensesTotal)}</strong></article>
+    </section>
+    <section class="panel product-profit-panel">
+      <div class="product-profit-title"><span>سود هر کالا</span><small>بر اساس بازه انتخاب‌شده</small></div>
+      <div class="product-profit-list">${productRows || '<div class="empty-inline"><span>◌</span><p>در این بازه فروش کالایی ثبت نشده است.</p></div>'}</div>
     </section>
     <section class="panel report-list">
       <div><span>سود ناخالص تقریبی</span><b>${rial(grossProfit)}</b></div>
