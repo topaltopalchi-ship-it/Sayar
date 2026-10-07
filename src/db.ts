@@ -195,6 +195,10 @@ export interface PartyBalance {
   purchases: number;
   receipts: number;
   payments: number;
+  pendingReceivedChecks: number;
+  pendingIssuedChecks: number;
+  clearedReceivedChecks: number;
+  clearedIssuedChecks: number;
 }
 
 export async function getPartyBalances(): Promise<Record<string, PartyBalance>> {
@@ -205,6 +209,7 @@ export async function getPartyBalances(): Promise<Record<string, PartyBalance>> 
     if (!t.partyId) continue;
     const current = balances[t.partyId] ?? {
       partyId: t.partyId, balance: 0, sales: 0, purchases: 0, receipts: 0, payments: 0,
+      pendingReceivedChecks: 0, pendingIssuedChecks: 0, clearedReceivedChecks: 0, clearedIssuedChecks: 0,
     };
 
     if (t.type === "sale") {
@@ -222,6 +227,23 @@ export async function getPartyBalances(): Promise<Record<string, PartyBalance>> 
     }
 
     balances[t.partyId] = current;
+  }
+
+  const checks = await listChecks();
+  for (const check of checks) {
+    if (!check.partyId) continue;
+    const current = balances[check.partyId] ?? {
+      partyId: check.partyId, balance: 0, sales: 0, purchases: 0, receipts: 0, payments: 0,
+      pendingReceivedChecks: 0, pendingIssuedChecks: 0, clearedReceivedChecks: 0, clearedIssuedChecks: 0,
+    };
+    if (check.direction === "received") {
+      if (check.status === "pending") current.pendingReceivedChecks += check.amount;
+      if (check.status === "cleared") current.clearedReceivedChecks += check.amount;
+    } else {
+      if (check.status === "pending") current.pendingIssuedChecks += check.amount;
+      if (check.status === "cleared") current.clearedIssuedChecks += check.amount;
+    }
+    balances[check.partyId] = current;
   }
 
   return balances;
