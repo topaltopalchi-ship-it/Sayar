@@ -116,3 +116,23 @@ export interface AccountEntry {
   description: string;
   transferId?: ID;
 }
+
+
+export type CheckDirection = "received" | "issued";
+export type CheckStatus = "pending" | "cleared" | "bounced" | "spent" | "cancelled";
+
+export interface Check {
+  id: ID;
+  direction: CheckDirection;
+  number: string;
+  bank: string;
+  issuerName: string;
+  amount: Money;
+  issueDate: number;
+  dueDate: number;
+  partyId?: ID;
+  accountId?: ID;
+  status: CheckStatus;
+  description: string;
+  createdAt: number;
+}
