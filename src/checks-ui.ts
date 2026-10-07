@@ -20,21 +20,21 @@ export async function checksView(): Promise<string> {
 }
 const moneyFormat = (v:number) => new Intl.NumberFormat("fa-IR").format(v);
 
-export function checkModal(direction: CheckDirection, parties: Array<{id:string;name:string}> = [], accounts: Array<{id:string;name:string}> = []): string {
+export function checkModal(direction: CheckDirection, parties: Array<{id:string;name:string}> = [], accounts: Array<{id:string;name:string}> = [], existing?: Check): string {
   const title = direction === "received" ? "ثبت چک دریافتی" : "ثبت چک پرداختی";
   return `<div class="modal-backdrop" id="check-modal"><section class="modal"><button class="modal-close" id="check-close">×</button><span class="eyebrow">چک و سررسید</span><h2>${title}</h2>
-  <label class="field"><span>شماره چک</span><input id="check-number" inputmode="numeric" placeholder="مثلاً ۱۲۳۴۵۶" value="${(arguments[3] as Check | undefined)?.number || ""}"></label>
+  <label class="field"><span>شماره چک</span><input id="check-number" inputmode="numeric" placeholder="مثلاً ۱۲۳۴۵۶" value="${existing?.number || ""}"></label>
   <label class="field"><span>بانک</span><input id="check-bank" placeholder="مثلاً بانک ملی" value="${(arguments[3] as Check | undefined)?.bank || ""}"></label>
   <label class="field"><span>نام صادرکننده / صاحب چک</span><input id="check-issuer" value="${(arguments[3] as Check | undefined)?.issuerName || ""}"></label><label class="field"><span>طرف حساب</span><select id="check-party"><option value="">بدون انتخاب</option>${parties.map(p => `<option value="${p.id}">${p.name}</option>`).join("")}</select><label class="field"><span>حساب مالی</span><select id="check-account"><option value="">بدون انتخاب</option>${accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join("")}</select></label>
   <label class="field"><span>مبلغ</span><input id="check-amount" type="number" min="1" value="${(arguments[3] as Check | undefined)?.amount ?? ""}"></label>
-  <label class="field"><span>تاریخ صدور شمسی</span><input id="check-issue" placeholder="۱۴۰۵/۰۱/۰۱" value="${(arguments[3] as Check | undefined)?.issueDate ? dateLabel((arguments[3] as Check).issueDate).replace(/-/g,"/") : ""}"></label>
+  <label class="field"><span>تاریخ صدور شمسی</span><input id="check-issue" placeholder="۱۴۰۵/۰۱/۰۱" value="${(arguments[3] as Check | undefined)?.issueDate ? dateLabel(existing as Check.issueDate).replace(/-/g,"/") : ""}"></label>
   <label class="field"><span>تاریخ سررسید شمسی</span><input id="check-due" placeholder="۱۴۰۵/۰۲/۰۱" value="${(arguments[3] as Check | undefined)?.dueDate ? dateLabel((arguments[3] as Check).dueDate).replace(/-/g,"/") : ""}"></label>
   <label class="field"><span>شرح</span><input id="check-description" placeholder="توضیحات اختیاری" value="${(arguments[3] as Check | undefined)?.description || ""}"></label>
   <button class="primary-button wide" id="check-submit">${(arguments[3] as Check | undefined) ? "ذخیره تغییرات" : "ثبت چک"}</button></section></div>`;
 }
 
 function jalaliDate(value: string): number | null {
-  const m=value.trim().match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/); if(!m) return null;
+  const normalized=value.trim().replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))); const m=normalized.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/); if(!m) return null;
   const jy=+m[1], jm=+m[2], jd=+m[3]; if(jm<1||jm>12||jd<1||jd>31)return null;
   let j=jy+1597, days=-355668+365*j+Math.floor(j/33)*8+Math.floor(((j%33)+3)/4)+jd+(jm<7?(jm-1)*31:(jm-7)*30+186);
   let gy=400*Math.floor(days/146097); days%=146097; if(days>36524){gy+=100*Math.floor(--days/36524);days%=36524;if(days>=365)days++} gy+=4*Math.floor(days/1461);days%=1461;if(days>365){gy+=Math.floor((days-1)/365);days=(days-1)%365}
