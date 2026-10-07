@@ -63,7 +63,7 @@ const rial = (v: number) => formatMoney(v);
 const dateLabel = (v: number) => new Intl.DateTimeFormat("fa-IR-u-ca-persian", {year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(v));
 
 async function enhancePeople(): Promise<void> {
-  const view = document.querySelector("#view");
+  const view = document.querySelector<HTMLElement>("#view");
   if (!view || !view.querySelector(".person-row") || view.dataset.balanceEnhanced === "1") return;
   view.dataset.balanceEnhanced = "1";
   const [parties, balances, checks] = await Promise.all([listParties(), getPartyBalances(), listChecks()]);
