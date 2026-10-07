@@ -24,12 +24,13 @@ function isProfessionalMode(): boolean { return localStorage.getItem(UI_MODE_KEY
 function setProfessionalMode(value: boolean): void { localStorage.setItem(UI_MODE_KEY, value ? "professional" : "simple"); }
 function uiModeModal(): string {
   const professional = isProfessionalMode();
-  return `<div class="modal-backdrop" id="ui-mode-modal"><section class="modal ui-mode-modal"><button class="modal-close" id="ui-mode-close">×</button><span class="eyebrow">شخصی‌سازی سای‌سای</span><h2>حالت کاربری</h2><p class="muted">اگر حسابدار نیستید، حالت ساده منوها و گزینه‌های ضروری را خلوت نگه می‌دارد.</p><label class="professional-toggle"><input id="professional-mode" type="checkbox" ${professional ? "checked" : ""}><span><b>نسخه حرفه‌ای</b><small>گزارش‌های پیشرفته، تنظیمات بیشتر و ابزارهای مدیریتی نمایش داده شوند.</small></span></label><div class="mode-hint">${professional ? "حالت حرفه‌ای فعال است." : "حالت ساده برای استفاده روزمره فعال است."}</div><button class="primary-button wide" id="ui-mode-save">ذخیره و اعمال</button></section></div>`;
+  return `<div class="modal-backdrop" id="ui-mode-modal"><section class="modal ui-mode-modal"><button class="modal-close" id="ui-mode-close">×</button><span class="eyebrow">شخصی‌سازی سای‌سای</span><h2>حالت کاربری</h2><p class="muted">اگر حسابدار نیستید، حالت ساده منوها و گزینه‌های ضروری را خلوت نگه می‌دارد.</p><label class="professional-toggle"><input id="professional-mode" type="checkbox" ${professional ? "checked" : ""}><span><b>نسخه حرفه‌ای</b><small>گزارش‌های پیشرفته، تنظیمات بیشتر و ابزارهای مدیریتی نمایش داده شوند.</small></span></label><button class="secondary-button wide" id="subscription-settings">مدیریت اشتراک</button><div class="mode-hint">${professional ? "حالت حرفه‌ای فعال است." : "حالت ساده برای استفاده روزمره فعال است."}</div><button class="primary-button wide" id="ui-mode-save">ذخیره و اعمال</button></section></div>`;
 }
 function bindUiModeModal(): void {
   const modal = document.querySelector<HTMLDivElement>("#ui-mode-modal");
   if (!modal) return;
   modal.querySelector("#ui-mode-close")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#subscription-settings")?.addEventListener("click", async () => { modal.remove(); const subscription = await getSubscription().catch(() => ({ status: "none", plan: "none", expiresAt: null } as Subscription)); showSubscription(subscription); });
   modal.querySelector("#ui-mode-save")?.addEventListener("click", async () => {
     const enabled = modal.querySelector<HTMLInputElement>("#professional-mode")?.checked ?? false;
     setProfessionalMode(enabled);
