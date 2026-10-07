@@ -51,5 +51,5 @@ export function formatJalaliInput(value: string): string {
 }
 
 export function toPersianDigits(value: string): string {
-  return value.replace(/\\d/g, d => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
+  return value.replace(/\d/g, d => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
 }
