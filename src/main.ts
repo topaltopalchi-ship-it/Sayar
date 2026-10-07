@@ -92,7 +92,7 @@ function transactionRow(t: Transaction): string {
     sale: "فروش", purchase: "خرید", receipt: "دریافت", payment: "پرداخت", expense: "هزینه", stockAdjustment: "اصلاح موجودی"
   };
   const icons: Record<Transaction["type"], string> = { sale: "↗", purchase: "↙", receipt: "↓", payment: "↑", expense: "−", stockAdjustment: "±" };
-  return `<div class="transaction-row"><div class="transaction-icon">${icons[t.type]}</div><div class="transaction-main"><strong>${labels[t.type]}</strong><small>${t.description || dateLabel(t.date)}</small></div><b>${rial(t.amount)}</b></div>`;
+  return `<div class="transaction-row"><div class="transaction-icon">${icons[t.type]}</div><div class="transaction-main"><strong>${labels[t.type]}${t.invoiceNumber ? ` · ${t.invoiceNumber}` : ""}</strong><small>${t.description || dateLabel(t.date)} · ${dateLabel(t.date)}</small></div><b>${rial(t.amount)}</b></div>`;
 }
 
 function saleModal(): string {
