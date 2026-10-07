@@ -1,5 +1,6 @@
 import { addParty, addSettlement, calculateHistoricalCOGS, getPartyBalances, listExpenses, listParties, listProducts, listTransactions } from "./db";
 import { lineTotal, type Party, type PartyType } from "./domain";
+import { formatMoney } from "./settings";
 
 const typeLabel: Record<PartyType,string> = {
   customer: "مشتری",
@@ -56,7 +57,7 @@ export async function saveSettlement(partyId: string, type: "receipt"|"payment",
 export { typeLabel };
 
 const money = new Intl.NumberFormat("fa-IR");
-const rial = (v: number) => `${money.format(Math.round(v))} ریال`;
+const rial = (v: number) => formatMoney(v);
 const dateLabel = (v: number) => new Intl.DateTimeFormat("fa-IR-u-ca-persian", {year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(v));
 
 async function enhancePeople(): Promise<void> {
