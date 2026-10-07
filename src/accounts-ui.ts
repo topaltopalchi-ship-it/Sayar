@@ -4,7 +4,8 @@ import type { Account, AccountType } from "./domain";
 
 const money = new Intl.NumberFormat("fa-IR");
 const dateTime = new Intl.DateTimeFormat("fa-IR-u-ca-persian", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-const rial = (v: number) => formatMoney(v);\nconst entryLabel = (type: Account["type"] | "deposit" | "withdraw" | "transfer") => ({ deposit: "واریز / دریافت", withdraw: "برداشت / پرداخت", transfer: "انتقال بین حساب‌ها" } as Record<string,string>)[type] || "گردش";
+const rial = (v: number) => formatMoney(v);
+const entryLabel = (type: Account["type"] | "deposit" | "withdraw" | "transfer") => ({ deposit: "واریز / دریافت", withdraw: "برداشت / پرداخت", transfer: "انتقال بین حساب‌ها" } as Record<string,string>)[type] || "گردش";
 
 export async function accountsView(): Promise<string> {
   const [accounts, balances] = await Promise.all([listAccounts(), getAccountBalances()]);
