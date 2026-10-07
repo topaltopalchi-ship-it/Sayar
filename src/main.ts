@@ -741,7 +741,7 @@ async function render(): Promise<void> {
   }));
   document.querySelector("#more-refresh")?.addEventListener("click", () => render());
   window.addEventListener("sai-sai-refresh", () => { void render(); });
-  root.addEventListener("input", event => {
+  document.addEventListener("input", (event: Event) => {
     const input = (event.target as HTMLElement).closest<HTMLInputElement>("#report-from-date, #report-to-date");
     if (!input) return;
     const pos = input.selectionStart ?? input.value.length;
@@ -754,7 +754,7 @@ async function render(): Promise<void> {
       input.setSelectionRange(caret, caret);
     }
   });
-  root.addEventListener("keydown", event => {
+  document.addEventListener("keydown", (event: KeyboardEvent) => {
     if ((event.target as HTMLElement).closest<HTMLInputElement>("#report-from-date, #report-to-date") && event.key === "Enter") {
       event.preventDefault();
       document.querySelector<HTMLElement>("#report-apply-range")?.click();
