@@ -17,9 +17,9 @@ export interface StorePurchase {
 
 const API_BASE = (import.meta.env.VITE_BILLING_API_URL as string | undefined)?.replace(/\/$/, "");
 const BILLING_DISABLED = (import.meta.env.VITE_BILLING_DISABLED as string | undefined) === "true";
-const TRIAL_DAYS = 30;
+const TRIAL_DAYS = 30;\n// This versioned key starts a fresh 30-day trial for the current test/release build.\n// A production store release should move entitlement enforcement to the store/backend.
 const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000;
-const TRIAL_STARTED_KEY = "sai-sai-trial-started-at";
+const TRIAL_STARTED_KEY = "sai-sai-trial-started-at-v2";
 
 function getTrialStartedAt(): number {
   const stored = Number(localStorage.getItem(TRIAL_STARTED_KEY));
