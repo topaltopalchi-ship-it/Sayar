@@ -82,3 +82,6 @@ body{background:radial-gradient(circle at 12% 0,#223657 0,#10182a 34%,#090e1b 78
 .report-slash{flex:0 0 44px;border:1px solid #385277;border-radius:13px;background:#162238;color:#fff !important;font-size:20px;font-weight:800;line-height:1}
 .report-slash:active,.report-slash:focus{background:#2563eb;color:#fff !important;outline:none}
 .report-custom-range .field span{color:#d5deed}
+
+/* Sayar brand logo */
+.brand-block{display:flex;align-items:center;gap:10px;min-width:0}.brand-logo{width:52px;height:52px;flex:0 0 52px;border-radius:15px;display:block;object-fit:cover;box-shadow:0 8px 22px #02061755;border:1px solid #2f4f86}.brand-block h1{white-space:nowrap}
