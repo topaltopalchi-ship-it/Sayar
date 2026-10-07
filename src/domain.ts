@@ -40,6 +40,8 @@ export interface TransactionLine {
   discount: Money;
 }
 
+export type SettlementType = "receipt" | "payment";
+
 export interface Transaction {
   id: ID;
   type: TransactionType;
