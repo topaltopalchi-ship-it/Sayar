@@ -341,7 +341,7 @@ function peopleView(): string {
   const customerCount = parties.filter(p => p.type === "customer" || p.type === "both").length;
   const supplierCount = parties.filter(p => p.type === "supplier" || p.type === "both").length;
   return pageHead("دفتر اشخاص", "مشتریان و تأمین‌کنندگان", `${money.format(customerCount)} مشتری · ${money.format(supplierCount)} تأمین‌کننده`, `<button class="primary-button" id="new-party">＋ افزودن شخص</button>`) +
-    `<section class="panel">${parties.length ? parties.map(p => `<div class="person-row"><div class="person-avatar">${p.name.slice(0,1)}</div><div><strong>${p.name}</strong><small>${p.phone || "بدون شماره"} · ${p.type === "customer" ? "مشتری" : p.type === "supplier" ? "تأمین‌کننده" : "مشتری و تأمین‌کننده"}</small></div></div>`).join("") : `<div class="empty-inline"><span>♙</span><p>هنوز شخصی ثبت نشده است.</p></div>`}</section>`;
+    `<section class="panel">${parties.length ? parties.map(p => `<div class="person-row"><div class="person-avatar">${p.name.slice(0,1)}</div><div><strong>${p.name}</strong><small>${p.phone || "بدون شماره"} · ${p.type === "customer" ? "مشتری" : p.type === "supplier" ? "تأمین‌کننده" : "مشتری و تأمین‌کننده"}</small></div><span class="account-actions"><button type="button" class="secondary-button" data-party-edit="${p.id}">ویرایش</button><button type="button" class="secondary-button" data-party-delete="${p.id}">حذف</button></span></div>`).join("") : `<div class="empty-inline"><span>♙</span><p>هنوز شخصی ثبت نشده است.</p></div>`}</section>`;
 }
 
 async function reportsView(transactions: Transaction[]): Promise<string> {
@@ -439,12 +439,12 @@ async function openSettlement(type: "receipt" | "payment"): Promise<void> {
   });
 }
 
-function partyModal(): string {
-  return `<div class="modal-backdrop" id="party-modal"><section class="modal"><button class="modal-close" id="party-close">×</button><span class="eyebrow">دفتر اشخاص</span><h2>افزودن شخص</h2>
-    <label class="field"><span>نام</span><input id="party-name" placeholder="نام مشتری یا تأمین‌کننده"></label>
-    <label class="field"><span>شماره تماس</span><input id="party-phone" inputmode="tel" placeholder="اختیاری"></label>
-    <label class="field"><span>نوع</span><select id="party-type"><option value="customer">مشتری</option><option value="supplier">تأمین‌کننده</option><option value="both">هر دو</option></select></label>
-    <button class="primary-button wide" id="party-submit">ذخیره شخص</button></section></div>`;
+function partyModal(party?: Party): string {
+  return `<div class="modal-backdrop" id="party-modal"><section class="modal"><button class="modal-close" id="party-close">×</button><span class="eyebrow">دفتر اشخاص</span><h2>${party ? "ویرایش شخص" : "افزودن شخص"}</h2>
+    <label class="field"><span>نام</span><input id="party-name" placeholder="نام مشتری یا تأمین‌کننده" value="${party?.name || ""}"></label>
+    <label class="field"><span>شماره تماس</span><input id="party-phone" inputmode="tel" placeholder="اختیاری" value="${party?.phone || ""}"></label>
+    <label class="field"><span>نوع</span><select id="party-type"><option value="customer" ${party?.type === "customer" ? "selected" : ""}>مشتری</option><option value="supplier" ${party?.type === "supplier" ? "selected" : ""}>تأمین‌کننده</option><option value="both" ${party?.type === "both" ? "selected" : ""}>هر دو</option></select></label>
+    <button class="primary-button wide" id="party-submit">${party ? "ذخیره تغییرات" : "ذخیره شخص"}</button></section></div>`;
 }
 
 function bindPartyModal(): void {
@@ -454,8 +454,16 @@ function bindPartyModal(): void {
     try {
       const name = modal.querySelector<HTMLInputElement>("#party-name")!.value.trim();
       if (!name) throw new Error("نام شخص الزامی است");
-      await addParty({ name, phone: modal.querySelector<HTMLInputElement>("#party-phone")!.value.trim(), type: modal.querySelector<HTMLSelectElement>("#party-type")!.value as Party["type"] });
-      modal.remove(); showToast("شخص با موفقیت ثبت شد"); await render();
+      const values = { name, phone: modal.querySelector<HTMLInputElement>("#party-phone")!.value.trim(), type: modal.querySelector<HTMLSelectElement>("#party-type")!.value as Party["type"] };
+      const editId = modal.dataset.editId;
+      if (editId) {
+        const existing = (await listParties()).find(p => p.id === editId);
+        if (!existing) throw new Error("شخص پیدا نشد");
+        await updateParty({ ...existing, ...values });
+      } else {
+        await addParty(values);
+      }
+      modal.remove(); showToast(modal.dataset.editId ? "تغییرات شخص ذخیره شد" : "شخص با موفقیت ثبت شد"); await render();
     } catch (e) { showToast(e instanceof Error ? e.message : "ذخیره شخص ناموفق بود"); }
   });
 }
@@ -572,6 +580,19 @@ async function render(): Promise<void> {
     try { await deleteProduct(product.id); showToast("کالا حذف شد"); await render(); } catch (e) { showToast(e instanceof Error ? e.message : "حذف کالا ناموفق بود"); }
   });
   document.querySelector("#new-party")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", partyModal()); bindPartyModal(); });
+  document.querySelectorAll<HTMLElement>("[data-party-edit]").forEach(button => button.addEventListener("click", async event => {
+    event.stopPropagation();
+    const id = button.dataset.partyEdit; const party = id ? (await listParties()).find(p => p.id === id) : undefined;
+    if (!party) return;
+    document.body.insertAdjacentHTML("beforeend", partyModal(party));
+    const modal = document.querySelector<HTMLElement>("#party-modal"); if (modal) { modal.dataset.editId = party.id; bindPartyModal(); }
+  }));
+  document.querySelectorAll<HTMLElement>("[data-party-delete]").forEach(button => button.addEventListener("click", async event => {
+    event.stopPropagation();
+    const id = button.dataset.partyDelete; const party = id ? (await listParties()).find(p => p.id === id) : undefined;
+    if (!party || !confirm(`شخص «${party.name}» حذف شود؟`)) return;
+    try { await deleteParty(party.id); showToast("شخص حذف شد"); await render(); } catch (e) { showToast(e instanceof Error ? e.message : "حذف شخص ناموفق بود"); }
+  }));
   document.querySelector("#new-received-check")?.addEventListener("click", async () => { const [parties,accounts]=await Promise.all([listParties(),listAccounts()]); document.body.insertAdjacentHTML("beforeend", checkModal("received",parties,accounts)); const modal=document.querySelector<HTMLElement>("#check-modal"); if(modal) void bindCheckModal(modal,"received",async m=>{showToast(m);await render();}); });
   document.querySelector("#new-issued-check")?.addEventListener("click", async () => { const [parties,accounts]=await Promise.all([listParties(),listAccounts()]); document.body.insertAdjacentHTML("beforeend", checkModal("issued",parties,accounts)); const modal=document.querySelector<HTMLElement>("#check-modal"); if(modal) void bindCheckModal(modal,"issued",async m=>{showToast(m);await render();}); });
   void bindCheckStatuses(m=>showToast(m));
