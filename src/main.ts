@@ -380,7 +380,7 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
 function reportExcelCsv(transactions: Transaction[]): void {
   const rows = [["نوع","تاریخ","مبلغ","پرداخت","شرح"]];
   for (const t of transactions) rows.push([t.type, dateLabel(t.date), String(t.amount), String(t.paid), t.description || ""]);
-  const csv = "\uFEFF" + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const csv = "\uFEFF" + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join(String.fromCharCode(10));
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href=url; a.download=`sai-sai-report-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url);
 }
