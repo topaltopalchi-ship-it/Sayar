@@ -360,8 +360,16 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
     `<section class="stats-grid">${stat("فروش",rial(sales),"primary")}${stat("بهای تمام‌شده",rial(cost),"warning")}${stat("سود ناخالص",rial(gross),"success")}${stat("سود خالص",rial(net),"success")}</section>` +
     `<section class="panel report-list"><div><span>خرید</span><b>${rial(purchases)}</b></div><div><span>هزینه</span><b>${rial(expenseTotal)}</b></div><div><span>دریافت</span><b>${rial(receipts)}</b></div><div><span>پرداخت</span><b>${rial(payments)}</b></div><div><span>خالص جریان نقدی</span><b>${rial(receipts-payments-expenseTotal)}</b></div><div><span>تعداد فروش</span><b>${money.format(salesTx.length)}</b></div></section>` + reportExportButtons()
 }
+function reportExcelCsv(transactions: Transaction[]): void {
+  const rows = [["نوع","تاریخ","مبلغ","پرداخت","شرح"]];
+  for (const t of transactions) rows.push([t.type, dateLabel(t.date), String(t.amount), String(t.paid), t.description || ""]);
+  const csv = "\uFEFF" + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href=url; a.download=`sai-sai-report-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url);
+}
+
 function reportExportButtons(): string {
-  return `<section class="panel"><div class="page-head-row"><div><strong>خروجی گزارش</strong><p class="muted">گزارش فعلی را برای چاپ یا ذخیره PDF آماده کنید.</p></div><button class="secondary-button" id="report-print">چاپ / PDF</button></div></section>`;
+  return `<section class="panel"><div class="page-head-row"><div><strong>خروجی گزارش</strong><p class="muted">گزارش فعلی را برای چاپ یا ذخیره PDF آماده کنید.</p></div><button class="secondary-button" id="report-csv">Excel / CSV</button><button class="secondary-button" id="report-print">چاپ / PDF</button></div></section>`;
 }
 
 function expenseModal(): string {
@@ -523,6 +531,7 @@ async function render(): Promise<void> {
   document.querySelector("#more-refresh")?.addEventListener("click", () => render());
   document.querySelectorAll<HTMLElement>("[data-report-range]").forEach(b => b.addEventListener("click", async () => { localStorage.setItem("sai-sai-report-range", b.dataset.reportRange || "month"); await render(); }));
   document.querySelector("#report-print")?.addEventListener("click", () => window.print());
+  document.querySelector("#report-csv")?.addEventListener("click", async () => reportExcelCsv(await listTransactions()));
   document.querySelector("#more-backup")?.addEventListener("click", async () => {
     const [products, parties, transactions, expenses, accounts, accountEntries, checks] = await Promise.all([listProducts(), listParties(), listTransactions(), listExpenses(), listAccounts(), (await import("./db")).listAccountEntries(), (await import("./db")).listChecks()]);
     const payload = { version: 2, exportedAt: Date.now(), products, parties, transactions, expenses, accounts, accountEntries, checks };
