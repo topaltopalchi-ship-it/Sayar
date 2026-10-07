@@ -202,6 +202,30 @@ export async function addSale(input: {
   });
 }
 
+
+export async function addPurchase(input: {
+  date: number;
+  partyId?: string;
+  description: string;
+  lines: Transaction["lines"];
+  paid: number;
+}): Promise<Transaction> {
+  if (!input.lines.length) throw new Error("حداقل یک کالا برای خرید لازم است");
+  for (const line of input.lines) {
+    if (line.quantity <= 0) throw new Error("مقدار خرید باید بیشتر از صفر باشد");
+    if (line.unitPrice < 0) throw new Error("قیمت خرید نمی‌تواند منفی باشد");
+  }
+
+  return addTransaction({
+    type: "purchase",
+    date: input.date,
+    partyId: input.partyId,
+    description: input.description,
+    lines: input.lines,
+    paid: Math.max(0, input.paid),
+  });
+}
+
 export async function seedDemoIfEmpty(): Promise<void> {
   const products = await listProducts();
   if (products.length) return;
