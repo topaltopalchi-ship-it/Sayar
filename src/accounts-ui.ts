@@ -78,13 +78,55 @@ export async function accountLedgerModal(accountId: string): Promise<string> {
   const balance = account.openingBalance + entries.reduce((s,e)=>s+e.amount,0);
   const deposits = entries.filter(e=>e.amount>0).reduce((s,e)=>s+e.amount,0);
   const withdrawals = entries.filter(e=>e.amount<0).reduce((s,e)=>s+Math.abs(e.amount),0);
-  const rows = [...entries].reverse().map(e => `<div class="transaction-row"><div class="transaction-icon">${e.amount >= 0 ? "↓" : "↑"}</div><div class="transaction-main"><strong>${entryLabel(e.type)}</strong><small>${e.description || "بدون شرح"} · ${dateTime.format(new Date(e.date))}</small></div><b>${e.amount >= 0 ? "+" : ""}${rial(e.amount)}</b></div>`).join("");
+  const rows = [...entries].reverse().map(e => {
+    const sourceLocked = Boolean(e.referenceId);
+    const transfer = Boolean(e.transferId);
+    const actions = sourceLocked
+      ? '<small class="muted">برای اصلاح، سند اصلی را ویرایش کنید</small>'
+      : transfer
+        ? `<span class="account-entry-actions"><button type="button" class="secondary-button" data-transfer-edit="${e.transferId}">ویرایش انتقال</button><button type="button" class="secondary-button" data-transfer-delete="${e.transferId}">حذف انتقال</button></span>`
+        : `<span class="account-entry-actions"><button type="button" class="secondary-button" data-account-entry-edit="${e.id}">ویرایش</button><button type="button" class="secondary-button" data-account-entry-delete="${e.id}">حذف</button></span>`;
+    return `<div class="transaction-row"><div class="transaction-icon">${e.amount >= 0 ? "↓" : "↑"}</div><div class="transaction-main"><strong>${entryLabel(e.type)}</strong><small>${e.description || "بدون شرح"} · ${dateTime.format(new Date(e.date))}</small>${actions}</div><b>${e.amount >= 0 ? "+" : ""}${rial(e.amount)}</b></div>`;
+  }).join("");
   return `<div class="modal-backdrop" id="account-ledger-modal"><section class="modal ledger-modal"><button class="modal-close" id="account-ledger-close">×</button><span class="eyebrow">گردش حساب</span><h2>${account.name}</h2><p class="muted">${account.type === "bank" ? "حساب بانکی" : "صندوق نقدی"}</p>
     <section class="stats-grid"><article class="stat-card primary"><span>موجودی اول دوره</span><strong>${rial(account.openingBalance)}</strong></article><article class="stat-card success"><span>ورودی</span><strong>${rial(deposits)}</strong></article><article class="stat-card danger"><span>خروجی</span><strong>${rial(withdrawals)}</strong></article><article class="stat-card warning"><span>مانده فعلی</span><strong>${rial(balance)}</strong></article></section>
-    <section class="panel"><div class="section-head"><h3>ریز گردش</h3><span class="muted">${money.format(entries.length)} ثبت</span></div>${rows || '<div class="empty-inline"><span>◌</span><p>هنوز گردش مالی ثبت نشده است.</p></div>'}</section>
+    <section class="panel"><div class="section-head"><h3>ریز گردش</h3><button type="button" class="primary-button" id="new-account-entry">＋ ثبت گردش دستی</button></div>${rows || '<div class="empty-inline"><span>◌</span><p>هنوز گردش مالی ثبت نشده است.</p></div>'}</section>
   </section></div>`;
 }
 
 export async function bindAccountLedger(modal: HTMLElement): Promise<void> {
   modal.querySelector("#account-ledger-close")?.addEventListener("click", () => modal.remove());
+}
+
+
+export function accountEntryModal(accounts: Account[], existing?: import("./domain").AccountEntry): string {
+  const options = accounts.map(a => `<option value="${a.id}" ${a.id === (existing?.accountId || "") ? "selected" : ""}>${a.name}</option>`).join("");
+  const type = existing?.type === "withdraw" ? "withdraw" : "deposit";
+  return `<div class="modal-backdrop" id="account-entry-modal"><section class="modal"><button class="modal-close" id="account-entry-close">×</button><span class="eyebrow">گردش حساب</span><h2>${existing ? "ویرایش گردش دستی" : "ثبت گردش دستی"}</h2>
+  <label class="field"><span>حساب</span><select id="entry-account">${options}</select></label>
+  <label class="field"><span>نوع</span><select id="entry-type"><option value="deposit" ${type === "deposit" ? "selected" : ""}>واریز / دریافت</option><option value="withdraw" ${type === "withdraw" ? "selected" : ""}>برداشت / پرداخت</option></select></label>
+  <label class="field"><span>مبلغ</span><input id="entry-amount" type="number" min="1" value="${Math.abs(existing?.amount || 0)}"></label>
+  <label class="field"><span>شرح</span><input id="entry-description" value="${existing?.description || ""}" placeholder="مثلاً واریز نقدی"></label>
+  <button class="primary-button wide" id="account-entry-submit">${existing ? "ذخیره تغییرات" : "ثبت گردش"}</button></section></div>`;
+}
+
+export async function bindAccountEntryModal(modal: HTMLElement, done: (message: string) => void): Promise<void> {
+  modal.querySelector("#account-entry-close")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#account-entry-submit")?.addEventListener("click", async () => {
+    try {
+      const accountId = modal.querySelector<HTMLSelectElement>("#entry-account")?.value || "";
+      const type = (modal.querySelector<HTMLSelectElement>("#entry-type")?.value || "deposit") as "deposit" | "withdraw";
+      const amount = Math.abs(Number(modal.querySelector<HTMLInputElement>("#entry-amount")?.value || 0));
+      const description = (modal.querySelector<HTMLInputElement>("#entry-description")?.value || "").trim() || "گردش دستی";
+      const editId = modal.dataset.editId;
+      if (!accountId || amount <= 0) throw new Error("حساب و مبلغ را بررسی کنید");
+      if (editId) {
+        await (await import("./db")).updateAccountEntry(editId, { type, amount, description });
+      } else {
+        await addAccountEntry({ accountId, date: Date.now(), type, amount: type === "withdraw" ? -amount : amount, description });
+      }
+      modal.remove();
+      done(editId ? "گردش حساب ویرایش شد" : "گردش حساب ثبت شد");
+    } catch (e) { done(e instanceof Error ? e.message : "ثبت گردش ناموفق بود"); }
+  });
 }
