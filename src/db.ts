@@ -371,3 +371,20 @@ export async function updateCheck(id: string, patch: Partial<Check>): Promise<vo
   if (!current) throw new Error("چک پیدا نشد");
   await put("checks", { ...current, ...patch, id } as Check);
 }
+
+export async function clearCheck(id: string, accountId: string): Promise<void> {
+  const checks = await listChecks();
+  const check = checks.find(c => c.id === id);
+  if (!check) throw new Error("چک پیدا نشد");
+  if (check.status === "cleared") throw new Error("این چک قبلاً وصول شده است");
+  if (check.status !== "pending") throw new Error("فقط چک در انتظار قابل وصول است");
+  if (!accountId) throw new Error("انتخاب حساب مالی الزامی است");
+  await addAccountEntry({
+    accountId,
+    date: Date.now(),
+    type: check.direction === "received" ? "deposit" : "withdraw",
+    amount: check.direction === "received" ? check.amount : -check.amount,
+    description: "وصول چک " + (check.number || ""),
+  });
+  await updateCheck(id, { status: "cleared", accountId });
+}
