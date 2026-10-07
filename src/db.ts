@@ -134,6 +134,7 @@ export async function updateExpense(expense: Expense): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(["expenses","accountEntries"], "readwrite");
     for (const e of entries.filter(e => e.referenceId === expense.id)) tx.objectStore("accountEntries").delete(e.id);
+    if (!entries.some(e => e.referenceId === expense.id) && expense.accountId) { const old = entries.find(e => e.accountId === expense.accountId && e.date === expense.date && e.amount === -Math.round(expense.amount) && e.description === expense.title); if (old) tx.objectStore("accountEntries").delete(old.id); }
     tx.objectStore("expenses").put(expense);
     if (expense.accountId && expense.amount > 0) tx.objectStore("accountEntries").put({ id: newId(), accountId: expense.accountId, date: expense.date, type: "withdraw", amount: -Math.round(expense.amount), description: expense.title, referenceId: expense.id } satisfies AccountEntry);
     tx.oncomplete = () => resolve();
@@ -148,6 +149,7 @@ export async function deleteExpense(id: string): Promise<void> {
     const tx = db.transaction(["expenses","accountEntries"], "readwrite");
     tx.objectStore("expenses").delete(id);
     for (const e of entries.filter(e => e.referenceId === id)) tx.objectStore("accountEntries").delete(e.id);
+    if (!entries.some(e => e.referenceId === id) && current.accountId && current.paid > 0) { const expected = current.type === "sale" || current.type === "receipt" ? Math.round(current.paid) : -Math.round(current.paid); const old = entries.find(e => e.accountId === current.accountId && e.date === current.date && e.amount === expected && e.description === current.description); if (old) tx.objectStore("accountEntries").delete(old.id); }
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -202,6 +204,7 @@ export async function updateTransaction(id: string, input: {
     const ms = tx.objectStore("movements"); const es = tx.objectStore("accountEntries");
     for (const m of movements.filter(m => m.referenceId === id)) ms.delete(m.id);
     for (const e of entries.filter(e => e.referenceId === id)) es.delete(e.id);
+    if (current.accountId && current.paid > 0 && !entries.some(e => e.referenceId === id)) { const expected = current.type === "sale" || current.type === "receipt" ? Math.round(current.paid) : -Math.round(current.paid); const old = entries.find(e => e.accountId === current.accountId && e.date === current.date && e.amount === expected && e.description === current.description); if (old) es.delete(old.id); }
     tx.objectStore("transactions").put(updated);
     if (updated.accountId && updated.paid > 0) {
       const entryType = updated.type === "sale" || updated.type === "receipt" ? "deposit" : "withdraw";
