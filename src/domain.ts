@@ -116,6 +116,7 @@ export interface AccountEntry {
   amount: Money;
   description: string;
   transferId?: ID;
+  referenceId?: ID;
 }
 
 
