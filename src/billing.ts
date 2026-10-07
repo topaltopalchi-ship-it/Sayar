@@ -38,7 +38,7 @@ function getLocalTrialSubscription(): Subscription {
 
 export async function getSubscription(): Promise<Subscription> {
   if (BILLING_DISABLED) return getLocalTrialSubscription();
-  if (!API_BASE) return { status: "none", plan: "none" };
+  if (!API_BASE) return { status: "none", plan: "none", expiresAt: null };
 
   const response = await fetch(`${API_BASE}/subscription/status`, {
     credentials: "include",
