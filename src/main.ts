@@ -3,6 +3,7 @@ import { getDashboard, listProducts, getStock, listParties, addSale, addPurchase
 import { createMonthlyCheckout, getSubscription, type Subscription } from "./billing";
 import type { Product, Party, TransactionLine } from "./domain";
 import { openPurchaseModal } from "./purchase-ui";
+import { addParty } from "./db";
 
 type Tab = "dashboard" | "sales" | "purchases" | "inventory" | "people" | "reports" | "more";
 
@@ -208,11 +209,11 @@ async function render(): Promise<void> {
   else if (activeTab==="inventory") content=await inventoryView();
   else if (activeTab==="sales") content=placeholder("فروش","ثبت فاکتور فروش، مشتری، کالا، تخفیف، پرداخت و مانده حساب.");
   else if (activeTab==="purchases") content=placeholder("خرید","ثبت خرید، تأمین‌کننده، پرداخت و افزایش خودکار موجودی.");
-  else if (activeTab==="people") content=placeholder("اشخاص","مشتریان، تأمین‌کنندگان و گردش حساب هر شخص.");
+  else if (activeTab==="people") { const ps=await listParties(); content=`<section class="page-head"><span class="eyebrow">دفتر اشخاص</span><h2>مشتریان و تأمین‌کنندگان</h2><p class="muted">مدیریت طرف‌حساب‌ها و مانده حساب.</p><button class="primary-button" id="new-party">＋ افزودن شخص</button></section><section class="panel">${ps.length?ps.map(p=>`<div class="person-row"><div><strong>${p.name}</strong><small>${p.phone||"بدون شماره"} · ${p.type==="customer"?"مشتری":p.type==="supplier"?"تأمین‌کننده":"هر دو"}</small></div></div>`).join(""):`<div class="empty-inline"><span>♙</span><p>هنوز شخصی ثبت نشده است.</p></div>`}</section>`; }
   else if (activeTab==="reports") content=placeholder("گزارش‌ها","گزارش فروش، سود، موجودی، بدهی و مطالبات در بازه زمانی.");
   else content=placeholder("بیشتر","تنظیمات، پشتیبان‌گیری، حساب کاربری و مدیریت اشتراک.");
   layout(content, subscription);
-  document.querySelectorAll<HTMLButtonElement>("[data-locked]").forEach(b => b.addEventListener("click", async () => {
+  document.querySelector("#new-party")?.addEventListener("click", async () => { const name=window.prompt("نام مشتری یا تأمین‌کننده"); if(name?.trim()){ await addParty({name:name.trim(),phone:"",type:"customer"}); showToast("شخص ثبت شد"); await render(); }}); document.querySelectorAll<HTMLButtonElement>("[data-locked]").forEach(b => b.addEventListener("click", async () => {
     if (b.dataset.locked === "sales") await openSaleModal();
     else if (b.dataset.locked === "purchases") { products = await listProducts(); parties = await listParties(); openPurchaseModal(products, parties, rial, async (message) => { showToast(message); await render(); }); }
     else showToast("این عملیات در مرحله بعد فعال می‌شود.");
