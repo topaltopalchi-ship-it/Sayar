@@ -202,7 +202,7 @@ function invoiceModal(t: Transaction, productMap: Map<string, Product>, partyMap
       ${getInvoiceBranding().showSignature && getInvoiceBranding().signature ? '<img class="invoice-signature" src="' + getInvoiceBranding().signature + '" alt="امضا">' : ''}
     </div>
     <div class="invoice-branding no-print"><button class="secondary-button" id="invoice-branding-settings">⚙ امضا، مهر و شعار</button></div>
-    <button class="primary-button wide no-print" id="invoice-print">چاپ / ذخیره PDF</button>
+    <div class="invoice-actions no-print"><button class="secondary-button" id="invoice-share">اشتراک‌گذاری فاکتور</button><button class="primary-button" id="invoice-print">چاپ / ذخیره PDF</button></div>
   </section></div>`;
 }
 
@@ -211,6 +211,32 @@ async function openInvoice(t: Transaction): Promise<void> {
   document.body.insertAdjacentHTML("beforeend", invoiceModal(t, new Map(productList.map(p => [p.id, p])), new Map(partyList.map(p => [p.id, p]))));
   document.querySelector("#invoice-close")?.addEventListener("click", () => document.querySelector("#invoice-modal")?.remove());
   document.querySelector("#invoice-print")?.addEventListener("click", () => window.print());
+  document.querySelector("#invoice-share")?.addEventListener("click", async () => {
+    const party = t.partyId ? partyList.find(p => p.id === t.partyId) : undefined;
+    const title = t.type === "purchase" ? "فاکتور خرید" : "فاکتور فروش";
+    const balance = Math.max(0, t.amount - t.paid);
+    const text = [
+      "سای‌سای | " + title,
+      "شماره: " + (t.invoiceNumber || "بدون شماره"),
+      "تاریخ: " + dateLabel(t.date),
+      "طرف حساب: " + (party?.name || "ثبت نشده"),
+      "مبلغ: " + rial(t.amount),
+      "پرداخت‌شده: " + rial(t.paid),
+      "مانده: " + rial(balance)
+    ].join("\n");
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: title + " سای‌سای", text });
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+        showToast("اطلاعات فاکتور کپی شد");
+      } else {
+        showToast("اشتراک‌گذاری در این دستگاه در دسترس نیست");
+      }
+    } catch {
+      // لغو اشتراک‌گذاری توسط کاربر، خطا محسوب نمی‌شود.
+    }
+  });
   document.querySelector("#invoice-branding-settings")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", invoiceBrandingModal()); bindInvoiceBrandingModal(); });
 }
 
