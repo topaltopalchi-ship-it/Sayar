@@ -542,7 +542,68 @@ export async function addAccountEntry(input: Omit<AccountEntry, "id">): Promise<
   return entry;
 }
 
-export async function transferBetweenAccounts(fromAccountId: string, toAccountId: string, amount: number, description: string): Promise<void> {
+
+
+export async function updateAccountEntry(id: string, patch: Partial<Pick<AccountEntry, "date" | "type" | "amount" | "description">>): Promise<AccountEntry> {
+  const entries = await listAccountEntries();
+  const current = entries.find(e => e.id === id);
+  if (!current) throw new Error("گردش حساب پیدا نشد");
+  if (current.referenceId) throw new Error("این گردش از یک تراکنش ساخته شده است؛ خود تراکنش را ویرایش کنید");
+  if (current.transferId) throw new Error("انتقال بین حساب‌ها را از گزینه انتقال ویرایش کنید");
+  const next = { ...current, ...patch, id } as AccountEntry;
+  if (!Number.isFinite(next.amount) || next.amount === 0) throw new Error("مبلغ باید غیرصفر باشد");
+  next.amount = next.type === "withdraw" ? -Math.abs(Math.round(next.amount)) : Math.abs(Math.round(next.amount));
+  await put("accountEntries", next);
+  return next;
+}
+
+export async function deleteAccountEntry(id: string): Promise<void> {
+  const entries = await listAccountEntries();
+  const current = entries.find(e => e.id === id);
+  if (!current) throw new Error("گردش حساب پیدا نشد");
+  if (current.referenceId) throw new Error("این گردش از یک تراکنش ساخته شده است؛ خود تراکنش را حذف کنید");
+  if (current.transferId) throw new Error("انتقال را از گزینه انتقال بین حساب‌ها حذف کنید");
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("accountEntries", "readwrite");
+    tx.objectStore("accountEntries").delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function updateTransfer(transferId: string, amount: number, description: string): Promise<void> {
+  const entries = (await listAccountEntries()).filter(e => e.transferId === transferId);
+  if (entries.length !== 2) throw new Error("انتقال کامل پیدا نشد");
+  const source = entries.find(e => e.amount < 0);
+  const target = entries.find(e => e.amount > 0);
+  if (!source || !target) throw new Error("ساختار انتقال نامعتبر است");
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error("مبلغ باید بیشتر از صفر باشد");
+  const value = Math.round(amount);
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("accountEntries", "readwrite");
+    const store = tx.objectStore("accountEntries");
+    store.put({ ...source, amount: -value, description });
+    store.put({ ...target, amount: value, description });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function deleteTransfer(transferId: string): Promise<void> {
+  const entries = (await listAccountEntries()).filter(e => e.transferId === transferId);
+  if (!entries.length) throw new Error("انتقال پیدا نشد");
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("accountEntries", "readwrite");
+    const store = tx.objectStore("accountEntries");
+    entries.forEach(e => store.delete(e.id));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+\nexport async function transferBetweenAccounts(fromAccountId: string, toAccountId: string, amount: number, description: string): Promise<void> {
   if (fromAccountId === toAccountId || amount <= 0) throw new Error("حساب مبدأ و مقصد را درست انتخاب کنید");
   const id = newId();
   const date = Date.now();
