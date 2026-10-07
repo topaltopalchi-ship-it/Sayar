@@ -94,9 +94,6 @@ function layout(content: string, subscription: Subscription): void {
       </nav>
       <div id="toast" class="toast" role="status" aria-live="polite"></div>
     </main>`;
-  document.querySelectorAll<HTMLButtonElement>("[data-nav]").forEach(b =>
-    b.addEventListener("click", async () => { activeTab = b.dataset.nav as Tab; await render(); })
-  );
   document.querySelector<HTMLButtonElement>("#settings")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", uiModeModal()); bindUiModeModal(); });
   document.querySelectorAll<HTMLButtonElement>("[data-subscribe]").forEach(b => b.addEventListener("click", subscribe));
 }
@@ -471,15 +468,41 @@ async function subscribe(): Promise<void> {
 }
 
 async function bindActions(): Promise<void> {
-  document.querySelectorAll<HTMLButtonElement>("[data-action]").forEach(b => b.addEventListener("click", async () => {
-    const action = b.dataset.action;
-    if (action === "sale") await openSaleModal();
-    else if (action === "purchase") {
-      products = await listProducts(); parties = await listParties();
-      openPurchaseModal(products, parties, rial, async m => { showToast(m); await render(); });
-    } else if (action === "receipt") await openSettlement("receipt");
-    else { document.body.insertAdjacentHTML("beforeend", expenseModal()); bindExpenseModal(); }
-  }));
+  const root = document.querySelector<HTMLDivElement>("#app");
+  if (!root || root.dataset.actionsBound === "1") return;
+  root.dataset.actionsBound = "1";
+
+  root.addEventListener("click", async event => {
+    const target = event.target as HTMLElement;
+    const nav = target.closest<HTMLElement>("[data-nav], [data-nav-shortcut]");
+    if (nav) {
+      const next = nav.dataset.nav || nav.dataset.navShortcut;
+      if (next) {
+        activeTab = next as Tab;
+        await render();
+      }
+      return;
+    }
+
+    const actionButton = target.closest<HTMLButtonElement>("[data-action]");
+    if (!actionButton) return;
+    const action = actionButton.dataset.action;
+    try {
+      if (action === "sale") await openSaleModal();
+      else if (action === "purchase") {
+        products = await listProducts();
+        parties = await listParties();
+        openPurchaseModal(products, parties, rial, async m => { showToast(m); await render(); });
+      } else if (action === "receipt") {
+        await openSettlement("receipt");
+      } else if (action === "expense") {
+        document.body.insertAdjacentHTML("beforeend", expenseModal());
+        bindExpenseModal();
+      }
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "باز کردن این بخش ناموفق بود");
+    }
+  });
 }
 
 async function render(): Promise<void> {
