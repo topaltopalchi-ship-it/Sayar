@@ -84,10 +84,42 @@ export async function listExpenses(): Promise<Expense[]> {
   return items.sort((a, b) => b.date - a.date);
 }
 
+export async function updateProduct(product: Product): Promise<void> { await put("products", product); }
+
+export async function deleteProduct(productId: string): Promise<void> {
+  const [transactions, movements] = await Promise.all([listTransactions(), listMovements()]);
+  if (transactions.some(t => t.lines.some(l => l.productId === productId)) || movements.some(m => m.productId === productId)) {
+    throw new Error("این کالا در فاکتورها یا گردش موجودی استفاده شده و قابل حذف نیست");
+  }
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("products", "readwrite");
+    tx.objectStore("products").delete(productId);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 export async function addProduct(input: Omit<Product, "id" | "createdAt" | "active">): Promise<Product> {
   const product: Product = { ...input, id: newId(), createdAt: Date.now(), active: true };
   await put("products", product);
   return product;
+}
+
+export async function updateParty(party: Party): Promise<void> { await put("parties", party); }
+
+export async function deleteParty(partyId: string): Promise<void> {
+  const [transactions, checks] = await Promise.all([listTransactions(), listChecks()]);
+  if (transactions.some(t => t.partyId === partyId) || checks.some(c => c.partyId === partyId)) {
+    throw new Error("این شخص در فاکتورها، دریافت/پرداخت یا چک‌ها استفاده شده و قابل حذف نیست");
+  }
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("parties", "readwrite");
+    tx.objectStore("parties").delete(partyId);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 export async function addParty(input: Omit<Party, "id" | "createdAt">): Promise<Party> {
