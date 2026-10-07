@@ -22,15 +22,19 @@ const moneyFormat = (v:number) => new Intl.NumberFormat("fa-IR").format(v);
 
 export function checkModal(direction: CheckDirection, parties: Array<{id:string;name:string}> = [], accounts: Array<{id:string;name:string}> = [], existing?: Check): string {
   const title = direction === "received" ? "ثبت چک دریافتی" : "ثبت چک پرداختی";
-  return `<div class="modal-backdrop" id="check-modal"><section class="modal"><button class="modal-close" id="check-close">×</button><span class="eyebrow">چک و سررسید</span><h2>${title}</h2>
+  const option = (value?: string, selected?: string) => value && selected === value ? "selected" : "";
+  const j = (value?: number) => value ? dateLabel(value) : "";
+  return `<div class="modal-backdrop" id="check-modal"><section class="modal"><button class="modal-close" id="check-close">×</button><span class="eyebrow">چک و سررسید</span><h2>${existing ? "ویرایش چک" : title}</h2>
   <label class="field"><span>شماره چک</span><input id="check-number" inputmode="numeric" placeholder="مثلاً ۱۲۳۴۵۶" value="${existing?.number || ""}"></label>
-  <label class="field"><span>بانک</span><input id="check-bank" placeholder="مثلاً بانک ملی" value="${(arguments[3] as Check | undefined)?.bank || ""}"></label>
-  <label class="field"><span>نام صادرکننده / صاحب چک</span><input id="check-issuer" value="${(arguments[3] as Check | undefined)?.issuerName || ""}"></label><label class="field"><span>طرف حساب</span><select id="check-party"><option value="">بدون انتخاب</option>${parties.map(p => `<option value="${p.id}">${p.name}</option>`).join("")}</select><label class="field"><span>حساب مالی</span><select id="check-account"><option value="">بدون انتخاب</option>${accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join("")}</select></label>
-  <label class="field"><span>مبلغ</span><input id="check-amount" type="number" min="1" value="${(arguments[3] as Check | undefined)?.amount ?? ""}"></label>
-  <label class="field"><span>تاریخ صدور شمسی</span><input id="check-issue" placeholder="۱۴۰۵/۰۱/۰۱" value="${(arguments[3] as Check | undefined)?.issueDate ? dateLabel(existing as Check.issueDate).replace(/-/g,"/") : ""}"></label>
-  <label class="field"><span>تاریخ سررسید شمسی</span><input id="check-due" placeholder="۱۴۰۵/۰۲/۰۱" value="${(arguments[3] as Check | undefined)?.dueDate ? dateLabel((arguments[3] as Check).dueDate).replace(/-/g,"/") : ""}"></label>
-  <label class="field"><span>شرح</span><input id="check-description" placeholder="توضیحات اختیاری" value="${(arguments[3] as Check | undefined)?.description || ""}"></label>
-  <button class="primary-button wide" id="check-submit">${(arguments[3] as Check | undefined) ? "ذخیره تغییرات" : "ثبت چک"}</button></section></div>`;
+  <label class="field"><span>بانک</span><input id="check-bank" placeholder="مثلاً بانک ملی" value="${existing?.bank || ""}"></label>
+  <label class="field"><span>نام صادرکننده / صاحب چک</span><input id="check-issuer" value="${existing?.issuerName || ""}"></label>
+  <label class="field"><span>طرف حساب</span><select id="check-party"><option value="">بدون انتخاب</option>${parties.map(p => `<option value="${p.id}" ${option(p.id, existing?.partyId)}>${p.name}</option>`).join("")}</select></label>
+  <label class="field"><span>حساب مالی</span><select id="check-account"><option value="">بدون انتخاب</option>${accounts.map(a => `<option value="${a.id}" ${option(a.id, existing?.accountId)}>${a.name}</option>`).join("")}</select></label>
+  <label class="field"><span>مبلغ</span><input id="check-amount" type="number" min="1" value="${existing?.amount ?? ""}"></label>
+  <label class="field"><span>تاریخ صدور شمسی</span><input id="check-issue" placeholder="۱۴۰۵/۰۱/۰۱" value="${j(existing?.issueDate)}"></label>
+  <label class="field"><span>تاریخ سررسید شمسی</span><input id="check-due" placeholder="۱۴۰۵/۰۲/۰۱" value="${j(existing?.dueDate)}"></label>
+  <label class="field"><span>شرح</span><input id="check-description" placeholder="توضیحات اختیاری" value="${existing?.description || ""}"></label>
+  <button class="primary-button wide" id="check-submit">${existing ? "ذخیره تغییرات" : "ثبت چک"}</button></section></div>`;
 }
 
 function jalaliDate(value: string): number | null {
