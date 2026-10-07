@@ -349,6 +349,28 @@ export async function addStockAdjustment(input: {
 }
 
 
+export async function restoreBackup(data: {
+  products: Product[]; parties: Party[]; transactions: Transaction[]; expenses?: Expense[];
+  accounts?: Account[]; accountEntries?: AccountEntry[]; checks?: Check[];
+}): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const stores = ["products","parties","transactions","movements","expenses","accounts","accountEntries","checks"];
+    const tx = db.transaction(stores, "readwrite");
+    const maps: Record<string, unknown[]> = {
+      products: data.products ?? [], parties: data.parties ?? [], transactions: data.transactions ?? [],
+      expenses: data.expenses ?? [], accounts: data.accounts ?? [], accountEntries: data.accountEntries ?? [], checks: data.checks ?? [],
+    };
+    for (const store of stores) {
+      tx.objectStore(store).clear();
+      for (const item of maps[store] ?? []) tx.objectStore(store).put(item);
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error("بازیابی ناموفق بود"));
+  });
+}
+
 export async function listAccounts(): Promise<Account[]> {
   const items = await getAll<Account>("accounts");
   return items.sort((a, b) => a.createdAt - b.createdAt);
