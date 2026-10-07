@@ -2,7 +2,7 @@ import type { Account, AccountEntry, Check, Dashboard, Expense, Party, Product, 
 import { lineTotal, newId, transactionTotal } from "./domain";
 
 const DB_NAME = "sayar-db";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 const stores = ["products", "parties", "transactions", "movements", "expenses", "accounts", "accountEntries", "checks"] as const;
 type StoreName = typeof stores[number];
@@ -343,6 +343,13 @@ export async function transferBetweenAccounts(fromAccountId: string, toAccountId
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+export async function getAccountLedger(accountId: string, from?: number, to?: number): Promise<AccountEntry[]> {
+  const entries = await listAccountEntries();
+  return entries
+    .filter(e => e.accountId === accountId && (from === undefined || e.date >= from) && (to === undefined || e.date < to))
+    .sort((a, b) => b.date - a.date);
 }
 
 export async function getAccountBalances(): Promise<Record<string, number>> {
