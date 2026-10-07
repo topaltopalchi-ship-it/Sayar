@@ -154,6 +154,11 @@ function invoiceModal(t: Transaction, productMap: Map<string, Product>, partyMap
     <div class="invoice-party"><span>طرف حساب</span><strong>${party?.name || "ثبت نشده"}</strong><small>${party?.phone || "بدون شماره تماس"}</small></div>
     <div class="invoice-table-wrap"><table class="invoice-table"><thead><tr><th>#</th><th>کالا</th><th>مقدار</th><th>قیمت</th><th>تخفیف</th><th>جمع</th></tr></thead><tbody>${rows || '<tr><td colspan="6">بدون ردیف</td></tr>'}</tbody></table></div>
     <div class="invoice-summary"><div><span>جمع فاکتور</span><b>${rial(t.amount)}</b></div><div><span>پرداخت‌شده</span><b>${rial(t.paid)}</b></div><div class="invoice-balance"><span>مانده</span><b>${rial(Math.max(0, t.amount - t.paid))}</b></div></div>
+    <div class="invoice-signatures">
+      ${getInvoiceBranding().showSlogan && getInvoiceBranding().slogan ? '<img class="invoice-slogan" src="' + getInvoiceBranding().slogan + '" alt="شعار">' : ''}
+      ${getInvoiceBranding().showStamp && getInvoiceBranding().stamp ? '<img class="invoice-stamp" src="' + getInvoiceBranding().stamp + '" alt="مهر">' : ''}
+      ${getInvoiceBranding().showSignature && getInvoiceBranding().signature ? '<img class="invoice-signature" src="' + getInvoiceBranding().signature + '" alt="امضا">' : ''}
+    </div>
     <div class="invoice-branding no-print"><button class="secondary-button" id="invoice-branding-settings">⚙ امضا، مهر و شعار</button></div>\n    <button class="primary-button wide no-print" id="invoice-print">چاپ / ذخیره PDF</button>
   </section></div>`;
 }
