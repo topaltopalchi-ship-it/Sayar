@@ -104,8 +104,19 @@ export async function addTransaction(
 
   const db = await openDb();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(["transactions", "movements"], "readwrite");
+    const tx = db.transaction(["transactions", "movements", "accountEntries"], "readwrite");
     tx.objectStore("transactions").put(transaction);
+    if (transaction.accountId && transaction.paid > 0) {
+      const entryType = transaction.type === "sale" || transaction.type === "receipt" ? "deposit" : "withdraw";
+      tx.objectStore("accountEntries").put({
+        id: newId(),
+        accountId: transaction.accountId,
+        date: transaction.date,
+        type: entryType,
+        amount: entryType === "deposit" ? Math.round(transaction.paid) : -Math.round(transaction.paid),
+        description: transaction.description || (entryType === "deposit" ? "دریافت وجه" : "پرداخت وجه"),
+      } satisfies AccountEntry);
+    }
 
     if (transaction.type === "sale" || transaction.type === "purchase") {
       const movementStore = tx.objectStore("movements");
@@ -241,7 +252,7 @@ export function calculateHistoricalCOGS(transactions: Transaction[], products: P
 }
 
 export async function addSale(input: {
-  date: number; partyId?: string; description: string; lines: Transaction["lines"]; paid: number;
+  date: number; partyId?: string; accountId?: string; description: string; lines: Transaction["lines"]; paid: number;
 }): Promise<Transaction> {
   for (const line of input.lines) {
     const stock = await getStock(line.productId);
@@ -249,18 +260,18 @@ export async function addSale(input: {
     if (stock < line.quantity) throw new Error("موجودی کالا برای این فروش کافی نیست");
   }
   return addTransaction({
-    type: "sale", date: input.date, partyId: input.partyId, description: input.description,
+    type: "sale", date: input.date, partyId: input.partyId, accountId: input.accountId, description: input.description,
     lines: input.lines, paid: Math.max(0, input.paid),
   });
 }
 
 export async function addSettlement(input: {
-  type: "receipt" | "payment"; date: number; partyId: string; amount: number; description: string;
+  type: "receipt" | "payment"; date: number; partyId: string; accountId?: string; amount: number; description: string;
 }): Promise<Transaction> {
   if (!input.partyId) throw new Error("انتخاب شخص الزامی است");
   if (input.amount <= 0) throw new Error("مبلغ باید بیشتر از صفر باشد");
   return addTransaction({
-    type: input.type, date: input.date, partyId: input.partyId, description: input.description,
+    type: input.type, date: input.date, partyId: input.partyId, accountId: input.accountId, description: input.description,
     lines: [], paid: input.amount, amount: input.amount,
   });
 }
@@ -274,7 +285,7 @@ export async function addPurchase(input: {
     if (line.unitPrice < 0) throw new Error("قیمت خرید نمی‌تواند منفی باشد");
   }
   return addTransaction({
-    type: "purchase", date: input.date, partyId: input.partyId, description: input.description,
+    type: "purchase", date: input.date, partyId: input.partyId, accountId: input.accountId, description: input.description,
     lines: input.lines, paid: Math.max(0, input.paid),
   });
 }
