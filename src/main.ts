@@ -83,7 +83,7 @@ function layout(content: string, subscription: Subscription): void {
   app.innerHTML = `
     <main class="shell">
       <header class="topbar">
-        <div><span class="eyebrow">مدیریت مالی و فروش</span><h1>سای‌سای</h1></div>
+        <div class="brand-block"><img class="brand-logo" src="/icon-192.svg" alt="لوگوی سای‌سای"><div><span class="eyebrow">مدیریت مالی و فروش</span><h1>سای‌سای</h1></div></div>
         <div class="header-actions">
           <span class="plan-pill ${subscription.status}">${subscription.status === "active" ? (subscription.isTrial ? "دوره رایگان ۳۰ روزه" : "اشتراک فعال") : "اشتراک لازم است"}</span>
           <button class="icon-button" id="settings" aria-label="حالت کاربری">⚙</button>
