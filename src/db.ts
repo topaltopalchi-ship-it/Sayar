@@ -142,13 +142,20 @@ export async function getDashboard(): Promise<Dashboard> {
     .filter((t) => t.type === "receipt" && t.date >= today)
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const saleDebt = transactions
+  const salesDebt = transactions
     .filter((t) => t.type === "sale")
     .reduce((sum, t) => sum + Math.max(0, t.amount - t.paid), 0);
-
-  const purchaseDebt = transactions
+  const receipts = transactions
+    .filter((t) => t.type === "receipt")
+    .reduce((sum, t) => sum + t.paid, 0);
+  const purchasesDebt = transactions
     .filter((t) => t.type === "purchase")
     .reduce((sum, t) => sum + Math.max(0, t.amount - t.paid), 0);
+  const payments = transactions
+    .filter((t) => t.type === "payment")
+    .reduce((sum, t) => sum + t.paid, 0);
+  const saleDebt = Math.max(0, salesDebt - receipts);
+  const purchaseDebt = Math.max(0, purchasesDebt - payments);
 
   const quantities = new Map<string, number>();
   for (const movement of movements) {
