@@ -600,7 +600,7 @@ async function render(): Promise<void> {
     const id = button.dataset.productDelete; const product = id ? (await listProducts()).find(p => p.id === id) : undefined;
     if (!product || !confirm(`کالای «${product.name}» حذف شود؟`)) return;
     try { await deleteProduct(product.id); showToast("کالا حذف شد"); await render(); } catch (e) { showToast(e instanceof Error ? e.message : "حذف کالا ناموفق بود"); }
-  });
+  }));
   document.querySelector("#new-party")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", partyModal()); bindPartyModal(); });
   document.querySelectorAll<HTMLElement>("[data-party-edit]").forEach(button => button.addEventListener("click", async event => {
     event.stopPropagation();
