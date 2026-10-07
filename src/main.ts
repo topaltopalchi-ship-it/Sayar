@@ -1,6 +1,6 @@
 import "./style.css";
 import {
-  addParty, addProduct, addSale, addSettlement, addStockAdjustment, getDashboard, getStock,
+  addParty, addProduct, addSale, addSettlement, addExpense, addStockAdjustment, getDashboard, getStock,
   listParties, listProducts, listTransactions
 } from "./db";
 import { createMonthlyCheckout, getSubscription, type Subscription } from "./billing";
@@ -219,6 +219,28 @@ function reportsView(transactions: Transaction[]): string {
     <section class="panel report-list"><div><span>تعداد اسناد</span><b>${money.format(transactions.length)}</b></div><div><span>خالص فروش منهای خرید</span><b>${rial(sales - purchases)}</b></div><div><span>آخرین ثبت</span><b>${transactions[0] ? dateLabel(transactions[0].date) : "—"}</b></div></section>`;
 }
 
+function expenseModal(): string {
+  return `<div class="modal-backdrop" id="expense-modal"><section class="modal"><button class="modal-close" id="expense-close">×</button><span class="eyebrow">هزینه‌های جاری</span><h2>ثبت هزینه</h2>
+    <label class="field"><span>عنوان هزینه</span><input id="expense-title" placeholder="مثلاً حمل‌ونقل، اجاره، حقوق"></label>
+    <label class="field"><span>مبلغ</span><input id="expense-amount" type="number" min="1" value="0"></label>
+    <label class="field"><span>شرح</span><input id="expense-desc" placeholder="اختیاری"></label>
+    <button class="primary-button wide" id="expense-submit">ثبت هزینه</button></section></div>`;
+}
+
+function bindExpenseModal(): void {
+  const modal = document.querySelector<HTMLDivElement>("#expense-modal")!;
+  modal.querySelector("#expense-close")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#expense-submit")?.addEventListener("click", async () => {
+    try {
+      const title = modal.querySelector<HTMLInputElement>("#expense-title")!.value.trim();
+      const amount = Number(modal.querySelector<HTMLInputElement>("#expense-amount")!.value);
+      if (!title || amount <= 0) throw new Error("عنوان و مبلغ هزینه را وارد کنید");
+      await addExpense({ date: Date.now(), title, amount, description: modal.querySelector<HTMLInputElement>("#expense-desc")!.value.trim() });
+      modal.remove(); showToast("هزینه ثبت شد"); await render();
+    } catch (e) { showToast(e instanceof Error ? e.message : "ثبت هزینه ناموفق بود"); }
+  });
+}
+
 function settlementModal(type: "receipt" | "payment"): string {
   const title = type === "receipt" ? "ثبت دریافت" : "ثبت پرداخت";
   const options = parties.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
@@ -293,7 +315,7 @@ async function bindActions(): Promise<void> {
       products = await listProducts(); parties = await listParties();
       openPurchaseModal(products, parties, rial, async m => { showToast(m); await render(); });
     } else if (action === "receipt") await openSettlement("receipt");
-    else showToast("ثبت هزینه در مرحله بعد به دفتر هزینه‌ها متصل می‌شود");
+    else { document.body.insertAdjacentHTML("beforeend", expenseModal()); bindExpenseModal(); }
   }));
 }
 
@@ -329,6 +351,13 @@ async function render(): Promise<void> {
   document.querySelector("#new-adjustment")?.addEventListener("click", async () => { products = await listProducts(); if (!products.length) { showToast("ابتدا یک کالا ثبت کنید"); return; } document.body.insertAdjacentHTML("beforeend", adjustmentModal()); bindAdjustmentModal(); });
   document.querySelector("#new-product")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", productModal()); bindProductModal(); });
   document.querySelector("#new-party")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", partyModal()); bindPartyModal(); });
+  document.querySelector("#more-refresh")?.addEventListener("click", () => render());
+  document.querySelector("#more-backup")?.addEventListener("click", async () => {
+    const payload = { products: await listProducts(), parties: await listParties(), transactions: await listTransactions(), expenses: await (await import("./db")).listExpenses() };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `sayar-backup-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
+    showToast("فایل پشتیبان آماده شد");
+  });
   await bindActions();
 }
 
