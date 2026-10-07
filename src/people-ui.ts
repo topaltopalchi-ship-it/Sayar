@@ -68,20 +68,46 @@ async function enhancePeople(): Promise<void> {
   view.querySelectorAll<HTMLElement>(".person-row").forEach((row, index) => {
     const party = parties[index];
     if (!party) return;
-    const balance = balances[party.id]?.balance ?? 0;
-    const absolute = Math.abs(balance);
-    let label = "تسویه";
-    if (absolute) {
-      if (party.type === "customer") label = balance > 0 ? "بدهکار" : "طلبکار";
-      else if (party.type === "supplier") label = balance < 0 ? "بدهکار" : "طلبکار";
-      else label = balance > 0 ? "خالص بدهکار" : "خالص طلبکار";
-    }
-    const badge = document.createElement("b");
-    badge.className = "person-balance";
-    badge.textContent = absolute ? `${label} · ${rial(absolute)}` : "تسویه";
-    row.appendChild(badge);
-  });
-}
+    row.style.cursor = "pointer";
+    row.addEventListener("click", async () => {
+      const transactions = await listTransactions();
+      const balance = balances[party.id]?.balance ?? 0;
+      const related = transactions.filter(t => t.partyId === party.id).sort((a,b)=>b.date-a.date);
+      const labels: Record<string,string> = {sale:"فروش", purchase:"خرید", receipt:"دریافت", payment:"پرداخت"};
+      const rows = related.length ? related.slice(0,30).map(t => `<div class="ledger-row"><span><b>${labels[t.type] || t.type}</b><small>${dateLabel(t.date)} · ${t.description || "بدون شرح"}</small></span><strong>${rial(t.amount)}</strong></div>`).join("") : '<div class="empty-inline"><span>◌</span><p>گردش حسابی ثبت نشده است.</p></div>';
+      const customer = party.type === "customer" || party.type === "both";
+      const supplier = party.type === "supplier" || party.type === "both";
+      document.body.insertAdjacentHTML("beforeend", `
+        <div class="modal-backdrop" id="party-ledger-modal"><section class="modal party-ledger-modal">
+          <button class="modal-close" id="party-ledger-close">×</button>
+          <span class="eyebrow">گردش حساب</span><h2>${party.name}</h2>
+          <p class="muted">${party.phone || "بدون شماره"} · ${typeLabel[party.type]}</p>
+          <div class="ledger-balance"><span>مانده حساب</span><strong>${rial(Math.abs(balance))}</strong><small>${balance === 0 ? "تسویه" : customer ? (balance > 0 ? "بدهکار" : "طلبکار") : (balance < 0 ? "بدهکار" : "طلبکار")}</small></div>
+          <div class="ledger-actions">
+            ${customer ? '<button class="primary-button" data-ledger="receipt">↓ دریافت</button>' : ''}
+            ${supplier ? '<button class="primary-button" data-ledger="payment">↑ پرداخت</button>' : ''}
+          </div>
+          <div class="ledger-list">${rows}</div>
+        </section></div>`);
+      const modal = document.querySelector<HTMLDivElement>("#party-ledger-modal")!;
+      modal.querySelector("#party-ledger-close")?.addEventListener("click",()=>modal.remove());
+      modal.querySelectorAll<HTMLButtonElement>("[data-ledger]").forEach(btn => btn.addEventListener("click",()=>{
+        const type = btn.dataset.ledger as "receipt"|"payment";
+        modal.remove();
+        document.body.insertAdjacentHTML("beforeend", settlementModal(party,type));
+        const sm = document.querySelector<HTMLDivElement>("#settlement-modal")!;
+        sm.querySelector("#settlement-close")?.addEventListener("click",()=>sm.remove());
+        sm.querySelector("#settlement-submit")?.addEventListener("click",async()=>{
+          try {
+            const amount = Number(sm.querySelector<HTMLInputElement>("#settlement-amount")!.value);
+            const description = sm.querySelector<HTMLInputElement>("#settlement-description")!.value;
+            await saveSettlement(party.id,type,amount,description);
+            sm.remove(); window.dispatchEvent(new Event("sayar-refresh"));
+          } catch(e) { alert(e instanceof Error ? e.message : "ثبت ناموفق بود"); }
+        });
+      }));
+    });
+  });}
 
 type RangeKey = "today" | "week" | "month" | "all";
 let reportToken = 0;
