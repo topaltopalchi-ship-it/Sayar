@@ -1,5 +1,5 @@
 import "./style.css";
-import { getDashboard, listProducts, getStock, listParties, addSale } from "./db";
+import { getDashboard, listProducts, getStock, listParties, addSale, addPurchase } from "./db";
 import { createMonthlyCheckout, getSubscription, type Subscription } from "./billing";
 import type { Product, Party, TransactionLine } from "./domain";
 
