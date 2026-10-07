@@ -407,8 +407,16 @@ function bindExpenseModal(): void {
       const title = modal.querySelector<HTMLInputElement>("#expense-title")!.value.trim();
       const amount = Number(modal.querySelector<HTMLInputElement>("#expense-amount")!.value);
       if (!title || amount <= 0) throw new Error("عنوان و مبلغ هزینه را وارد کنید");
-      const expenseValues = { date: existing?.date ?? Date.now(), title, amount, accountId: modal.querySelector<HTMLSelectElement>("#expense-account")?.value || undefined, description: modal.querySelector<HTMLInputElement>("#expense-desc")!.value.trim() }; if (existing) await updateExpense({ ...existing, ...expenseValues }); else await addExpense(expenseValues);
-      modal.remove(); showToast(existing ? "هزینه ویرایش شد" : "هزینه ثبت شد"); await render();
+      const expenseValues = { date: Date.now(), title, amount, accountId: modal.querySelector<HTMLSelectElement>("#expense-account")?.value || undefined, description: modal.querySelector<HTMLInputElement>("#expense-desc")!.value.trim() };
+      const editId = modal.dataset.editId;
+      if (editId) {
+        const existingExpense = (await listExpenses()).find(x => x.id === editId);
+        if (!existingExpense) throw new Error("هزینه پیدا نشد");
+        await updateExpense({ ...existingExpense, ...expenseValues });
+      } else {
+        await addExpense(expenseValues);
+      }
+      modal.remove(); showToast(modal.dataset.editId ? "هزینه ویرایش شد" : "هزینه ثبت شد"); await render();
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت هزینه ناموفق بود"); }
   });
 }
