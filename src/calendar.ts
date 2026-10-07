@@ -33,8 +33,23 @@ export function jalaliToGregorianDate(value: string): Date | null {
 }
 
 export function todayJalaliInput(): string {
-  const parts = new Intl.DateTimeFormat("en-US-u-ca-persian", { year: "numeric", month: "2-digit", day: "2-digit" })
-    .formatToParts(new Date());
+  const parts = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+    year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(new Date());
   const get = (type: string) => parts.find(p => p.type === type)?.value || "";
   return `${get("year")}/${get("month")}/${get("day")}`;
+}
+
+export function formatJalaliInput(value: string): string {
+  const digits = value
+    .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+    .replace(/[^0-9]/g, "")
+    .slice(0, 8);
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 4)}/${digits.slice(4)}`;
+  return `${digits.slice(0, 4)}/${digits.slice(4, 6)}/${digits.slice(6)}`;
+}
+
+export function toPersianDigits(value: string): string {
+  return value.replace(/\\d/g, d => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
 }
