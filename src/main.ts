@@ -7,6 +7,8 @@ import { createMonthlyCheckout, getSubscription, type Subscription } from "./bil
 import { lineTotal, type Party, type Product, type Transaction, type TransactionLine } from "./domain";
 import { formatMoney, getCurrencyUnit, setCurrencyUnit } from "./settings";
 import { openPurchaseModal } from "./purchase-ui";
+import { accountModal, accountsView, bindAccountModal, bindTransferModal, transferModal } from "./accounts-ui";
+import { getAccountBalances, listAccounts } from "./db";
 
 type Tab = "dashboard" | "sales" | "purchases" | "inventory" | "people" | "reports" | "more";
 
@@ -457,7 +459,7 @@ async function render(): Promise<void> {
   } else if (activeTab === "inventory") content = await inventoryView();
   else if (activeTab === "people") { parties = await listParties(); content = peopleView(); }
   else if (activeTab === "reports") content = reportsView(await listTransactions());
-  else content = placeholder("بیشتر", "تنظیمات، پشتیبان‌گیری، حساب کاربری و مدیریت اشتراک.");
+  else if (activeTab === "more") content = await accountsView();
   layout(content, subscription);
 
   document.querySelectorAll<HTMLButtonElement>("[data-invoice-id]").forEach(b => b.addEventListener("click", async () => {
@@ -472,6 +474,8 @@ async function render(): Promise<void> {
   document.querySelector("#new-adjustment")?.addEventListener("click", async () => { products = await listProducts(); if (!products.length) { showToast("ابتدا یک کالا ثبت کنید"); return; } document.body.insertAdjacentHTML("beforeend", adjustmentModal()); bindAdjustmentModal(); });
   document.querySelector("#new-product")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", productModal()); bindProductModal(); });
   document.querySelector("#new-party")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", partyModal()); bindPartyModal(); });
+  document.querySelector("#new-account")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", accountModal()); const modal = document.querySelector<HTMLElement>("#account-modal"); if (modal) void bindAccountModal(modal, async m => { showToast(m); await render(); }); });
+  document.querySelector("#new-transfer")?.addEventListener("click", async () => { const accounts = await listAccounts(); if (accounts.length < 2) { showToast("برای انتقال حداقل دو حساب ثبت کنید"); return; } const balances = await getAccountBalances(); document.body.insertAdjacentHTML("beforeend", transferModal(accounts, balances)); const modal = document.querySelector<HTMLElement>("#transfer-modal"); if (modal) void bindTransferModal(modal, async m => { showToast(m); await render(); }); });
   document.querySelector("#more-refresh")?.addEventListener("click", () => render());
   document.querySelector("#more-backup")?.addEventListener("click", async () => {
     const payload = { products: await listProducts(), parties: await listParties(), transactions: await listTransactions(), expenses: await (await import("./db")).listExpenses() };
