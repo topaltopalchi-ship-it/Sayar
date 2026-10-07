@@ -380,7 +380,8 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
 function reportExcelCsv(transactions: Transaction[]): void {
   const rows = [["نوع","تاریخ","مبلغ","پرداخت","شرح"]];
   for (const t of transactions) rows.push([t.type, dateLabel(t.date), String(t.amount), String(t.paid), t.description || ""]);
-  const csv = "\uFEFF" + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const csv = "\uFEFF" + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("
+");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href=url; a.download=`sai-sai-report-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url);
 }
@@ -436,7 +437,8 @@ async function openSettlement(type: "receipt" | "payment", existing?: Transactio
   if (!parties.length) { showToast("ابتدا یک شخص ثبت کنید"); return; }
   (window as typeof window & { __saiAccounts?: unknown[] }).__saiAccounts = await listAccounts();
   document.body.insertAdjacentHTML("beforeend", settlementModal(type, existing));
-  const modal = document.querySelector<HTMLDivElement>("#settlement-modal")!;\n  if (existing) { modal.querySelector<HTMLSelectElement>("#settlement-party")!.value = existing.partyId || ""; modal.querySelector<HTMLSelectElement>("#settlement-account")!.value = existing.accountId || ""; modal.dataset.editId = existing.id; }
+  const modal = document.querySelector<HTMLDivElement>("#settlement-modal")!;
+  if (existing) { modal.querySelector<HTMLSelectElement>("#settlement-party")!.value = existing.partyId || ""; modal.querySelector<HTMLSelectElement>("#settlement-account")!.value = existing.accountId || ""; modal.dataset.editId = existing.id; }
   modal.querySelector("#settlement-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#settlement-submit")?.addEventListener("click", async () => {
     try {
