@@ -179,6 +179,29 @@ export async function getStock(productId: string): Promise<number> {
     .reduce((sum, movement) => sum + movement.quantity, 0);
 }
 
+export async function addSale(input: {
+  date: number;
+  partyId?: string;
+  description: string;
+  lines: Transaction["lines"];
+  paid: number;
+}): Promise<Transaction> {
+  for (const line of input.lines) {
+    const stock = await getStock(line.productId);
+    if (line.quantity <= 0) throw new Error("مقدار کالا باید بیشتر از صفر باشد");
+    if (stock < line.quantity) throw new Error("موجودی کالا برای این فروش کافی نیست");
+  }
+
+  return addTransaction({
+    type: "sale",
+    date: input.date,
+    partyId: input.partyId,
+    description: input.description,
+    lines: input.lines,
+    paid: Math.max(0, input.paid),
+  });
+}
+
 export async function seedDemoIfEmpty(): Promise<void> {
   const products = await listProducts();
   if (products.length) return;
