@@ -49,6 +49,7 @@ export interface Transaction {
   type: TransactionType;
   date: number;
   partyId?: ID;
+  accountId?: ID;
   description: string;
   lines: TransactionLine[];
   amount: Money;
