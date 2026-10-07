@@ -1,6 +1,6 @@
 import "./style.css";
 import {
-  addParty, addProduct, updateProduct, deleteProduct, addSale, addSettlement, addExpense, addStockAdjustment, getDashboard, getStock,
+  addParty, addProduct, updateProduct, deleteProduct, addSale, addSettlement, addExpense, addStockAdjustment, getDashboard, getStock, updateTransaction, deleteTransaction, updateExpense, deleteExpense,
   listParties, updateParty, deleteParty, listProducts, listTransactions, listExpenses, listMovements, calculateHistoricalCOGS
 } from "./db";
 import { createMonthlyCheckout, getSubscription, type Subscription } from "./billing";
@@ -9,7 +9,7 @@ import { formatMoney, getCurrencyUnit, setCurrencyUnit } from "./settings";
 import { openPurchaseModal } from "./purchase-ui";
 import { accountModal, accountLedgerModal, accountsView, bindAccountLedger, bindAccountModal, bindTransferModal, transferModal } from "./accounts-ui";
 import { getAccountBalances, listAccounts } from "./db";
-import { checksView, checkModal, bindCheckModal, bindCheckStatuses } from "./checks-ui";
+import { checksView, checkModal, bindCheckModal, bindCheckStatuses, bindCheckActions } from "./checks-ui";
 
 type Tab = "dashboard" | "sales" | "purchases" | "inventory" | "people" | "reports" | "more" | "checks";
 
@@ -214,28 +214,28 @@ async function openInvoice(t: Transaction): Promise<void> {
   document.querySelector("#invoice-branding-settings")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", invoiceBrandingModal()); bindInvoiceBrandingModal(); });
 }
 
-function saleModal(): string {
+function saleModal(existing?: Transaction): string {
   const productOptions = products.map(p => `<option value="${p.id}">${p.name} — ${rial(p.salePrice)} / ${p.unit}</option>`).join("");
   const partyOptions = parties.filter(p => p.type === "customer" || p.type === "both").map(p => `<option value="${p.id}">${p.name}</option>`).join("");
   const accountOptions = (window as typeof window & { __saiAccounts?: {id:string;name:string;type:string}[] }).__saiAccounts?.map(a => `<option value="${a.id}">${a.name}</option>`).join("") || "";
   return `
     <div class="modal-backdrop" id="sale-modal"><section class="modal" role="dialog" aria-modal="true">
-      <button class="modal-close" id="sale-close">×</button><span class="eyebrow">فاکتور فروش</span><h2>ثبت فروش</h2>
+      <button class="modal-close" id="sale-close">×</button><span class="eyebrow">فاکتور فروش</span><h2>${existing ? "ویرایش فروش" : "ثبت فروش"}</h2>
       <label class="field"><span>کالا</span><select id="sale-product">${productOptions}</select></label>
-      <div class="form-grid"><label class="field"><span>مقدار</span><input id="sale-quantity" type="number" min="0.001" step="0.001" value="1"></label>
-      <label class="field"><span>تخفیف</span><input id="sale-discount" type="number" min="0" value="0"></label></div>
+      <div class="form-grid"><label class="field"><span>مقدار</span><input id="sale-quantity" type="number" min="0.001" step="0.001" value="${existing?.lines[0]?.quantity ?? 1}"></label>
+      <label class="field"><span>تخفیف</span><input id="sale-discount" type="number" min="0" value="${existing?.lines[0]?.discount ?? 0}"></label></div>
       <label class="field"><span>مشتری</span><select id="sale-party"><option value="">بدون انتخاب</option>${partyOptions}</select></label>
-      <label class="field"><span>مبلغ پرداختی</span><input id="sale-paid" type="number" min="0" value="0"></label><label class="field"><span>دریافت به</span><select id="sale-account"><option value="">بدون انتخاب حساب</option>${accountOptions}</select></label>
+      <label class="field"><span>مبلغ پرداختی</span><input id="sale-paid" type="number" min="0" value="${existing?.paid ?? 0}"></label><label class="field"><span>دریافت به</span><select id="sale-account"><option value="">بدون انتخاب حساب</option>${accountOptions}</select></label>
       <div class="sale-summary"><span>مبلغ فاکتور</span><strong id="sale-total">۰ ریال</strong></div>
-      <button class="primary-button wide" id="sale-submit">ثبت فاکتور و کاهش موجودی</button>
+      <button class="primary-button wide" id="sale-submit">${existing ? "ذخیره تغییرات فاکتور" : "ثبت فاکتور و کاهش موجودی"}</button>
     </section></div>`;
 }
 
-async function openSaleModal(): Promise<void> {
+async function openSaleModal(existing?: Transaction): Promise<void> {
   products = await listProducts(); parties = await listParties();
   (window as typeof window & { __saiAccounts?: unknown[] }).__saiAccounts = await listAccounts();
   if (!products.length) { showToast("ابتدا یک کالا در موجودی ثبت کنید"); return; }
-  document.body.insertAdjacentHTML("beforeend", saleModal());
+  document.body.insertAdjacentHTML("beforeend", saleModal(existing));
   const modal = document.querySelector<HTMLDivElement>("#sale-modal")!;
   const product = modal.querySelector<HTMLSelectElement>("#sale-product")!;
   const quantity = modal.querySelector<HTMLInputElement>("#sale-quantity")!;
@@ -257,9 +257,11 @@ async function openSaleModal(): Promise<void> {
       const amount = Math.max(0, qty * p.salePrice - disc);
       const paidValue = Math.min(amount, Math.max(0, Number(paid.value) || 0));
       const line: TransactionLine = { productId: p.id, quantity: qty, unitPrice: p.salePrice, discount: disc };
-      const savedSale = await addSale({ date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
+      const savedSale = existing
+        ? await updateTransaction(existing.id, { date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue })
+        : await addSale({ date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
       modal.remove();
-      showToast(`فروش ثبت شد؛ مانده ${rial(amount - paidValue)}`);
+      showToast(`${existing ? "فاکتور ویرایش شد" : "فروش ثبت شد"}؛ مانده ${rial(amount - paidValue)}`);
       await openInvoice(savedSale);
       await render();
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت فروش ناموفق بود"); }
@@ -543,7 +545,7 @@ async function render(): Promise<void> {
   else if (activeTab === "sales") {
     const tx = (await listTransactions()).filter(t => t.type === "sale");
     content = pageHead("فروش", "دفتر فروش", "فاکتورهای فروش و مانده مشتریان.", `<button class="primary-button" id="new-sale">＋ ثبت فروش</button>`) +
-      `<section class="panel">${tx.length ? tx.map(t => `<button class="transaction-row transaction-button" data-invoice-id="${t.id}">${transactionRow(t)}</button>`).join("") : `<div class="empty-inline"><span>↗</span><p>هنوز فاکتور فروشی ثبت نشده است.</p></div>`}</section>`;
+      `<section class="panel">${tx.length ? tx.map(t => `<div class="transaction-actions-row"><button class="transaction-row transaction-button" data-invoice-id="${t.id}">${transactionRow(t)}</button><button class="secondary-button" data-sale-edit="${t.id}">ویرایش</button><button class="secondary-button" data-sale-delete="${t.id}">حذف</button></div>`).join("") : `<div class="empty-inline"><span>↗</span><p>هنوز فاکتور فروشی ثبت نشده است.</p></div>`}</section>`;
   } else if (activeTab === "purchases") {
     const tx = (await listTransactions()).filter(t => t.type === "purchase");
     content = pageHead("خرید", "دفتر خرید", "خریدها و افزایش خودکار موجودی.", `<button class="primary-button" id="new-purchase">＋ ثبت خرید</button>`) +
@@ -559,7 +561,9 @@ async function render(): Promise<void> {
     const tx = (await listTransactions()).find(t => t.id === b.dataset.invoiceId);
     if (tx) await openInvoice(tx);
   }));
-  document.querySelector("#new-sale")?.addEventListener("click", openSaleModal);
+  document.querySelector("#new-sale")?.addEventListener("click", () => void openSaleModal());
+  document.querySelectorAll<HTMLElement>("[data-sale-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.saleEdit); if(t) await openSaleModal(t); }));
+  document.querySelectorAll<HTMLElement>("[data-sale-delete]").forEach(b => b.addEventListener("click", async () => { const id=b.dataset.saleDelete||""; if(!id||!confirm("این فاکتور فروش حذف شود؟")) return; try { await deleteTransaction(id); showToast("فاکتور حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف فاکتور ناموفق بود"); } }));
   document.querySelector("#new-purchase")?.addEventListener("click", async () => {
     products = await listProducts(); parties = await listParties();
     openPurchaseModal(products, parties, rial, async m => { showToast(m); await render(); });
@@ -595,7 +599,7 @@ async function render(): Promise<void> {
   }));
   document.querySelector("#new-received-check")?.addEventListener("click", async () => { const [parties,accounts]=await Promise.all([listParties(),listAccounts()]); document.body.insertAdjacentHTML("beforeend", checkModal("received",parties,accounts)); const modal=document.querySelector<HTMLElement>("#check-modal"); if(modal) void bindCheckModal(modal,"received",async m=>{showToast(m);await render();}); });
   document.querySelector("#new-issued-check")?.addEventListener("click", async () => { const [parties,accounts]=await Promise.all([listParties(),listAccounts()]); document.body.insertAdjacentHTML("beforeend", checkModal("issued",parties,accounts)); const modal=document.querySelector<HTMLElement>("#check-modal"); if(modal) void bindCheckModal(modal,"issued",async m=>{showToast(m);await render();}); });
-  void bindCheckStatuses(m=>showToast(m));
+  void bindCheckStatuses(m=>showToast(m)); void bindCheckActions(m=>{showToast(m); void render();});
   document.querySelector("#new-account")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", accountModal()); const modal = document.querySelector<HTMLElement>("#account-modal"); if (modal) void bindAccountModal(modal, async m => { showToast(m); await render(); }); });
   document.querySelectorAll<HTMLElement>("[data-account-edit]").forEach(button => button.addEventListener("click", async event => {
     event.stopPropagation();
