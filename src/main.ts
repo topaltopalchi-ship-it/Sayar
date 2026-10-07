@@ -37,7 +37,7 @@ function layout(content: string, subscription: Subscription): void {
   app.innerHTML = `
     <main class="shell">
       <header class="topbar">
-        <div><span class="eyebrow">مدیریت مالی و فروش</span><h1>KASA</h1></div>
+        <div><span class="eyebrow">مدیریت مالی و فروش</span><h1>سای‌سای</h1></div>
         <div class="header-actions">
           <span class="plan-pill ${subscription.status}">${subscription.status === "active" ? "اشتراک فعال" : "نسخه آزمایشی"}</span>
           <button class="icon-button" id="settings" aria-label="اشتراک">⚙</button>
@@ -71,7 +71,7 @@ async function dashboardView(subscription: Subscription): Promise<string> {
 
   return `
     <section class="hero"><div><p class="hero-kicker">داشبورد مدیریت</p><h2>وضعیت کسب‌وکار شما</h2><p class="muted">فروش، دریافت، مطالبات و موجودی را از یکجا کنترل کنید.</p></div><div class="hero-mark">س</div></section>
-    ${subscription.status !== "active" ? `<section class="subscription-card"><div><span class="eyebrow">اشتراک KASA</span><h3>برای استفاده از نسخه کامل، اشتراک ماهانه فعال کنید.</h3><p class="muted">بعد از تأیید موفق پرداخت، دسترسی از سمت سرور فعال می‌شود.</p></div><button class="primary-button" data-subscribe>خرید اشتراک ماهانه</button></section>` : ""}
+    ${subscription.status !== "active" ? `<section class="subscription-card"><div><span class="eyebrow">اشتراک سای‌سای</span><h3>برای استفاده از نسخه کامل، اشتراک ماهانه فعال کنید.</h3><p class="muted">بعد از تأیید موفق پرداخت، دسترسی از سمت سرور فعال می‌شود.</p></div><button class="primary-button" data-subscribe>خرید اشتراک ماهانه</button></section>` : ""}
     <section class="stats-grid">
       ${stat("فروش امروز", rial(d.salesToday), "primary")}${stat("دریافت امروز", rial(d.receiptsToday), "success")}
       ${stat("مطالبات", rial(d.receivables), "warning")}${stat("موجودی کم", `${money.format(d.lowStock)} کالا`, "danger")}
@@ -214,7 +214,7 @@ function reportsView(transactions: Transaction[]): string {
   const receipts = transactions.filter(t => t.type === "receipt").reduce((s,t)=>s+t.paid,0);
   const payments = transactions.filter(t => t.type === "payment").reduce((s,t)=>s+t.paid,0);
   const expenses = transactions.filter(t => t.type === "expense").reduce((s,t)=>s+t.amount,0);
-  return pageHead("تحلیل مالی", "گزارش عملکرد", "خلاصه‌ی تمام اسناد ثبت‌شده در دفتر KASA.") +
+  return pageHead("تحلیل مالی", "گزارش عملکرد", "خلاصه‌ی تمام اسناد ثبت‌شده در دفتر سای‌سای.") +
     `<section class="stats-grid">${stat("کل فروش",rial(sales),"primary")}${stat("کل خرید",rial(purchases),"warning")}${stat("دریافت",rial(receipts),"success")}${stat("پرداخت",rial(payments + expenses),"danger")}</section>
     <section class="panel report-list"><div><span>تعداد اسناد</span><b>${money.format(transactions.length)}</b></div><div><span>خالص فروش منهای خرید</span><b>${rial(sales - purchases)}</b></div><div><span>آخرین ثبت</span><b>${transactions[0] ? dateLabel(transactions[0].date) : "—"}</b></div></section>`;
 }
@@ -291,13 +291,13 @@ function bindPartyModal(): void {
 
 function paywall(subscription: Subscription): string {
   const expiry = subscription.expiresAt ? `تا ${dateLabel(subscription.expiresAt)}` : "هنوز اشتراکی فعال نیست";
-  return `<section class="paywall"><div class="paywall-logo">س</div><span class="eyebrow">نسخه کامل KASA</span><h2>مدیریت فروش، انبار و حساب‌ها در یکجا</h2><p class="muted">برای استفاده از نسخه کامل، اشتراک ماهانه را فعال کنید. تأیید خرید در سرور انجام می‌شود.</p>
+  return `<section class="paywall"><div class="paywall-logo">س</div><span class="eyebrow">نسخه کامل سای‌سای</span><h2>مدیریت فروش، انبار و حساب‌ها در یکجا</h2><p class="muted">برای استفاده از نسخه کامل، اشتراک ماهانه را فعال کنید. تأیید خرید در سرور انجام می‌شود.</p>
     <div class="paywall-features"><span>✓ فروش و خرید</span><span>✓ موجودی و کالا</span><span>✓ مشتری و تأمین‌کننده</span><span>✓ گزارش‌های مدیریتی</span></div>
     <p class="subscription-expiry">${expiry}</p><button class="primary-button paywall-button" data-subscribe>خرید اشتراک ماهانه</button></section>`;
 }
 
 function showSubscription(subscription: Subscription): void {
-  document.body.insertAdjacentHTML("beforeend", `<div class="modal-backdrop" id="sub-modal"><section class="modal"><button class="modal-close" id="sub-close">×</button><span class="eyebrow">اشتراک KASA</span><h2>اشتراک ماهانه</h2><div class="price-card"><div><strong>پلن حرفه‌ای</strong><span>دسترسی کامل</span></div><b>ماهانه</b></div><button class="primary-button wide" id="sub-buy">ادامه پرداخت</button></section></div>`);
+  document.body.insertAdjacentHTML("beforeend", `<div class="modal-backdrop" id="sub-modal"><section class="modal"><button class="modal-close" id="sub-close">×</button><span class="eyebrow">اشتراک سای‌سای</span><h2>اشتراک ماهانه</h2><div class="price-card"><div><strong>پلن حرفه‌ای</strong><span>دسترسی کامل</span></div><b>ماهانه</b></div><button class="primary-button wide" id="sub-buy">ادامه پرداخت</button></section></div>`);
   document.querySelector("#sub-close")?.addEventListener("click", () => document.querySelector("#sub-modal")?.remove());
   document.querySelector("#sub-buy")?.addEventListener("click", subscribe);
 }
@@ -355,14 +355,14 @@ async function render(): Promise<void> {
   document.querySelector("#more-backup")?.addEventListener("click", async () => {
     const payload = { products: await listProducts(), parties: await listParties(), transactions: await listTransactions(), expenses: await (await import("./db")).listExpenses() };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `kasa-backup-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
+    const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `sai-sai-backup-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
     showToast("فایل پشتیبان آماده شد");
   });
   await bindActions();
 }
 
 function placeholder(title: string, text: string): string {
-  return pageHead("KASA", title, text) + `<section class="panel locked-panel"><div>◈</div><h3>این بخش در حال تکمیل است</h3><p class="muted">زیرساخت اصلی آماده است و قابلیت‌های تکمیلی در نسخه‌های بعدی اضافه می‌شوند.</p></section>`;
+  return pageHead("سای‌سای", title, text) + `<section class="panel locked-panel"><div>◈</div><h3>این بخش در حال تکمیل است</h3><p class="muted">زیرساخت اصلی آماده است و قابلیت‌های تکمیلی در نسخه‌های بعدی اضافه می‌شوند.</p></section>`;
 }
 
 render();
