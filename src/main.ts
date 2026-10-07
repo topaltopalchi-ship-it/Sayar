@@ -95,6 +95,52 @@ function transactionRow(t: Transaction): string {
   return `<div class="transaction-row"><div class="transaction-icon">${icons[t.type]}</div><div class="transaction-main"><strong>${labels[t.type]}${t.invoiceNumber ? ` · ${t.invoiceNumber}` : ""}</strong><small>${t.description || dateLabel(t.date)} · ${dateLabel(t.date)}</small></div><b>${rial(t.amount)}</b></div>`;
 }
 
+const INVOICE_BRANDING_KEY = "sai-sai-invoice-branding";
+
+type InvoiceBranding = { signature?: string; stamp?: string; slogan?: string; showSignature: boolean; showStamp: boolean; showSlogan: boolean };
+
+function getInvoiceBranding(): InvoiceBranding {
+  try {
+    const value = JSON.parse(localStorage.getItem(INVOICE_BRANDING_KEY) || "{}") as Partial<InvoiceBranding>;
+    return { signature: value.signature, stamp: value.stamp, slogan: value.slogan, showSignature: value.showSignature !== false, showStamp: value.showStamp !== false, showSlogan: value.showSlogan !== false };
+  } catch { return { showSignature: true, showStamp: true, showSlogan: true }; }
+}
+function saveInvoiceBranding(value: InvoiceBranding): void { localStorage.setItem(INVOICE_BRANDING_KEY, JSON.stringify(value)); }
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error("خواندن فایل ناموفق بود")); reader.readAsDataURL(file); });
+}
+function invoiceBrandingModal(): string {
+  const b = getInvoiceBranding();
+  return '<div class="modal-backdrop" id="invoice-branding-modal"><section class="modal">' +
+    '<button class="modal-close" id="branding-close">×</button><span class="eyebrow">تنظیمات فاکتور</span><h2>امضا، مهر و شعار</h2><p class="muted">یک‌بار ذخیره کن تا در همه فاکتورها قابل استفاده باشد.</p>' +
+    '<label class="field"><span>امضای آماده</span><input id="branding-signature" type="file" accept="image/png,image/jpeg,image/webp"></label>' +
+    (b.signature ? '<div class="branding-preview"><img src="' + b.signature + '" alt="امضای ذخیره‌شده"><button type="button" id="remove-signature">حذف امضا</button></div>' : '') +
+    '<label class="field"><span>مهر آماده</span><input id="branding-stamp" type="file" accept="image/png,image/jpeg,image/webp"></label>' +
+    (b.stamp ? '<div class="branding-preview"><img src="' + b.stamp + '" alt="مهر ذخیره‌شده"><button type="button" id="remove-stamp">حذف مهر</button></div>' : '') +
+    '<label class="field"><span>شعار آماده</span><input id="branding-slogan" type="file" accept="image/png,image/jpeg,image/webp"></label>' +
+    (b.slogan ? '<div class="branding-preview"><img src="' + b.slogan + '" alt="شعار ذخیره‌شده"><button type="button" id="remove-slogan">حذف شعار</button></div>' : '') +
+    '<label class="check-field"><input id="show-signature" type="checkbox" ' + (b.showSignature ? 'checked' : '') + '><span>نمایش امضا روی فاکتورها</span></label>' +
+    '<label class="check-field"><input id="show-stamp" type="checkbox" ' + (b.showStamp ? 'checked' : '') + '><span>نمایش مهر روی فاکتورها</span></label>' +
+    '<label class="check-field"><input id="show-slogan" type="checkbox" ' + (b.showSlogan ? 'checked' : '') + '><span>نمایش شعار روی فاکتورها</span></label>' +
+    '<button class="primary-button wide" id="branding-save">ذخیره تنظیمات</button></section></div>';
+}
+function bindInvoiceBrandingModal(): void {
+  const modal = document.querySelector<HTMLDivElement>("#invoice-branding-modal")!;
+  let b = getInvoiceBranding();
+  const handle = async (id: string, key: "signature" | "stamp" | "slogan") => {
+    const input = modal.querySelector<HTMLInputElement>("#" + id);
+    if (input?.files?.[0]) b = { ...b, [key]: await fileToDataUrl(input.files[0]) };
+  };
+  modal.querySelector("#branding-close")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#branding-save")?.addEventListener("click", async () => {
+    try {
+      await handle("branding-signature", "signature"); await handle("branding-stamp", "stamp"); await handle("branding-slogan", "slogan");
+      b = { ...b, showSignature: modal.querySelector<HTMLInputElement>("#show-signature")!.checked, showStamp: modal.querySelector<HTMLInputElement>("#show-stamp")!.checked, showSlogan: modal.querySelector<HTMLInputElement>("#show-slogan")!.checked };
+      saveInvoiceBranding(b); modal.remove(); showToast("تنظیمات فاکتور ذخیره شد");
+    } catch (e) { showToast(e instanceof Error ? e.message : "ذخیره تنظیمات ناموفق بود"); }
+  });
+  [["remove-signature","signature"],["remove-stamp","stamp"],["remove-slogan","slogan"]].forEach(([id,key]) => modal.querySelector("#"+id)?.addEventListener("click", () => { saveInvoiceBranding({ ...b, [key]: undefined }); modal.remove(); }));
+}
 function invoiceModal(t: Transaction, productMap: Map<string, Product>, partyMap: Map<string, Party>): string {
   const party = t.partyId ? partyMap.get(t.partyId) : undefined;
   const rows = t.lines.map((line, i) => {
@@ -108,7 +154,7 @@ function invoiceModal(t: Transaction, productMap: Map<string, Product>, partyMap
     <div class="invoice-party"><span>طرف حساب</span><strong>${party?.name || "ثبت نشده"}</strong><small>${party?.phone || "بدون شماره تماس"}</small></div>
     <div class="invoice-table-wrap"><table class="invoice-table"><thead><tr><th>#</th><th>کالا</th><th>مقدار</th><th>قیمت</th><th>تخفیف</th><th>جمع</th></tr></thead><tbody>${rows || '<tr><td colspan="6">بدون ردیف</td></tr>'}</tbody></table></div>
     <div class="invoice-summary"><div><span>جمع فاکتور</span><b>${rial(t.amount)}</b></div><div><span>پرداخت‌شده</span><b>${rial(t.paid)}</b></div><div class="invoice-balance"><span>مانده</span><b>${rial(Math.max(0, t.amount - t.paid))}</b></div></div>
-    <button class="primary-button wide no-print" id="invoice-print">چاپ / ذخیره PDF</button>
+    <div class="invoice-branding no-print"><button class="secondary-button" id="invoice-branding-settings">⚙ امضا، مهر و شعار</button></div>\n    <button class="primary-button wide no-print" id="invoice-print">چاپ / ذخیره PDF</button>
   </section></div>`;
 }
 
@@ -116,7 +162,7 @@ async function openInvoice(t: Transaction): Promise<void> {
   const [productList, partyList] = await Promise.all([listProducts(), listParties()]);
   document.body.insertAdjacentHTML("beforeend", invoiceModal(t, new Map(productList.map(p => [p.id, p])), new Map(partyList.map(p => [p.id, p]))));
   document.querySelector("#invoice-close")?.addEventListener("click", () => document.querySelector("#invoice-modal")?.remove());
-  document.querySelector("#invoice-print")?.addEventListener("click", () => window.print());
+  document.querySelector("#invoice-print")?.addEventListener("click", () => window.print());\n  document.querySelector("#invoice-branding-settings")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", invoiceBrandingModal()); bindInvoiceBrandingModal(); });
 }
 
 function saleModal(): string {
