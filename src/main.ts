@@ -444,7 +444,7 @@ async function openSettlement(type: "receipt" | "payment", existing?: Transactio
       const amount = Number(modal.querySelector<HTMLInputElement>("#settlement-amount")!.value);
       if (!partyId || amount <= 0) throw new Error("شخص و مبلغ را وارد کنید");
       const accountId = modal.querySelector<HTMLSelectElement>("#settlement-account")!.value || undefined;
-      const description = modal.querySelector<HTMLInputElement>("#settlement-description")!.value.trim() || (type === "receipt" ? "دریافت وجه" : "پرداخت وجه"); if (modal.dataset.editId) await updateTransaction(modal.dataset.editId, { date: Date.now(), partyId, accountId, amount: undefined as never, description, lines: [], paid: amount }); else await addSettlement({ type, date: Date.now(), partyId, accountId, amount, description });
+      const description = modal.querySelector<HTMLInputElement>("#settlement-description")!.value.trim() || (type === "receipt" ? "دریافت وجه" : "پرداخت وجه"); if (modal.dataset.editId) await updateTransaction(modal.dataset.editId, { date: Date.now(), partyId, accountId, description, lines: [], paid: amount }); else await addSettlement({ type, date: Date.now(), partyId, accountId, amount, description });
       modal.remove(); showToast(existing ? "تغییرات ذخیره شد" : "ثبت شد"); await render();
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت ناموفق بود"); }
   });
