@@ -84,7 +84,7 @@ function layout(content: string, subscription: Subscription): void {
       <header class="topbar">
         <div><span class="eyebrow">مدیریت مالی و فروش</span><h1>سای‌سای</h1></div>
         <div class="header-actions">
-          <span class="plan-pill ${subscription.status}">${subscription.status === "active" ? "اشتراک فعال" : "نسخه آزمایشی"}</span>
+          <span class="plan-pill ${subscription.status}">${subscription.status === "active" ? (subscription.isTrial ? "دوره رایگان ۳۰ روزه" : "اشتراک فعال") : "اشتراک لازم است"}</span>
           <button class="icon-button" id="settings" aria-label="حالت کاربری">⚙</button>
         </div>
       </header>
