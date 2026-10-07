@@ -1,8 +1,9 @@
 export function jalaliToGregorianDate(value: string): Date | null {
-  const match = value.trim().match(/^(\\d{4})[\\/-](\\d{1,2})[\\/-](\\d{1,2})$/);
+  const normalized = value.trim().replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
+  const match = normalized.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
   if (!match) return null;
   const jy = Number(match[1]), jm = Number(match[2]), jd = Number(match[3]);
-  if (jm < 1 || jm > 12 || jd < 1 || jd > 31) return null;
+  if (jm < 1 || jm > 12 || jd < 1 || jd > (jm <= 6 ? 31 : jm <= 11 ? 30 : 30)) return null;
 
   let j = jy + 1597;
   let days = -355668 + 365 * j + Math.floor(j / 33) * 8 + Math.floor(((j % 33) + 3) / 4) + jd
