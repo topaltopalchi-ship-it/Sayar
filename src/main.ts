@@ -4,7 +4,7 @@ import {
   listParties, listProducts, listTransactions
 } from "./db";
 import { createMonthlyCheckout, getSubscription, type Subscription } from "./billing";
-import type { Party, Product, Transaction, TransactionLine } from "./domain";
+import { lineTotal, type Party, type Product, type Transaction, type TransactionLine } from "./domain";
 import { openPurchaseModal } from "./purchase-ui";
 
 type Tab = "dashboard" | "sales" | "purchases" | "inventory" | "people" | "reports" | "more";
@@ -93,6 +93,30 @@ function transactionRow(t: Transaction): string {
   };
   const icons: Record<Transaction["type"], string> = { sale: "↗", purchase: "↙", receipt: "↓", payment: "↑", expense: "−", stockAdjustment: "±" };
   return `<div class="transaction-row"><div class="transaction-icon">${icons[t.type]}</div><div class="transaction-main"><strong>${labels[t.type]}${t.invoiceNumber ? ` · ${t.invoiceNumber}` : ""}</strong><small>${t.description || dateLabel(t.date)} · ${dateLabel(t.date)}</small></div><b>${rial(t.amount)}</b></div>`;
+}
+
+function invoiceModal(t: Transaction, productMap: Map<string, Product>, partyMap: Map<string, Party>): string {
+  const party = t.partyId ? partyMap.get(t.partyId) : undefined;
+  const rows = t.lines.map((line, i) => {
+    const p = productMap.get(line.productId);
+    return `<tr><td>${money.format(i + 1)}</td><td>${p?.name || "کالای حذف‌شده"}</td><td>${money.format(line.quantity)} ${p?.unit || ""}</td><td>${rial(line.unitPrice)}</td><td>${rial(line.discount)}</td><td>${rial(lineTotal(line))}</td></tr>`;
+  }).join("");
+  const title = t.type === "purchase" ? "فاکتور خرید" : "فاکتور فروش";
+  return `<div class="modal-backdrop invoice-backdrop" id="invoice-modal"><section class="modal invoice-modal">
+    <button class="modal-close no-print" id="invoice-close">×</button>
+    <div class="invoice-head"><div><span class="eyebrow">سای‌سای</span><h2>${title}</h2><p>${t.invoiceNumber || "بدون شماره"} · ${dateLabel(t.date)}</p></div><div class="invoice-brand">س</div></div>
+    <div class="invoice-party"><span>طرف حساب</span><strong>${party?.name || "ثبت نشده"}</strong><small>${party?.phone || "بدون شماره تماس"}</small></div>
+    <div class="invoice-table-wrap"><table class="invoice-table"><thead><tr><th>#</th><th>کالا</th><th>مقدار</th><th>قیمت</th><th>تخفیف</th><th>جمع</th></tr></thead><tbody>${rows || '<tr><td colspan="6">بدون ردیف</td></tr>'}</tbody></table></div>
+    <div class="invoice-summary"><div><span>جمع فاکتور</span><b>${rial(t.amount)}</b></div><div><span>پرداخت‌شده</span><b>${rial(t.paid)}</b></div><div class="invoice-balance"><span>مانده</span><b>${rial(Math.max(0, t.amount - t.paid))}</b></div></div>
+    <button class="primary-button wide no-print" id="invoice-print">چاپ / ذخیره PDF</button>
+  </section></div>`;
+}
+
+async function openInvoice(t: Transaction): Promise<void> {
+  const [productList, partyList] = await Promise.all([listProducts(), listParties()]);
+  document.body.insertAdjacentHTML("beforeend", invoiceModal(t, new Map(productList.map(p => [p.id, p])), new Map(partyList.map(p => [p.id, p]))));
+  document.querySelector("#invoice-close")?.addEventListener("click", () => document.querySelector("#invoice-modal")?.remove());
+  document.querySelector("#invoice-print")?.addEventListener("click", () => window.print());
 }
 
 function saleModal(): string {
