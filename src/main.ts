@@ -88,8 +88,35 @@ function placeholder(title:string, text:string): string {
   return `<section class="page-head"><span class="eyebrow">سایار</span><h2>${title}</h2><p class="muted">${text}</p></section><section class="panel locked-panel"><div>◈</div><h3>این بخش در حال ساخت است</h3><p class="muted">هسته اطلاعاتی آن در معماری سایار در نظر گرفته شده و رابط کامل مرحله‌ای اضافه می‌شود.</p></section>`;
 }
 
+function lockedView(subscription: Subscription): string {
+  const expiry = subscription.expiresAt
+    ? `تا ${dateLabel(subscription.expiresAt)}`
+    : "هنوز اشتراکی فعال نیست";
+
+  return `
+    <section class="paywall">
+      <div class="paywall-logo">س</div>
+      <span class="eyebrow">نسخه کامل سایار</span>
+      <h2>برای ورود به سیستم، اشتراک ماهانه را فعال کنید</h2>
+      <p class="muted">دسترسی به فروش، خرید، موجودی، اشخاص و گزارش‌ها بعد از تأیید پرداخت از سمت سرور باز می‌شود.</p>
+      <div class="paywall-features">
+        <span>✓ حسابداری و ثبت اسناد</span><span>✓ مدیریت فروش و خرید</span>
+        <span>✓ انبار و موجودی</span><span>✓ گزارش‌های مدیریتی</span>
+      </div>
+      <p class="subscription-expiry">${expiry}</p>
+      <button class="primary-button paywall-button" data-subscribe>خرید اشتراک ماهانه</button>
+      <small>پس از پرداخت موفق، به سایار برگردید؛ وضعیت اشتراک خودکار بررسی می‌شود.</small>
+    </section>`;
+}
+
 async function render(): Promise<void> {
   const subscription = await getSubscription().catch(() => ({ status:"none", plan:"none", expiresAt:null } as Subscription));
+  if (subscription.status !== "active") {
+    layout(lockedView(subscription), subscription);
+    document.querySelector<HTMLButtonElement>("[data-subscribe]")?.addEventListener("click", subscribe);
+    return;
+  }
+
   let content = "";
   if (activeTab==="dashboard") content=await dashboardView(subscription);
   else if (activeTab==="inventory") content=await inventoryView();
@@ -101,24 +128,3 @@ async function render(): Promise<void> {
   layout(content, subscription);
   document.querySelectorAll<HTMLButtonElement>("[data-locked]").forEach(b => b.addEventListener("click", () => showToast("این عملیات در مرحله بعد فعال می‌شود.")));
 }
-
-function showSubscription(subscription: Subscription): void {
-  const modal=document.createElement("div");
-  modal.className="modal-backdrop";
-  modal.innerHTML=`<div class="modal"><button class="modal-close" aria-label="بستن">×</button><span class="eyebrow">اشتراک سایار</span><h2>${subscription.status==="active"?"اشتراک شما فعال است":"نسخه کامل سایار"}</h2><div class="price-card"><strong>اشتراک ماهانه</strong><span>قیمت از سرور دریافت خواهد شد</span></div><p class="muted">پرداخت باید توسط درگاه/استور تأیید شود؛ اپلیکیشن به‌تنهایی وضعیت پرداخت را معتبر اعلام نمی‌کند.</p><button class="primary-button" data-subscribe>ادامه پرداخت</button></div>`;
-  document.body.appendChild(modal);
-  modal.querySelector(".modal-close")?.addEventListener("click",()=>modal.remove());
-  modal.addEventListener("click",e=>{if(e.target===modal)modal.remove()});
-  modal.querySelector<HTMLButtonElement>("[data-subscribe]")?.addEventListener("click",async()=>{modal.remove();await subscribe()});
-}
-
-async function subscribe(): Promise<void> {
-  try {
-    const url=await createMonthlyCheckout();
-    window.location.assign(url);
-  } catch(error) {
-    showToast(error instanceof Error ? error.message : "پرداخت در دسترس نیست");
-  }
-}
-
-render();
