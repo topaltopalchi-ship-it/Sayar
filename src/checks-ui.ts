@@ -23,14 +23,14 @@ const moneyFormat = (v:number) => new Intl.NumberFormat("fa-IR").format(v);
 export function checkModal(direction: CheckDirection, parties: Array<{id:string;name:string}> = [], accounts: Array<{id:string;name:string}> = []): string {
   const title = direction === "received" ? "ثبت چک دریافتی" : "ثبت چک پرداختی";
   return `<div class="modal-backdrop" id="check-modal"><section class="modal"><button class="modal-close" id="check-close">×</button><span class="eyebrow">چک و سررسید</span><h2>${title}</h2>
-  <label class="field"><span>شماره چک</span><input id="check-number" inputmode="numeric" placeholder="مثلاً ۱۲۳۴۵۶"></label>
-  <label class="field"><span>بانک</span><input id="check-bank" placeholder="مثلاً بانک ملی"></label>
-  <label class="field"><span>نام صادرکننده / صاحب چک</span><input id="check-issuer"></label><label class="field"><span>طرف حساب</span><select id="check-party"><option value="">بدون انتخاب</option>${parties.map(p => `<option value="${p.id}">${p.name}</option>`).join("")}</select><label class="field"><span>حساب مالی</span><select id="check-account"><option value="">بدون انتخاب</option>${accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join("")}</select></label>
-  <label class="field"><span>مبلغ</span><input id="check-amount" type="number" min="1"></label>
-  <label class="field"><span>تاریخ صدور شمسی</span><input id="check-issue" placeholder="۱۴۰۵/۰۱/۰۱"></label>
-  <label class="field"><span>تاریخ سررسید شمسی</span><input id="check-due" placeholder="۱۴۰۵/۰۲/۰۱"></label>
-  <label class="field"><span>شرح</span><input id="check-description" placeholder="توضیحات اختیاری"></label>
-  <button class="primary-button wide" id="check-submit">ثبت چک</button></section></div>`;
+  <label class="field"><span>شماره چک</span><input id="check-number" inputmode="numeric" placeholder="مثلاً ۱۲۳۴۵۶" value="${(arguments[3] as Check | undefined)?.number || ""}"></label>
+  <label class="field"><span>بانک</span><input id="check-bank" placeholder="مثلاً بانک ملی" value="${(arguments[3] as Check | undefined)?.bank || ""}"></label>
+  <label class="field"><span>نام صادرکننده / صاحب چک</span><input id="check-issuer" value="${(arguments[3] as Check | undefined)?.issuerName || ""}"></label><label class="field"><span>طرف حساب</span><select id="check-party"><option value="">بدون انتخاب</option>${parties.map(p => `<option value="${p.id}">${p.name}</option>`).join("")}</select><label class="field"><span>حساب مالی</span><select id="check-account"><option value="">بدون انتخاب</option>${accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join("")}</select></label>
+  <label class="field"><span>مبلغ</span><input id="check-amount" type="number" min="1" value="${(arguments[3] as Check | undefined)?.amount ?? ""}"></label>
+  <label class="field"><span>تاریخ صدور شمسی</span><input id="check-issue" placeholder="۱۴۰۵/۰۱/۰۱" value="${(arguments[3] as Check | undefined)?.issueDate ? dateLabel((arguments[3] as Check).issueDate).replace(/-/g,"/") : ""}"></label>
+  <label class="field"><span>تاریخ سررسید شمسی</span><input id="check-due" placeholder="۱۴۰۵/۰۲/۰۱" value="${(arguments[3] as Check | undefined)?.dueDate ? dateLabel((arguments[3] as Check).dueDate).replace(/-/g,"/") : ""}"></label>
+  <label class="field"><span>شرح</span><input id="check-description" placeholder="توضیحات اختیاری" value="${(arguments[3] as Check | undefined)?.description || ""}"></label>
+  <button class="primary-button wide" id="check-submit">${(arguments[3] as Check | undefined) ? "ذخیره تغییرات" : "ثبت چک"}</button></section></div>`;
 }
 
 function jalaliDate(value: string): number | null {
@@ -49,8 +49,10 @@ export async function bindCheckModal(modal: HTMLElement, direction: CheckDirecti
       const due=jalaliDate((modal.querySelector<HTMLInputElement>("#check-due")?.value||"").trim());
       const amount=Math.round(Number(modal.querySelector<HTMLInputElement>("#check-amount")?.value||0));
       if(!issue||!due||due<issue||amount<=0) throw new Error("مبلغ و تاریخ‌های چک را بررسی کنید");
-      await addCheck({direction,number:(modal.querySelector<HTMLInputElement>("#check-number")?.value||"").trim(),bank:(modal.querySelector<HTMLInputElement>("#check-bank")?.value||"").trim(),issuerName:(modal.querySelector<HTMLInputElement>("#check-issuer")?.value||"").trim(),amount,issueDate:issue,dueDate:due,status:"pending",partyId:(modal.querySelector<HTMLSelectElement>("#check-party")?.value||undefined),accountId:(modal.querySelector<HTMLSelectElement>("#check-account")?.value||undefined),description:(modal.querySelector<HTMLInputElement>("#check-description")?.value||"").trim()});
-      modal.remove();done("چک ثبت شد");
+      const values = {direction,number:(modal.querySelector<HTMLInputElement>("#check-number")?.value||"").trim(),bank:(modal.querySelector<HTMLInputElement>("#check-bank")?.value||"").trim(),issuerName:(modal.querySelector<HTMLInputElement>("#check-issuer")?.value||"").trim(),amount,issueDate:issue,dueDate:due,status:"pending",partyId:(modal.querySelector<HTMLSelectElement>("#check-party")?.value||undefined),accountId:(modal.querySelector<HTMLSelectElement>("#check-account")?.value||undefined),description:(modal.querySelector<HTMLInputElement>("#check-description")?.value||"").trim()};
+      const editId = modal.dataset.editId;
+      if (editId) await updateCheck(editId, values); else await addCheck(values);
+      modal.remove();done(editId ? "چک ویرایش شد" : "چک ثبت شد");
     } catch(e){done(e instanceof Error?e.message:"ثبت چک ناموفق بود");}
   });
 }
