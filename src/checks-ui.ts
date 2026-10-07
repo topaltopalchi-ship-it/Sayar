@@ -55,5 +55,5 @@ export async function bindCheckModal(modal: HTMLElement, direction: CheckDirecti
   });
 }
 export async function bindCheckStatuses(done:(m:string)=>void) {
-  document.querySelectorAll<HTMLSelectElement>(".check-status").forEach(s=>s.addEventListener("change",async()=>{const id=s.dataset.checkId||""; if(s.value==="cleared"){ const accounts=await listAccounts(); const check=(await listChecks()).find(x=>x.id===id); if(!check){done("چک پیدا نشد");return;} const accountId=check.accountId||accounts[0]?.id||""; await clearCheck(id,accountId); } else { await updateCheck(id,{status:s.value as CheckStatus}); } done("وضعیت چک به‌روزرسانی شد");}));
+  document.querySelectorAll<HTMLSelectElement>(".check-status").forEach(s=>s.addEventListener("change",async()=>{const id=s.dataset.checkId||""; if(s.value==="cleared"){ const accounts=await listAccounts(); const check=(await listChecks()).find(x=>x.id===id); if(!check){done("چک پیدا نشد");return;} const accountId=check.accountId||accounts[0]?.id||""; if(!accountId) throw new Error("برای وصول چک حداقل یک حساب مالی بسازید"); await clearCheck(id,accountId); } else { await updateCheck(id,{status:s.value as CheckStatus}); } done("وضعیت چک به‌روزرسانی شد");}));
 }
