@@ -242,6 +242,7 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
   const discount = modal.querySelector<HTMLInputElement>("#sale-discount")!;
   const paid = modal.querySelector<HTMLInputElement>("#sale-paid")!;
   const total = modal.querySelector<HTMLElement>("#sale-total")!;
+  if (existing) { if (existing.lines[0]) product.value = existing.lines[0].productId; modal.querySelector<HTMLSelectElement>("#sale-party")!.value = existing.partyId || ""; modal.querySelector<HTMLSelectElement>("#sale-account")!.value = existing.accountId || ""; }
   const update = () => {
     const p = products.find(x => x.id === product.value);
     total.textContent = rial(Math.max(0, (Number(quantity.value) || 0) * (p?.salePrice ?? 0) - (Number(discount.value) || 0)));
