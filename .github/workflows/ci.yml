@@ -19,7 +19,8 @@ jobs:
       - name: Install
         run: npm install
       - name: Build
-        run: npm run build 2>&1 | tee build.log
+        run: |
+          npm run build 2>&1 | tee build.log
           echo "---BUILD-LOG---"
           cat build.log
       - name: Upload build log
