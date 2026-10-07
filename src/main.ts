@@ -5,6 +5,7 @@ import {
 } from "./db";
 import { createMonthlyCheckout, getSubscription, type Subscription } from "./billing";
 import { lineTotal, type Party, type Product, type Transaction, type TransactionLine } from "./domain";
+import { formatMoney, getCurrencyUnit, setCurrencyUnit } from "./settings";
 import { openPurchaseModal } from "./purchase-ui";
 
 type Tab = "dashboard" | "sales" | "purchases" | "inventory" | "people" | "reports" | "more";
@@ -22,6 +23,22 @@ let activeTab: Tab = "dashboard";
 const UI_MODE_KEY = "sai-sai-ui-mode";
 function isProfessionalMode(): boolean { return localStorage.getItem(UI_MODE_KEY) === "professional"; }
 function setProfessionalMode(value: boolean): void { localStorage.setItem(UI_MODE_KEY, value ? "professional" : "simple"); }
+function settingsModal(): string {
+  const unit = getCurrencyUnit();
+  return `<div class="modal-backdrop" id="settings-modal"><section class="modal ui-mode-modal"><button class="modal-close" id="settings-close">×</button><span class="eyebrow">تنظیمات سای‌سای</span><h2>تنظیمات پایه</h2><label class="field"><span>واحد نمایش مبلغ</span><select id="currency-unit"><option value="toman" ${unit === "toman" ? "selected" : ""}>تومان</option><option value="rial" ${unit === "rial" ? "selected" : ""}>ریال</option></select></label><button class="primary-button wide" id="settings-save">ذخیره و اعمال</button></section></div>`;
+}
+function bindSettingsModal(): void {
+  const modal = document.querySelector<HTMLDivElement>("#settings-modal");
+  if (!modal) return;
+  modal.querySelector("#settings-close")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#settings-save")?.addEventListener("click", async () => {
+    const unit = modal.querySelector<HTMLSelectElement>("#currency-unit")?.value === "toman" ? "toman" : "rial";
+    setCurrencyUnit(unit);
+    modal.remove();
+    await render();
+    showToast("واحد مبلغ ذخیره شد");
+  });
+}
 function uiModeModal(): string {
   const professional = isProfessionalMode();
   return `<div class="modal-backdrop" id="ui-mode-modal"><section class="modal ui-mode-modal"><button class="modal-close" id="ui-mode-close">×</button><span class="eyebrow">شخصی‌سازی سای‌سای</span><h2>حالت کاربری</h2><p class="muted">اگر حسابدار نیستید، حالت ساده منوها و گزینه‌های ضروری را خلوت نگه می‌دارد.</p><label class="professional-toggle"><input id="professional-mode" type="checkbox" ${professional ? "checked" : ""}><span><b>نسخه حرفه‌ای</b><small>گزارش‌های پیشرفته، تنظیمات بیشتر و ابزارهای مدیریتی نمایش داده شوند.</small></span></label><button class="secondary-button wide" id="subscription-settings">مدیریت اشتراک</button><div class="mode-hint">${professional ? "حالت حرفه‌ای فعال است." : "حالت ساده برای استفاده روزمره فعال است."}</div><button class="primary-button wide" id="ui-mode-save">ذخیره و اعمال</button></section></div>`;
@@ -44,7 +61,7 @@ function bindUiModeModal(): void {
 let products: Product[] = [];
 let parties: Party[] = [];
 
-const rial = (value: number) => `${money.format(Math.round(value))} ریال`;
+const rial = (value: number) => formatMoney(value);
 const dateLabel = (value: number) => dateTime.format(new Date(value));
 
 function showToast(message: string): void {
