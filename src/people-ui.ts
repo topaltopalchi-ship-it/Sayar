@@ -1,4 +1,4 @@
-import { addParty, addSettlement, calculateHistoricalCOGS, getPartyBalances, listExpenses, listParties, listProducts, listTransactions } from "./db";
+import { addParty, addSettlement, calculateHistoricalCOGS, getPartyBalances, listChecks, listExpenses, listParties, listProducts, listTransactions, listAccounts } from "./db";
 import { lineTotal, type Party, type PartyType } from "./domain";
 import { formatMoney } from "./settings";
 import { jalaliToGregorianDate, todayJalaliInput } from "./calendar";
@@ -30,7 +30,7 @@ export function partyModal(): string {
     </div>`;
 }
 
-export function settlementModal(party: Party, type: "receipt"|"payment"): string {
+export function settlementModal(party: Party, type: "receipt"|"payment", accounts: Array<{id:string;name:string}> = []): string {
   const title = type === "receipt" ? "دریافت از مشتری" : "پرداخت به تأمین‌کننده";
   return `
     <div class="modal-backdrop" id="settlement-modal">
@@ -40,7 +40,7 @@ export function settlementModal(party: Party, type: "receipt"|"payment"): string
         <h2>${title}</h2>
         <p class="muted">طرف حساب: <strong>${party.name}</strong></p>
         <label class="field"><span>مبلغ</span><input id="settlement-amount" type="number" min="1" value="0"></label>
-        <label class="field"><span>شرح</span><input id="settlement-description" type="text" placeholder="${title}"></label>
+        <label class="field"><span>${type === "receipt" ? "دریافت به" : "پرداخت از"}</span><select id="settlement-account"><option value="">بدون انتخاب حساب</option>${accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join("")}</select></label>\n        <label class="field"><span>شرح</span><input id="settlement-description" type="text" placeholder="${title}"></label>
         <button class="primary-button wide" id="settlement-submit">ثبت ${type === "receipt" ? "دریافت" : "پرداخت"}</button>
       </section>
     </div>`;
@@ -51,8 +51,8 @@ export async function saveNewParty(name: string, phone: string, type: PartyType)
   return addParty({ name: name.trim(), phone: phone.trim(), type });
 }
 
-export async function saveSettlement(partyId: string, type: "receipt"|"payment", amount: number, description: string): Promise<void> {
-  await addSettlement({ partyId, type, amount, date: Date.now(), description: description.trim() || (type === "receipt" ? "دریافت از مشتری" : "پرداخت به تأمین‌کننده") });
+export async function saveSettlement(partyId: string, type: "receipt"|"payment", amount: number, description: string, accountId?: string): Promise<void> {
+  await addSettlement({ partyId, type, amount, date: Date.now(), accountId, description: description.trim() || (type === "receipt" ? "دریافت از مشتری" : "پرداخت به تأمین‌کننده") });
 }
 
 export { typeLabel };
@@ -65,7 +65,7 @@ async function enhancePeople(): Promise<void> {
   const view = document.querySelector("#view");
   if (!view || !view.querySelector(".person-row") || view.dataset.balanceEnhanced === "1") return;
   view.dataset.balanceEnhanced = "1";
-  const [parties, balances] = await Promise.all([listParties(), getPartyBalances()]);
+  const [parties, balances, checks] = await Promise.all([listParties(), getPartyBalances(), listChecks()]);
   view.querySelectorAll<HTMLElement>(".person-row").forEach((row, index) => {
     const party = parties[index];
     if (!party) return;
@@ -73,7 +73,7 @@ async function enhancePeople(): Promise<void> {
     row.addEventListener("click", async () => {
       const transactions = await listTransactions();
       const balance = balances[party.id]?.balance ?? 0;
-      const related = transactions.filter(t => t.partyId === party.id).sort((a,b)=>b.date-a.date);
+      const related = transactions.filter(t => t.partyId === party.id).sort((a,b)=>b.date-a.date);\n      const partyChecks = checks.filter(c => c.partyId === party.id);\n      const pendingReceived = balances[party.id]?.pendingReceivedChecks ?? 0;\n      const pendingIssued = balances[party.id]?.pendingIssuedChecks ?? 0;
       const labels: Record<string,string> = {sale:"فروش", purchase:"خرید", receipt:"دریافت", payment:"پرداخت"};
       const rows = related.length ? related.slice(0,30).map(t => `<div class="ledger-row"><span><b>${labels[t.type] || t.type}</b><small>${dateLabel(t.date)} · ${t.description || "بدون شرح"}</small></span><strong>${rial(t.amount)}</strong></div>`).join("") : '<div class="empty-inline"><span>◌</span><p>گردش حسابی ثبت نشده است.</p></div>';
       const customer = party.type === "customer" || party.type === "both";
@@ -84,11 +84,11 @@ async function enhancePeople(): Promise<void> {
           <span class="eyebrow">گردش حساب</span><h2>${party.name}</h2>
           <p class="muted">${party.phone || "بدون شماره"} · ${typeLabel[party.type]}</p>
           <div class="ledger-balance"><span>مانده حساب</span><strong>${rial(Math.abs(balance))}</strong><small>${balance === 0 ? "تسویه" : customer ? (balance > 0 ? "بدهکار" : "طلبکار") : (balance < 0 ? "بدهکار" : "طلبکار")}</small></div>
-          <div class="ledger-actions">
+          <div class="ledger-checks"><span>چک دریافتی در انتظار: <b>${rial(pendingReceived)}</b></span><span>چک پرداختی در انتظار: <b>${rial(pendingIssued)}</b></span></div>\n          <div class="ledger-actions">
             ${customer ? '<button class="primary-button" data-ledger="receipt">↓ دریافت</button>' : ''}
             ${supplier ? '<button class="primary-button" data-ledger="payment">↑ پرداخت</button>' : ''}
           </div>
-          <div class="ledger-list">${rows}</div>
+          <div class="ledger-list">${rows}${partyChecks.map(c => `<div class="ledger-row"><span><b>${c.direction === "received" ? "چک دریافتی" : "چک پرداختی"}</b><small>${c.number || "بدون شماره"} · سررسید ${dateLabel(c.dueDate)} · ${c.status}</small></span><strong>${rial(c.amount)}</strong></div>`).join("")}</div>
         </section></div>`);
       const modal = document.querySelector<HTMLDivElement>("#party-ledger-modal")!;
       modal.querySelector("#party-ledger-close")?.addEventListener("click",()=>modal.remove());
@@ -102,7 +102,7 @@ async function enhancePeople(): Promise<void> {
           try {
             const amount = Number(sm.querySelector<HTMLInputElement>("#settlement-amount")!.value);
             const description = sm.querySelector<HTMLInputElement>("#settlement-description")!.value;
-            await saveSettlement(party.id,type,amount,description);
+            const accountId = sm.querySelector<HTMLSelectElement>("#settlement-account")?.value || undefined;\n            await saveSettlement(party.id,type,amount,description,accountId);
             sm.remove(); window.dispatchEvent(new Event("sai-sai-refresh"));
           } catch(e) { alert(e instanceof Error ? e.message : "ثبت ناموفق بود"); }
         });
