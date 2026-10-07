@@ -236,12 +236,15 @@ export async function getPartyBalances(): Promise<Record<string, PartyBalance>> 
       partyId: check.partyId, balance: 0, sales: 0, purchases: 0, receipts: 0, payments: 0,
       pendingReceivedChecks: 0, pendingIssuedChecks: 0, clearedReceivedChecks: 0, clearedIssuedChecks: 0,
     };
+    const settlesParty = check.status === "pending" || check.status === "cleared" || check.status === "spent";
     if (check.direction === "received") {
       if (check.status === "pending") current.pendingReceivedChecks += check.amount;
       if (check.status === "cleared") current.clearedReceivedChecks += check.amount;
+      if (settlesParty) current.balance -= check.amount;
     } else {
       if (check.status === "pending") current.pendingIssuedChecks += check.amount;
-      if (check.status === "cleared") current.clearedIssuedChecks += check.amount;
+      if (check.status === "cleared" || check.status === "spent") current.clearedIssuedChecks += check.amount;
+      if (settlesParty) current.balance += check.amount;
     }
     balances[check.partyId] = current;
   }
