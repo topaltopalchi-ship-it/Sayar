@@ -88,6 +88,11 @@ export async function addTransaction(
     amount: input.amount ?? transactionTotal(input.lines),
   };
 
+  if (transaction.type === "sale") {
+    const [history, products] = await Promise.all([listTransactions(), listProducts()]);
+    transaction.costOfGoods = calculateHistoricalCOGS([...history, transaction], products).get(transaction.id) ?? 0;
+  }
+
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(["transactions", "movements"], "readwrite");
@@ -185,6 +190,45 @@ export async function getPartyBalances(): Promise<Record<string, PartyBalance>> 
   }
 
   return balances;
+}
+
+export function calculateHistoricalCOGS(transactions: Transaction[], products: Product[]): Map<string, number> {
+  type Lot = { quantity: number; unitCost: number };
+  const lots = new Map<string, Lot[]>();
+  const fallback = new Map(products.map(p => [p.id, p.purchasePrice]));
+  const costs = new Map<string, number>();
+  const ordered = [...transactions].sort((a, b) => a.date - b.date || a.createdAt - b.createdAt);
+
+  for (const t of ordered) {
+    if (t.type === "purchase") {
+      for (const line of t.lines) {
+        const q = Math.max(0, line.quantity);
+        if (!q) continue;
+        const unitCost = lineTotal(line) / q;
+        const queue = lots.get(line.productId) ?? [];
+        queue.push({ quantity: q, unitCost });
+        lots.set(line.productId, queue);
+      }
+    } else if (t.type === "sale") {
+      let total = 0;
+      for (const line of t.lines) {
+        let remaining = Math.max(0, line.quantity);
+        const queue = lots.get(line.productId) ?? [];
+        while (remaining > 0 && queue.length) {
+          const lot = queue[0];
+          const used = Math.min(remaining, lot.quantity);
+          total += used * lot.unitCost;
+          lot.quantity -= used;
+          remaining -= used;
+          if (lot.quantity <= 0.0000001) queue.shift();
+        }
+        if (remaining > 0) total += remaining * (fallback.get(line.productId) ?? 0);
+        lots.set(line.productId, queue);
+      }
+      costs.set(t.id, Math.round(total));
+    }
+  }
+  return costs;
 }
 
 export async function addSale(input: {
