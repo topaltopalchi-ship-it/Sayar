@@ -290,8 +290,13 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
         : await addSale({ date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
       modal.remove();
       showToast(`${existing ? "فاکتور ویرایش شد" : "فروش ثبت شد"}؛ مانده ${rial(amount - paidValue)}`);
-      await openInvoice(savedSale);
+      // First refresh the sales ledger so the saved invoice is visible, then open the invoice.
       await render();
+      try {
+        await openInvoice(savedSale);
+      } catch {
+        showToast("فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود");
+      }
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت فروش ناموفق بود"); }
   });
   update();
