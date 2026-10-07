@@ -54,7 +54,13 @@ jobs:
       - name: Install
         run: npm install
       - name: Build web
-        run: npm run build
+        run: npm run build 2>&1 | tee android-build.log
+      - name: Upload Android web build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-web-build-log
+          path: android-build.log
       - name: Generate Android project
         run: npx cap add android
       - name: Sync Capacitor
