@@ -434,6 +434,10 @@ function bindPartyModal(): void {
   });
 }
 
+function backupRestoreModal(): string {
+  return `<div class="modal-backdrop" id="backup-restore-modal"><section class="modal"><button class="modal-close" id="backup-restore-close">×</button><span class="eyebrow">پشتیبان</span><h2>بازیابی اطلاعات</h2><p class="muted">فایل JSON پشتیبان سای‌سای را انتخاب کنید. داده‌های فعلی جایگزین می‌شوند.</p><input id="backup-file" type="file" accept=".json,application/json"><button class="primary-button wide" id="backup-restore-submit">بازیابی</button></section></div>`;
+}
+
 function paywall(subscription: Subscription): string {
   const expiry = subscription.expiresAt ? `تا ${dateLabel(subscription.expiresAt)}` : "هنوز اشتراکی فعال نیست";
   return `<section class="paywall"><div class="paywall-logo">س</div><span class="eyebrow">نسخه کامل سای‌سای</span><h2>مدیریت فروش، انبار و حساب‌ها در یکجا</h2><p class="muted">برای استفاده از نسخه کامل، اشتراک ماهانه را فعال کنید. تأیید خرید در سرور انجام می‌شود.</p>
@@ -518,7 +522,8 @@ async function render(): Promise<void> {
   document.querySelector("#more-backup")?.addEventListener("click", async () => {
     const [products, parties, transactions, expenses, accounts, accountEntries, checks] = await Promise.all([listProducts(), listParties(), listTransactions(), listExpenses(), listAccounts(), (await import("./db")).listAccountEntries(), (await import("./db")).listChecks()]);
     const payload = { version: 2, exportedAt: Date.now(), products, parties, transactions, expenses, accounts, accountEntries, checks };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });  document.querySelector("#more-restore")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", backupRestoreModal()); const m=document.querySelector<HTMLElement>("#backup-restore-modal")!; m.querySelector("#backup-restore-close")?.addEventListener("click",()=>m.remove()); m.querySelector("#backup-restore-submit")?.addEventListener("click",async()=>{ try { const input=m.querySelector<HTMLInputElement>("#backup-file")!; const file=input.files?.[0]; if(!file) throw new Error("فایل پشتیبان را انتخاب کنید"); const data=JSON.parse(await file.text()); if(!Array.isArray(data.products)||!Array.isArray(data.parties)||!Array.isArray(data.transactions)) throw new Error("فایل پشتیبان معتبر نیست"); const db=await import("./db"); await db.restoreBackup(data); m.remove(); showToast("بازیابی با موفقیت انجام شد"); await render(); } catch(e){showToast(e instanceof Error?e.message:"بازیابی ناموفق بود");} }); });
+
     const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `sai-sai-backup-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
     showToast("فایل پشتیبان آماده شد");
   });
