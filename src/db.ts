@@ -47,6 +47,25 @@ async function put<T extends { id: string }>(store: StoreName, value: T): Promis
   });
 }
 
+export async function updateAccount(account: Account): Promise<void> {
+  await put("accounts", account);
+}
+
+export async function deleteAccount(accountId: string): Promise<void> {
+  const [transactions, checks, entries] = await Promise.all([listTransactions(), listChecks(), listAccountEntries()]);
+  if (transactions.some(t => t.accountId === accountId) || checks.some(c => c.accountId === accountId)) {
+    throw new Error("این حساب در اسناد ثبت‌شده استفاده شده و قابل حذف نیست؛ ابتدا اسناد مرتبط را اصلاح کنید");
+  }
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(["accounts", "accountEntries"], "readwrite");
+    tx.objectStore("accounts").delete(accountId);
+    for (const entry of entries.filter(e => e.accountId === accountId)) tx.objectStore("accountEntries").delete(entry.id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 export async function listProducts(): Promise<Product[]> { return getAll<Product>("products"); }
 export async function listParties(): Promise<Party[]> { return getAll<Party>("parties"); }
 
