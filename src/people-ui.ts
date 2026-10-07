@@ -1,6 +1,5 @@
 import { addParty, addSettlement, calculateHistoricalCOGS, getPartyBalances, listExpenses, listParties, listProducts, listTransactions } from "./db";
 import type { Party, PartyType } from "./domain";
-import { lineTotal } from "./domain";
 
 const typeLabel: Record<PartyType,string> = {
   customer: "مشتری",
