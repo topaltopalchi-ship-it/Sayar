@@ -375,7 +375,7 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   return pageHead("تحلیل مالی", "گزارش سود و زیان", "گزارش بر اساس بازه انتخابی و بهای تمام‌شده FIFO.") +
     `<section class="panel report-list"><div class="report-range"><button data-report-range="today">امروز</button><button data-report-range="week">۷ روز</button><button data-report-range="month">ماه جاری</button><button data-report-range="all">همه</button></div><p class="muted">بازه فعال: ${label}</p></section>` +
     `<section class="stats-grid">${stat("فروش",rial(sales),"primary")}${stat("بهای تمام‌شده",rial(cost),"warning")}${stat("سود ناخالص",rial(gross),"success")}${stat("سود خالص",rial(net),"success")}</section>` +
-    `<section class="panel report-list"><div><span>خرید</span><b>${rial(purchases)}</b></div><div><span>هزینه</span><b>${rial(expenseTotal)}</b></div><div><span>دریافت</span><b>${rial(receipts)}</b></div><div><span>پرداخت</span><b>${rial(payments)}</b></div><div><span>خالص جریان نقدی</span><b>${rial(receipts-payments-expenseTotal)}</b></div><div><span>تعداد فروش</span><b>${money.format(salesTx.length)}</b></div></section>` + reportExportButtons()
+    `<section class="panel report-list"><div><span>خرید</span><b>${rial(purchases)}</b></div><div><span>هزینه</span><b>${rial(expenseTotal)}</b></div><div><span>دریافت</span><b>${rial(receipts)}</b></div><div><span>پرداخت</span><b>${rial(payments)}</b></div><div><span>خالص جریان نقدی</span><b>${rial(receipts-payments-expenseTotal)}</b></div><div><span>تعداد فروش</span><b>${money.format(salesTx.length)}</b></div></section>` + `<section class="panel"><div class="section-head"><h3>هزینه‌ها</h3><span class="muted">${money.format(expenseTx.length)} مورد</span></div>${expenseTx.length ? expenseTx.map(e => `<div class="transaction-row"><div class="transaction-icon">−</div><div class="transaction-main"><strong>${e.title}</strong><small>${dateLabel(e.date)} · ${e.description || ""}</small></div><b>${rial(e.amount)}</b><button class="secondary-button" data-expense-edit="${e.id}">ویرایش</button><button class="secondary-button" data-expense-delete="${e.id}">حذف</button></div>`).join("") : `<div class="empty-inline"><p>هزینه‌ای ثبت نشده است.</p></div>`}</section>` + reportExportButtons()
 }
 function reportExcelCsv(transactions: Transaction[]): void {
   const rows = [["نوع","تاریخ","مبلغ","پرداخت","شرح"]];
@@ -389,12 +389,12 @@ function reportExportButtons(): string {
   return `<section class="panel"><div class="page-head-row"><div><strong>خروجی گزارش</strong><p class="muted">گزارش فعلی را برای چاپ یا ذخیره PDF آماده کنید.</p></div><button class="secondary-button" id="report-csv">Excel / CSV</button><button class="secondary-button" id="report-print">چاپ / PDF</button></div></section>`;
 }
 
-function expenseModal(): string {
-  return `<div class="modal-backdrop" id="expense-modal"><section class="modal"><button class="modal-close" id="expense-close">×</button><span class="eyebrow">هزینه‌های جاری</span><h2>ثبت هزینه</h2>
-    <label class="field"><span>عنوان هزینه</span><input id="expense-title" placeholder="مثلاً حمل‌ونقل، اجاره، حقوق"></label>
-    <label class="field"><span>مبلغ</span><input id="expense-amount" type="number" min="1" value="0"></label><label class="field"><span>پرداخت از</span><select id="expense-account"><option value="">بدون انتخاب حساب</option>${(window as typeof window & { __saiAccounts?: {id:string;name:string}[] }).__saiAccounts?.map(a => `<option value="${a.id}">${a.name}</option>`).join("") || ""}</select>
-    <label class="field"><span>شرح</span><input id="expense-desc" placeholder="اختیاری"></label>
-    <button class="primary-button wide" id="expense-submit">ثبت هزینه</button></section></div>`;
+function expenseModal(existing?: import("./domain").Expense): string {
+  return `<div class="modal-backdrop" id="expense-modal"><section class="modal"><button class="modal-close" id="expense-close">×</button><span class="eyebrow">هزینه‌های جاری</span><h2>${existing ? "ویرایش هزینه" : "ثبت هزینه"}</h2>
+    <label class="field"><span>عنوان هزینه</span><input id="expense-title" placeholder="مثلاً حمل‌ونقل، اجاره، حقوق" value="${existing?.title || ""}"></label>
+    <label class="field"><span>مبلغ</span><input id="expense-amount" type="number" min="1" value="${existing?.amount ?? 0}"></label><label class="field"><span>پرداخت از</span><select id="expense-account"><option value="">بدون انتخاب حساب</option>${(window as typeof window & { __saiAccounts?: {id:string;name:string}[] }).__saiAccounts?.map(a => `<option value="${a.id}">${a.name}</option>`).join("") || ""}</select>
+    <label class="field"><span>شرح</span><input id="expense-desc" placeholder="اختیاری" value="${existing?.description || ""}"></label>
+    <button class="primary-button wide" id="expense-submit">${existing ? "ذخیره تغییرات" : "ثبت هزینه"}</button></section></div>`;
 }
 
 async function openExpenseModal(): Promise<void> { (window as typeof window & { __saiAccounts?: {id:string;name:string}[] }).__saiAccounts = await listAccounts(); document.body.insertAdjacentHTML("beforeend", expenseModal()); bindExpenseModal(); }
@@ -407,8 +407,8 @@ function bindExpenseModal(): void {
       const title = modal.querySelector<HTMLInputElement>("#expense-title")!.value.trim();
       const amount = Number(modal.querySelector<HTMLInputElement>("#expense-amount")!.value);
       if (!title || amount <= 0) throw new Error("عنوان و مبلغ هزینه را وارد کنید");
-      await addExpense({ date: Date.now(), title, amount, accountId: modal.querySelector<HTMLSelectElement>("#expense-account")?.value || undefined, description: modal.querySelector<HTMLInputElement>("#expense-desc")!.value.trim() });
-      modal.remove(); showToast("هزینه ثبت شد"); await render();
+      const expenseValues = { date: existing?.date ?? Date.now(), title, amount, accountId: modal.querySelector<HTMLSelectElement>("#expense-account")?.value || undefined, description: modal.querySelector<HTMLInputElement>("#expense-desc")!.value.trim() }; if (existing) await updateExpense({ ...existing, ...expenseValues }); else await addExpense(expenseValues);
+      modal.remove(); showToast(existing ? "هزینه ویرایش شد" : "هزینه ثبت شد"); await render();
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت هزینه ناموفق بود"); }
   });
 }
@@ -631,6 +631,16 @@ async function render(): Promise<void> {
   document.querySelectorAll<HTMLElement>("[data-report-range]").forEach(b => b.addEventListener("click", async () => { localStorage.setItem("sai-sai-report-range", b.dataset.reportRange || "month"); await render(); }));
   document.querySelector("#report-print")?.addEventListener("click", () => window.print());
   document.querySelector("#report-csv")?.addEventListener("click", async () => reportExcelCsv(await listTransactions()));
+  document.querySelectorAll<HTMLElement>("[data-expense-edit]").forEach(b => b.addEventListener("click", async () => {
+    const e=(await listExpenses()).find(x=>x.id===b.dataset.expenseEdit); if(!e) return;
+    (window as typeof window & { __saiAccounts?: unknown[] }).__saiAccounts=await listAccounts();
+    document.body.insertAdjacentHTML("beforeend", expenseModal(e));
+    const m=document.querySelector<HTMLElement>("#expense-modal"); if(m){ m.dataset.editId=e.id; bindExpenseModal(); m.querySelector<HTMLSelectElement>("#expense-account")!.value=e.accountId||""; }
+  }));
+  document.querySelectorAll<HTMLElement>("[data-expense-delete]").forEach(b => b.addEventListener("click", async () => {
+    const id=b.dataset.expenseDelete||""; if(!id||!confirm("این هزینه حذف شود؟")) return;
+    try { await deleteExpense(id); showToast("هزینه حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف هزینه ناموفق بود"); }
+  }));
   document.querySelector("#more-backup")?.addEventListener("click", async () => {
     const [products, parties, transactions, expenses, accounts, accountEntries, checks, movements] = await Promise.all([listProducts(), listParties(), listTransactions(), listExpenses(), listAccounts(), (await import("./db")).listAccountEntries(), (await import("./db")).listChecks(), listMovements()]);
     const payload = { version: 2, exportedAt: Date.now(), products, parties, transactions, expenses, accounts, accountEntries, checks, movements };
