@@ -74,8 +74,23 @@ export async function addParty(input: Omit<Party, "id" | "createdAt">): Promise<
 
 export async function addExpense(input: Omit<Expense, "id">): Promise<Expense> {
   const expense: Expense = { ...input, id: newId() };
-  await put("expenses", expense);
-  return expense;
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(["expenses", "accountEntries"], "readwrite");
+    tx.objectStore("expenses").put(expense);
+    if (expense.accountId && expense.amount > 0) {
+      tx.objectStore("accountEntries").put({
+        id: newId(),
+        accountId: expense.accountId,
+        date: expense.date,
+        type: "withdraw",
+        amount: -Math.round(expense.amount),
+        description: expense.title,
+      } satisfies AccountEntry);
+    }
+    tx.oncomplete = () => resolve(expense);
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 export async function addTransaction(
