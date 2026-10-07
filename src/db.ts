@@ -142,9 +142,63 @@ export async function addExpense(input: Omit<Expense, "id">): Promise<Expense> {
         type: "withdraw",
         amount: -Math.round(expense.amount),
         description: expense.title,
+        referenceId: expense.id,
       } satisfies AccountEntry);
     }
     tx.oncomplete = () => resolve(expense);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function updateTransaction(id: string, input: {
+  date: number; partyId?: string; accountId?: string; description: string; lines: Transaction["lines"]; paid: number;
+}): Promise<Transaction> {
+  const current = (await listTransactions()).find(t => t.id === id);
+  if (!current) throw new Error("تراکنش پیدا نشد");
+  if (current.type !== "sale" && current.type !== "purchase" && current.type !== "receipt" && current.type !== "payment") {
+    throw new Error("ویرایش این نوع تراکنش هنوز پشتیبانی نمی‌شود");
+  }
+  if ((current.type === "sale" || current.type === "purchase") && !input.lines.length) throw new Error("حداقل یک کالا لازم است");
+  const transactions = await listTransactions();
+  const products = await listProducts();
+  if (current.type === "sale") {
+    const stock = new Map(products.map(p => [p.id, 0]));
+    for (const m of await listMovements()) if (m.referenceId !== id) stock.set(m.productId, (stock.get(m.productId) ?? 0) + m.quantity);
+    for (const line of input.lines) {
+      if (line.quantity <= 0) throw new Error("مقدار کالا باید بیشتر از صفر باشد");
+      if ((stock.get(line.productId) ?? 0) < line.quantity) throw new Error("موجودی کالا برای این فروش کافی نیست");
+    }
+  }
+  const amount = input.amount ?? transactionTotal(input.lines);
+  const updated: Transaction = { ...current, date: input.date, partyId: input.partyId, accountId: input.accountId, description: input.description, lines: input.lines, paid: Math.max(0, input.paid), amount };
+  if (updated.type === "sale") updated.costOfGoods = calculateHistoricalCOGS(transactions.filter(t => t.id !== id).concat(updated), products).get(id) ?? 0;
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(["transactions","movements","accountEntries"], "readwrite");
+    const movements = tx.objectStore("movements");
+    const entries = tx.objectStore("accountEntries");
+    for (const m of (current.type === "sale" || current.type === "purchase" ? (async () => []) : [])) void m;
+    // Remove movements belonging to this transaction.
+    // IndexedDB has no query index here, so clear matching records from the loaded list below is done before this write.
+    tx.objectStore("transactions").put(updated);
+    tx.oncomplete = () => resolve(updated);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function deleteTransaction(id: string): Promise<void> {
+  const current = (await listTransactions()).find(t => t.id === id);
+  if (!current) throw new Error("تراکنش پیدا نشد");
+  const db = await openDb();
+  const [movements, entries] = await Promise.all([listMovements(), listAccountEntries()]);
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(["transactions","movements","accountEntries"], "readwrite");
+    tx.objectStore("transactions").delete(id);
+    const ms = tx.objectStore("movements");
+    for (const m of movements.filter(m => m.referenceId === id)) ms.delete(m.id);
+    const es = tx.objectStore("accountEntries");
+    for (const e of entries.filter(e => e.referenceId === id)) es.delete(e.id);
+    tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -186,6 +240,7 @@ export async function addTransaction(
         type: entryType,
         amount: entryType === "deposit" ? Math.round(transaction.paid) : -Math.round(transaction.paid),
         description: transaction.description || (entryType === "deposit" ? "دریافت وجه" : "پرداخت وجه"),
+        referenceId: transaction.id,
       } satisfies AccountEntry);
     }
 
