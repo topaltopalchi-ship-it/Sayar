@@ -609,6 +609,12 @@ async function render(): Promise<void> {
   document.querySelector("#new-received-check")?.addEventListener("click", async () => { const [parties,accounts]=await Promise.all([listParties(),listAccounts()]); document.body.insertAdjacentHTML("beforeend", checkModal("received",parties,accounts)); const modal=document.querySelector<HTMLElement>("#check-modal"); if(modal) void bindCheckModal(modal,"received",async m=>{showToast(m);await render();}); });
   document.querySelector("#new-issued-check")?.addEventListener("click", async () => { const [parties,accounts]=await Promise.all([listParties(),listAccounts()]); document.body.insertAdjacentHTML("beforeend", checkModal("issued",parties,accounts)); const modal=document.querySelector<HTMLElement>("#check-modal"); if(modal) void bindCheckModal(modal,"issued",async m=>{showToast(m);await render();}); });
   void bindCheckStatuses(m=>showToast(m)); void bindCheckActions(m=>{showToast(m); void render();});
+  document.querySelectorAll<HTMLElement>("[data-check-edit]").forEach(b => b.addEventListener("click", async () => {
+    const id=b.dataset.checkEdit||""; const check=(await (await import("./db")).listChecks()).find(x=>x.id===id); if(!check) return;
+    const [ps,as]=await Promise.all([listParties(),listAccounts()]);
+    document.body.insertAdjacentHTML("beforeend", checkModal(check.direction, ps, as, check));
+    const m=document.querySelector<HTMLElement>("#check-modal"); if(m){m.dataset.editId=check.id; void bindCheckModal(m,check.direction,async msg=>{showToast(msg);await render();});}
+  }));
   document.querySelector("#new-account")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", accountModal()); const modal = document.querySelector<HTMLElement>("#account-modal"); if (modal) void bindAccountModal(modal, async m => { showToast(m); await render(); }); });
   document.querySelectorAll<HTMLElement>("[data-account-edit]").forEach(button => button.addEventListener("click", async event => {
     event.stopPropagation();
