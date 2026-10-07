@@ -50,6 +50,11 @@ async function put<T extends { id: string }>(store: StoreName, value: T): Promis
 export async function listProducts(): Promise<Product[]> { return getAll<Product>("products"); }
 export async function listParties(): Promise<Party[]> { return getAll<Party>("parties"); }
 
+export async function listMovements(): Promise<Movement[]> {
+  const items = await getAll<Movement>("movements");
+  return items.sort((a, b) => b.date - a.date);
+}
+
 export async function listTransactions(): Promise<Transaction[]> {
   const items = await getAll<Transaction>("transactions");
   return items.sort((a, b) => b.date - a.date);
@@ -351,7 +356,7 @@ export async function addStockAdjustment(input: {
 
 export async function restoreBackup(data: {
   products: Product[]; parties: Party[]; transactions: Transaction[]; expenses?: Expense[];
-  accounts?: Account[]; accountEntries?: AccountEntry[]; checks?: Check[];
+  accounts?: Account[]; accountEntries?: AccountEntry[]; checks?: Check[]; movements?: Movement[];
 }): Promise<void> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
@@ -359,7 +364,7 @@ export async function restoreBackup(data: {
     const tx = db.transaction(stores, "readwrite");
     const maps: Record<string, unknown[]> = {
       products: data.products ?? [], parties: data.parties ?? [], transactions: data.transactions ?? [],
-      expenses: data.expenses ?? [], accounts: data.accounts ?? [], accountEntries: data.accountEntries ?? [], checks: data.checks ?? [],
+      expenses: data.expenses ?? [], accounts: data.accounts ?? [], accountEntries: data.accountEntries ?? [], checks: data.checks ?? [], movements: data.movements ?? [],
     };
     for (const store of stores) {
       tx.objectStore(store).clear();
