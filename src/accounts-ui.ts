@@ -1,16 +1,16 @@
-import { addAccount, addAccountEntry, getAccountBalances, listAccounts, listAccountEntries, transferBetweenAccounts } from "./db";
+import { addAccount, addAccountEntry, getAccountBalances, getAccountLedger, listAccounts, listAccountEntries, transferBetweenAccounts } from "./db";
 import { formatMoney } from "./settings";
 import type { Account, AccountType } from "./domain";
 
 const money = new Intl.NumberFormat("fa-IR");
 const dateTime = new Intl.DateTimeFormat("fa-IR-u-ca-persian", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-const rial = (v: number) => formatMoney(v);
+const rial = (v: number) => formatMoney(v);\nconst entryLabel = (type: Account["type"] | "deposit" | "withdraw" | "transfer") => ({ deposit: "واریز / دریافت", withdraw: "برداشت / پرداخت", transfer: "انتقال بین حساب‌ها" } as Record<string,string>)[type] || "گردش";
 
 export async function accountsView(): Promise<string> {
   const [accounts, balances] = await Promise.all([listAccounts(), getAccountBalances()]);
   const total = accounts.reduce((s, a) => s + (balances[a.id] ?? 0), 0);
-  const cards = accounts.map(a => `<div class="account-card"><div class="account-icon">${a.type === "bank" ? "▣" : "▤"}</div><div><strong>${a.name}</strong><small>${a.type === "bank" ? "حساب بانکی" : "صندوق نقدی"}</small></div><b>${rial(balances[a.id] ?? 0)}</b></div>`).join("");
-  return `<section class="hero"><div><p class="hero-kicker">خزانه‌داری</p><h2>صندوق و بانک</h2><p class="muted">پول نقد و موجودی حساب‌های بانکی را یکجا مدیریت کنید.</p></div><div class="hero-mark">₿</div></section>
+  const cards = accounts.map(a => `<button class="account-card" data-account-ledger="${a.id}"><div class="account-icon">${a.type === "bank" ? "▣" : "▤"}</div><div><strong>${a.name}</strong><small>${a.type === "bank" ? "حساب بانکی" : "صندوق نقدی"} · مشاهده گردش</small></div><b>${rial(balances[a.id] ?? 0)}</b></button>`).join("");
+  return `<section class="hero"><div><p class="hero-kicker">خزانه‌داری</p><h2>صندوق و بانک</h2><p class="muted">پول نقد و موجودی حساب‌های بانکی را یکجا مدیریت کنید.</p></div><div class="hero-mark">▣</div></section>
   <section class="stats-grid"><article class="stat-card primary"><span>موجودی کل</span><strong>${rial(total)}</strong></article><article class="stat-card success"><span>تعداد حساب‌ها</span><strong>${money.format(accounts.length)}</strong></article></section>
   <section class="section"><div class="section-head"><h3>حساب‌ها</h3><div><button class="secondary-button" id="new-account">＋ حساب جدید</button> <button class="secondary-button" id="new-transfer">↔ انتقال</button></div></div>
   <section class="panel account-list">${cards || '<div class="empty-inline"><span>◌</span><p>هنوز صندوق یا حساب بانکی ثبت نشده است.</p></div>'}</section></section>`;
@@ -62,4 +62,23 @@ export async function bindTransferModal(modal: HTMLElement, done: (message: stri
       modal.remove(); done("انتقال با موفقیت ثبت شد");
     } catch (e) { done(e instanceof Error ? e.message : "ثبت انتقال ناموفق بود"); }
   });
+}
+
+export async function accountLedgerModal(accountId: string): Promise<string> {
+  const [accounts, allEntries] = await Promise.all([listAccounts(), listAccountEntries()]);
+  const account = accounts.find(a => a.id === accountId);
+  if (!account) throw new Error("حساب پیدا نشد");
+  const entries = allEntries.filter(e => e.accountId === accountId).sort((a,b)=>a.date-b.date);
+  const balance = account.openingBalance + entries.reduce((s,e)=>s+e.amount,0);
+  const deposits = entries.filter(e=>e.amount>0).reduce((s,e)=>s+e.amount,0);
+  const withdrawals = entries.filter(e=>e.amount<0).reduce((s,e)=>s+Math.abs(e.amount),0);
+  const rows = [...entries].reverse().map(e => `<div class="transaction-row"><div class="transaction-icon">${e.amount >= 0 ? "↓" : "↑"}</div><div class="transaction-main"><strong>${entryLabel(e.type)}</strong><small>${e.description || "بدون شرح"} · ${dateTime.format(new Date(e.date))}</small></div><b>${e.amount >= 0 ? "+" : ""}${rial(e.amount)}</b></div>`).join("");
+  return `<div class="modal-backdrop" id="account-ledger-modal"><section class="modal ledger-modal"><button class="modal-close" id="account-ledger-close">×</button><span class="eyebrow">گردش حساب</span><h2>${account.name}</h2><p class="muted">${account.type === "bank" ? "حساب بانکی" : "صندوق نقدی"}</p>
+    <section class="stats-grid"><article class="stat-card primary"><span>موجودی اول دوره</span><strong>${rial(account.openingBalance)}</strong></article><article class="stat-card success"><span>ورودی</span><strong>${rial(deposits)}</strong></article><article class="stat-card danger"><span>خروجی</span><strong>${rial(withdrawals)}</strong></article><article class="stat-card warning"><span>مانده فعلی</span><strong>${rial(balance)}</strong></article></section>
+    <section class="panel"><div class="section-head"><h3>ریز گردش</h3><span class="muted">${money.format(entries.length)} ثبت</span></div>${rows || '<div class="empty-inline"><span>◌</span><p>هنوز گردش مالی ثبت نشده است.</p></div>'}</section>
+  </section></div>`;
+}
+
+export async function bindAccountLedger(modal: HTMLElement): Promise<void> {
+  modal.querySelector("#account-ledger-close")?.addEventListener("click", () => modal.remove());
 }
