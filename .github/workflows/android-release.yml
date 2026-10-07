@@ -24,7 +24,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-          cache: gradle
       - name: Install
         run: npm install
       - name: Build web
