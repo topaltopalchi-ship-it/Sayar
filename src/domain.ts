@@ -94,3 +94,24 @@ export function lineTotal(line: TransactionLine): Money {
 export function transactionTotal(lines: TransactionLine[]): Money {
   return lines.reduce((sum, line) => sum + lineTotal(line), 0);
 }
+
+
+export type AccountType = "cash" | "bank";
+
+export interface Account {
+  id: ID;
+  name: string;
+  type: AccountType;
+  openingBalance: Money;
+  createdAt: number;
+}
+
+export interface AccountEntry {
+  id: ID;
+  accountId: ID;
+  date: number;
+  type: "deposit" | "withdraw" | "transfer";
+  amount: Money;
+  description: string;
+  transferId?: ID;
+}
