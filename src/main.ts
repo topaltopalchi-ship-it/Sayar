@@ -344,12 +344,12 @@ function reportsView(transactions: Transaction[]): string {
 function expenseModal(): string {
   return `<div class="modal-backdrop" id="expense-modal"><section class="modal"><button class="modal-close" id="expense-close">×</button><span class="eyebrow">هزینه‌های جاری</span><h2>ثبت هزینه</h2>
     <label class="field"><span>عنوان هزینه</span><input id="expense-title" placeholder="مثلاً حمل‌ونقل، اجاره، حقوق"></label>
-    <label class="field"><span>مبلغ</span><input id="expense-amount" type="number" min="1" value="0"></label>
+    <label class="field"><span>مبلغ</span><input id="expense-amount" type="number" min="1" value="0"></label><label class="field"><span>پرداخت از</span><select id="expense-account"><option value="">بدون انتخاب حساب</option>${(window as typeof window & { __saiAccounts?: {id:string;name:string}[] }).__saiAccounts?.map(a => `<option value="${a.id}">${a.name}</option>`).join("") || ""}</select>
     <label class="field"><span>شرح</span><input id="expense-desc" placeholder="اختیاری"></label>
     <button class="primary-button wide" id="expense-submit">ثبت هزینه</button></section></div>`;
 }
 
-function bindExpenseModal(): void {
+async function openExpenseModal(): Promise<void> { (window as typeof window & { __saiAccounts?: {id:string;name:string}[] }).__saiAccounts = await listAccounts(); document.body.insertAdjacentHTML("beforeend", expenseModal()); bindExpenseModal(); }\n\nfunction bindExpenseModal(): void {
   const modal = document.querySelector<HTMLDivElement>("#expense-modal")!;
   modal.querySelector("#expense-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#expense-submit")?.addEventListener("click", async () => {
@@ -357,7 +357,7 @@ function bindExpenseModal(): void {
       const title = modal.querySelector<HTMLInputElement>("#expense-title")!.value.trim();
       const amount = Number(modal.querySelector<HTMLInputElement>("#expense-amount")!.value);
       if (!title || amount <= 0) throw new Error("عنوان و مبلغ هزینه را وارد کنید");
-      await addExpense({ date: Date.now(), title, amount, description: modal.querySelector<HTMLInputElement>("#expense-desc")!.value.trim() });
+      await addExpense({ date: Date.now(), title, amount, accountId: modal.querySelector<HTMLSelectElement>("#expense-account")?.value || undefined, description: modal.querySelector<HTMLInputElement>("#expense-desc")!.value.trim() });
       modal.remove(); showToast("هزینه ثبت شد"); await render();
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت هزینه ناموفق بود"); }
   });
