@@ -2,6 +2,7 @@ import "./style.css";
 import { getDashboard, listProducts, getStock, listParties, addSale, addPurchase } from "./db";
 import { createMonthlyCheckout, getSubscription, type Subscription } from "./billing";
 import type { Product, Party, TransactionLine } from "./domain";
+import { openPurchaseModal } from "./purchase-ui";
 
 type Tab = "dashboard" | "sales" | "purchases" | "inventory" | "people" | "reports" | "more";
 
@@ -213,6 +214,7 @@ async function render(): Promise<void> {
   layout(content, subscription);
   document.querySelectorAll<HTMLButtonElement>("[data-locked]").forEach(b => b.addEventListener("click", async () => {
     if (b.dataset.locked === "sales") await openSaleModal();
+    else if (b.dataset.locked === "purchases") { products = await listProducts(); parties = await listParties(); openPurchaseModal(products, parties, rial, async (message) => { showToast(message); await render(); }); }
     else showToast("این عملیات در مرحله بعد فعال می‌شود.");
   }));
 }
