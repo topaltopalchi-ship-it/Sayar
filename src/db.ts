@@ -50,8 +50,8 @@ async function put<T extends { id: string }>(store: StoreName, value: T): Promis
 export async function listProducts(): Promise<Product[]> { return getAll<Product>("products"); }
 export async function listParties(): Promise<Party[]> { return getAll<Party>("parties"); }
 
-export async function listMovements(): Promise<Movement[]> {
-  const items = await getAll<Movement>("movements");
+export async function listMovements(): Promise<StockMovement[]> {
+  const items = await getAll<StockMovement>("movements");
   return items.sort((a, b) => b.date - a.date);
 }
 
@@ -322,7 +322,7 @@ export async function addSettlement(input: {
 }
 
 export async function addPurchase(input: {
-  date: number; partyId?: string; description: string; lines: Transaction["lines"]; paid: number;
+  date: number; partyId?: string; accountId?: string; description: string; lines: Transaction["lines"]; paid: number;
 }): Promise<Transaction> {
   if (!input.lines.length) throw new Error("حداقل یک کالا برای خرید لازم است");
   for (const line of input.lines) {
@@ -356,7 +356,7 @@ export async function addStockAdjustment(input: {
 
 export async function restoreBackup(data: {
   products: Product[]; parties: Party[]; transactions: Transaction[]; expenses?: Expense[];
-  accounts?: Account[]; accountEntries?: AccountEntry[]; checks?: Check[]; movements?: Movement[];
+  accounts?: Account[]; accountEntries?: AccountEntry[]; checks?: Check[]; movements?: StockMovement[];
 }): Promise<void> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
