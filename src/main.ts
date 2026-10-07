@@ -289,14 +289,13 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
         ? await updateTransaction(existing.id, { date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue })
         : await addSale({ date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
       modal.remove();
-      showToast(`${existing ? "فاکتور ویرایش شد" : "فروش ثبت شد"}؛ مانده ${rial(amount - paidValue)}`);
-      // First refresh the sales ledger so the saved invoice is visible, then open the invoice.
-      await render();
       try {
         await openInvoice(savedSale);
       } catch {
         showToast("فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود");
       }
+      showToast(`${existing ? "فاکتور ویرایش شد" : "فروش ثبت شد"}؛ مانده ${rial(amount - paidValue)}`);
+      await render();
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت فروش ناموفق بود"); }
   });
   update();
@@ -564,6 +563,53 @@ async function bindActions(): Promise<void> {
       return;
     }
 
+    const reportRange = target.closest<HTMLElement>("[data-report-range]");
+    if (reportRange) {
+      localStorage.setItem("sai-sai-report-range", reportRange.dataset.reportRange || "month");
+      await render();
+      return;
+    }
+
+    const slashButton = target.closest<HTMLButtonElement>("[data-date-slash]");
+    if (slashButton) {
+      const id = slashButton.dataset.dateSlash;
+      const input = id ? document.querySelector<HTMLInputElement>("#" + id) : null;
+      if (input) {
+        const pos = input.selectionStart ?? input.value.length;
+        const before = input.value.slice(0, pos).replace(/\//g, "");
+        const after = input.value.slice(pos).replace(/\//g, "");
+        input.value = formatJalaliInput(before + "/" + after);
+        const caret = Math.min(input.value.length, before.length + 1);
+        input.focus();
+        input.setSelectionRange(caret, caret);
+      }
+      return;
+    }
+
+    const reportApply = target.closest<HTMLElement>("#report-apply-range");
+    if (reportApply) {
+      const fromInput = document.querySelector<HTMLInputElement>("#report-from-date");
+      const toInput = document.querySelector<HTMLInputElement>("#report-to-date");
+      if (!fromInput || !toInput) return;
+      fromInput.value = formatJalaliInput(fromInput.value);
+      toInput.value = formatJalaliInput(toInput.value);
+      const from = jalaliToGregorianDate(fromInput.value);
+      const to = jalaliToGregorianDate(toInput.value);
+      if (!from || !to) {
+        showToast("تاریخ را کامل و به شکل ۱۴۰۵/۰۸/۰۷ وارد کنید");
+        return;
+      }
+      if (from.getTime() > to.getTime()) {
+        showToast("تاریخ شروع نباید بعد از تاریخ پایان باشد");
+        return;
+      }
+      localStorage.setItem("sai-sai-report-from", fromInput.value);
+      localStorage.setItem("sai-sai-report-to", toInput.value);
+      localStorage.setItem("sai-sai-report-range", "custom");
+      await render();
+      return;
+    }
+
     const actionButton = target.closest<HTMLButtonElement>("[data-action]");
     if (!actionButton) return;
     const action = actionButton.dataset.action;
@@ -691,42 +737,24 @@ async function render(): Promise<void> {
   }));
   document.querySelector("#more-refresh")?.addEventListener("click", () => render());
   window.addEventListener("sai-sai-refresh", () => { void render(); });
-  document.querySelectorAll<HTMLElement>("[data-report-range]").forEach(b => b.addEventListener("click", async () => { localStorage.setItem("sai-sai-report-range", b.dataset.reportRange || "month"); await render(); }));
-  const normalizeReportDateInput = (input: HTMLInputElement): void => {
+  root.addEventListener("input", event => {
+    const input = (event.target as HTMLElement).closest<HTMLInputElement>("#report-from-date, #report-to-date");
+    if (!input) return;
+    const pos = input.selectionStart ?? input.value.length;
+    const beforeRaw = input.value.slice(0, pos);
     const formatted = formatJalaliInput(input.value);
-    if (input.value !== formatted) input.value = formatted;
-  };
-  document.querySelectorAll<HTMLInputElement>("#report-from-date, #report-to-date").forEach(input => {
-    input.addEventListener("input", () => normalizeReportDateInput(input));
-    input.addEventListener("change", () => normalizeReportDateInput(input));
-    input.addEventListener("blur", () => normalizeReportDateInput(input));
-    input.addEventListener("keydown", event => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        document.querySelector<HTMLButtonElement>("#report-apply-range")?.click();
-      }
-    });
+    const formattedBefore = formatJalaliInput(beforeRaw);
+    if (input.value !== formatted) {
+      input.value = formatted;
+      const caret = Math.min(formatted.length, formattedBefore.length);
+      input.setSelectionRange(caret, caret);
+    }
   });
-  document.querySelector("#report-apply-range")?.addEventListener("click", async () => {
-    const fromInput = document.querySelector<HTMLInputElement>("#report-from-date");
-    const toInput = document.querySelector<HTMLInputElement>("#report-to-date");
-    if (!fromInput || !toInput) return;
-    normalizeReportDateInput(fromInput);
-    normalizeReportDateInput(toInput);
-    const from = jalaliToGregorianDate(fromInput.value);
-    const to = jalaliToGregorianDate(toInput.value);
-    if (!from || !to) {
-      showToast("تاریخ را کامل و به شکل ۱۴۰۵/۰۸/۰۷ وارد کنید");
-      return;
+  root.addEventListener("keydown", event => {
+    if ((event.target as HTMLElement).closest<HTMLInputElement>("#report-from-date, #report-to-date") && event.key === "Enter") {
+      event.preventDefault();
+      document.querySelector<HTMLElement>("#report-apply-range")?.click();
     }
-    if (from.getTime() > to.getTime()) {
-      showToast("تاریخ شروع نباید بعد از تاریخ پایان باشد");
-      return;
-    }
-    localStorage.setItem("sai-sai-report-from", fromInput.value);
-    localStorage.setItem("sai-sai-report-to", toInput.value);
-    localStorage.setItem("sai-sai-report-range", "custom");
-    await render();
   });
   document.querySelector("#report-print")?.addEventListener("click", () => window.print());
   document.querySelectorAll<HTMLElement>("[data-settlement-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.settlementEdit); if(t && (t.type==="receipt"||t.type==="payment")) await openSettlement(t.type,t); }));
