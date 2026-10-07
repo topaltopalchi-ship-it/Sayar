@@ -103,7 +103,7 @@ function stat(label: string, value: string, tone: string): string {
 }
 
 function pageHead(eyebrow: string, title: string, text: string, action = ""): string {
-  return `<section class="page-head"><span class="eyebrow">${eyebrow}</span><div class="page-head-row"><div><h2>${existing ? (type === "receipt" ? "ویرایش دریافت" : "ویرایش پرداخت") : title}</h2><p class="muted">${text}</p></div>${action}</div></section>`;
+  return `<section class="page-head"><span class="eyebrow">${eyebrow}</span><div class="page-head-row"><div><h2>${title}</h2><p class="muted">${text}</p></div>${action}</div></section>`;
 }
 
 async function dashboardView(subscription: Subscription): Promise<string> {
