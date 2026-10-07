@@ -16,9 +16,28 @@ export interface StorePurchase {
 
 const API_BASE = (import.meta.env.VITE_BILLING_API_URL as string | undefined)?.replace(/\/$/, "");
 const BILLING_DISABLED = (import.meta.env.VITE_BILLING_DISABLED as string | undefined) === "true";
+const TRIAL_DAYS = 30;
+const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000;
+const TRIAL_STARTED_KEY = "sai-sai-trial-started-at";
+
+function getTrialStartedAt(): number {
+  const stored = Number(localStorage.getItem(TRIAL_STARTED_KEY));
+  if (Number.isFinite(stored) && stored > 0) return stored;
+  const now = Date.now();
+  localStorage.setItem(TRIAL_STARTED_KEY, String(now));
+  return now;
+}
+
+function getLocalTrialSubscription(): Subscription {
+  const startedAt = getTrialStartedAt();
+  const expiresAt = startedAt + TRIAL_MS;
+  return Date.now() < expiresAt
+    ? { status: "active", plan: "monthly", expiresAt, provider: "web" }
+    : { status: "expired", plan: "none", expiresAt, provider: "web" };
+}
 
 export async function getSubscription(): Promise<Subscription> {
-  if (BILLING_DISABLED) return { status: "active", plan: "monthly", expiresAt: null, provider: "web" };
+  if (BILLING_DISABLED) return getLocalTrialSubscription();
   if (!API_BASE) return { status: "none", plan: "none" };
 
   const response = await fetch(`${API_BASE}/subscription/status`, {
