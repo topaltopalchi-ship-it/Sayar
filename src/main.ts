@@ -19,6 +19,27 @@ const dateTime = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
   year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit"
 });
 let activeTab: Tab = "dashboard";
+const UI_MODE_KEY = "sai-sai-ui-mode";
+function isProfessionalMode(): boolean { return localStorage.getItem(UI_MODE_KEY) === "professional"; }
+function setProfessionalMode(value: boolean): void { localStorage.setItem(UI_MODE_KEY, value ? "professional" : "simple"); }
+function uiModeModal(): string {
+  const professional = isProfessionalMode();
+  return `<div class="modal-backdrop" id="ui-mode-modal"><section class="modal ui-mode-modal"><button class="modal-close" id="ui-mode-close">×</button><span class="eyebrow">شخصی‌سازی سای‌سای</span><h2>حالت کاربری</h2><p class="muted">اگر حسابدار نیستید، حالت ساده منوها و گزینه‌های ضروری را خلوت نگه می‌دارد.</p><label class="professional-toggle"><input id="professional-mode" type="checkbox" ${professional ? "checked" : ""}><span><b>نسخه حرفه‌ای</b><small>گزارش‌های پیشرفته، تنظیمات بیشتر و ابزارهای مدیریتی نمایش داده شوند.</small></span></label><div class="mode-hint">${professional ? "حالت حرفه‌ای فعال است." : "حالت ساده برای استفاده روزمره فعال است."}</div><button class="primary-button wide" id="ui-mode-save">ذخیره و اعمال</button></section></div>`;
+}
+function bindUiModeModal(): void {
+  const modal = document.querySelector<HTMLDivElement>("#ui-mode-modal");
+  if (!modal) return;
+  modal.querySelector("#ui-mode-close")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#ui-mode-save")?.addEventListener("click", async () => {
+    const enabled = modal.querySelector<HTMLInputElement>("#professional-mode")?.checked ?? false;
+    setProfessionalMode(enabled);
+    if (!enabled && (activeTab === "reports" || activeTab === "more")) activeTab = "dashboard";
+    modal.remove();
+    await render();
+    showToast(enabled ? "حالت حرفه‌ای فعال شد" : "حالت ساده فعال شد");
+  });
+}
+
 let products: Product[] = [];
 let parties: Party[] = [];
 
@@ -40,7 +61,7 @@ function layout(content: string, subscription: Subscription): void {
         <div><span class="eyebrow">مدیریت مالی و فروش</span><h1>سای‌سای</h1></div>
         <div class="header-actions">
           <span class="plan-pill ${subscription.status}">${subscription.status === "active" ? "اشتراک فعال" : "نسخه آزمایشی"}</span>
-          <button class="icon-button" id="settings" aria-label="اشتراک">⚙</button>
+          <button class="icon-button" id="settings" aria-label="حالت کاربری">⚙</button>
         </div>
       </header>
       <div id="view">${content}</div>
@@ -52,7 +73,7 @@ function layout(content: string, subscription: Subscription): void {
   document.querySelectorAll<HTMLButtonElement>("[data-nav]").forEach(b =>
     b.addEventListener("click", async () => { activeTab = b.dataset.nav as Tab; await render(); })
   );
-  document.querySelector<HTMLButtonElement>("#settings")?.addEventListener("click", () => showSubscription(subscription));
+  document.querySelector<HTMLButtonElement>("#settings")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", uiModeModal()); bindUiModeModal(); });
   document.querySelectorAll<HTMLButtonElement>("[data-subscribe]").forEach(b => b.addEventListener("click", subscribe));
 }
 
