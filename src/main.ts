@@ -651,6 +651,7 @@ async function render(): Promise<void> {
     } catch (e) { showToast(e instanceof Error ? e.message : "نمایش گردش حساب ناموفق بود"); }
   }));
   document.querySelector("#more-refresh")?.addEventListener("click", () => render());
+  window.addEventListener("sai-sai-refresh", () => { void render(); });
   document.querySelectorAll<HTMLElement>("[data-report-range]").forEach(b => b.addEventListener("click", async () => { localStorage.setItem("sai-sai-report-range", b.dataset.reportRange || "month"); await render(); }));
   document.querySelector("#report-print")?.addEventListener("click", () => window.print());
   document.querySelectorAll<HTMLElement>("[data-settlement-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.settlementEdit); if(t && (t.type==="receipt"||t.type==="payment")) await openSettlement(t.type,t); }));
