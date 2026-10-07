@@ -84,7 +84,7 @@ export async function accountLedgerModal(accountId: string): Promise<string> {
     const actions = sourceLocked
       ? '<small class="muted">برای اصلاح، سند اصلی را ویرایش کنید</small>'
       : transfer
-        ? `<span class="account-entry-actions"><button type="button" class="secondary-button" data-transfer-edit="${e.transferId}">ویرایش انتقال</button><button type="button" class="secondary-button" data-transfer-delete="${e.transferId}">حذف انتقال</button></span>`
+        ? (e.amount < 0 ? `<span class="account-entry-actions"><button type="button" class="secondary-button" data-transfer-edit="${e.transferId}">ویرایش انتقال</button><button type="button" class="secondary-button" data-transfer-delete="${e.transferId}">حذف انتقال</button></span>` : "")
         : `<span class="account-entry-actions"><button type="button" class="secondary-button" data-account-entry-edit="${e.id}">ویرایش</button><button type="button" class="secondary-button" data-account-entry-delete="${e.id}">حذف</button></span>`;
     return `<div class="transaction-row"><div class="transaction-icon">${e.amount >= 0 ? "↓" : "↑"}</div><div class="transaction-main"><strong>${entryLabel(e.type)}</strong><small>${e.description || "بدون شرح"} · ${dateTime.format(new Date(e.date))}</small>${actions}</div><b>${e.amount >= 0 ? "+" : ""}${rial(e.amount)}</b></div>`;
   }).join("");
@@ -146,7 +146,7 @@ export function accountEntryModal(accounts: Account[], existing?: import("./doma
   const options = accounts.map(a => `<option value="${a.id}" ${a.id === (existing?.accountId || "") ? "selected" : ""}>${a.name}</option>`).join("");
   const type = existing?.type === "withdraw" ? "withdraw" : "deposit";
   return `<div class="modal-backdrop" id="account-entry-modal"><section class="modal"><button class="modal-close" id="account-entry-close">×</button><span class="eyebrow">گردش حساب</span><h2>${existing ? "ویرایش گردش دستی" : "ثبت گردش دستی"}</h2>
-  <label class="field"><span>حساب</span><select id="entry-account">${options}</select></label>
+  <label class="field"><span>حساب</span><select id="entry-account" ${existing ? "disabled" : ""}>${options}</select></label>
   <label class="field"><span>نوع</span><select id="entry-type"><option value="deposit" ${type === "deposit" ? "selected" : ""}>واریز / دریافت</option><option value="withdraw" ${type === "withdraw" ? "selected" : ""}>برداشت / پرداخت</option></select></label>
   <label class="field"><span>مبلغ</span><input id="entry-amount" type="number" min="1" value="${Math.abs(existing?.amount || 0)}"></label>
   <label class="field"><span>شرح</span><input id="entry-description" value="${existing?.description || ""}" placeholder="مثلاً واریز نقدی"></label>
