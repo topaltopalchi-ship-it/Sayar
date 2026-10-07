@@ -1,10 +1,10 @@
-import type { Dashboard, Expense, Party, Product, StockMovement, Transaction } from "./domain";
+import type { Account, AccountEntry, Dashboard, Expense, Party, Product, StockMovement, Transaction } from "./domain";
 import { lineTotal, newId, transactionTotal } from "./domain";
 
 const DB_NAME = "sayar-db";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
-const stores = ["products", "parties", "transactions", "movements", "expenses"] as const;
+const stores = ["products", "parties", "transactions", "movements", "expenses", "accounts", "accountEntries"] as const;
 type StoreName = typeof stores[number];
 
 let database: IDBDatabase | null = null;
@@ -295,4 +295,49 @@ export async function addStockAdjustment(input: {
     id: newId(), productId: input.productId, date: input.date, type: "adjustment",
     quantity: input.quantity, referenceId: newId(),
   } satisfies StockMovement);
+}
+
+
+export async function listAccounts(): Promise<Account[]> {
+  const items = await getAll<Account>("accounts");
+  return items.sort((a, b) => a.createdAt - b.createdAt);
+}
+
+export async function listAccountEntries(): Promise<AccountEntry[]> {
+  const items = await getAll<AccountEntry>("accountEntries");
+  return items.sort((a, b) => a.date - b.date);
+}
+
+export async function addAccount(input: Omit<Account, "id" | "createdAt">): Promise<Account> {
+  const account: Account = { ...input, id: newId(), createdAt: Date.now() };
+  await put("accounts", account);
+  return account;
+}
+
+export async function addAccountEntry(input: Omit<AccountEntry, "id">): Promise<AccountEntry> {
+  const entry: AccountEntry = { ...input, id: newId() };
+  await put("accountEntries", entry);
+  return entry;
+}
+
+export async function transferBetweenAccounts(fromAccountId: string, toAccountId: string, amount: number, description: string): Promise<void> {
+  if (fromAccountId === toAccountId || amount <= 0) throw new Error("حساب مبدأ و مقصد را درست انتخاب کنید");
+  const id = newId();
+  const date = Date.now();
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("accountEntries", "readwrite");
+    tx.objectStore("accountEntries").put({ id: newId(), accountId: fromAccountId, date, type: "transfer", amount: -Math.round(amount), description, transferId: id } satisfies AccountEntry);
+    tx.objectStore("accountEntries").put({ id: newId(), accountId: toAccountId, date, type: "transfer", amount: Math.round(amount), description, transferId: id } satisfies AccountEntry);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function getAccountBalances(): Promise<Record<string, number>> {
+  const [accounts, entries] = await Promise.all([listAccounts(), listAccountEntries()]);
+  const balances: Record<string, number> = {};
+  for (const account of accounts) balances[account.id] = account.openingBalance;
+  for (const entry of entries) balances[entry.accountId] = (balances[entry.accountId] ?? 0) + entry.amount;
+  return balances;
 }
