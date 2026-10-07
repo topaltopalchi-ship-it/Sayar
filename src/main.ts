@@ -257,8 +257,11 @@ async function openSaleModal(): Promise<void> {
       const amount = Math.max(0, qty * p.salePrice - disc);
       const paidValue = Math.min(amount, Math.max(0, Number(paid.value) || 0));
       const line: TransactionLine = { productId: p.id, quantity: qty, unitPrice: p.salePrice, discount: disc };
-      await addSale({ date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
-      modal.remove(); showToast(`فروش ثبت شد؛ مانده ${rial(amount - paidValue)}`); await render();
+      const savedSale = await addSale({ date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
+      modal.remove();
+      showToast(`فروش ثبت شد؛ مانده ${rial(amount - paidValue)}`);
+      await openInvoice(savedSale);
+      await render();
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت فروش ناموفق بود"); }
   });
   update();
