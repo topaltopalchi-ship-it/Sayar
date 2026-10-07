@@ -356,7 +356,7 @@ async function render(): Promise<void> {
   else if (activeTab === "sales") {
     const tx = (await listTransactions()).filter(t => t.type === "sale");
     content = pageHead("فروش", "دفتر فروش", "فاکتورهای فروش و مانده مشتریان.", `<button class="primary-button" id="new-sale">＋ ثبت فروش</button>`) +
-      `<section class="panel">${tx.length ? tx.map(transactionRow).join("") : `<div class="empty-inline"><span>↗</span><p>هنوز فاکتور فروشی ثبت نشده است.</p></div>`}</section>`;
+      `<section class="panel">${tx.length ? tx.map(t => `<button class="transaction-row transaction-button" data-invoice-id="${t.id}">${transactionRow(t)}</button>`).join("") : `<div class="empty-inline"><span>↗</span><p>هنوز فاکتور فروشی ثبت نشده است.</p></div>`}</section>`;
   } else if (activeTab === "purchases") {
     const tx = (await listTransactions()).filter(t => t.type === "purchase");
     content = pageHead("خرید", "دفتر خرید", "خریدها و افزایش خودکار موجودی.", `<button class="primary-button" id="new-purchase">＋ ثبت خرید</button>`) +
@@ -367,6 +367,10 @@ async function render(): Promise<void> {
   else content = placeholder("بیشتر", "تنظیمات، پشتیبان‌گیری، حساب کاربری و مدیریت اشتراک.");
   layout(content, subscription);
 
+  document.querySelectorAll<HTMLButtonElement>("[data-invoice-id]").forEach(b => b.addEventListener("click", async () => {
+    const tx = (await listTransactions()).find(t => t.id === b.dataset.invoiceId);
+    if (tx) await openInvoice(tx);
+  }));
   document.querySelector("#new-sale")?.addEventListener("click", openSaleModal);
   document.querySelector("#new-purchase")?.addEventListener("click", async () => {
     products = await listProducts(); parties = await listParties();
