@@ -1,4 +1,4 @@
-import { addCheck, listChecks, updateCheck, clearCheck, listAccounts, listParties } from "./db";
+import { addCheck, listChecks, updateCheck, deleteCheck, clearCheck, listAccounts, listParties } from "./db";
 import { formatMoney } from "./settings";
 import type { Check, CheckDirection, CheckStatus } from "./domain";
 
@@ -12,7 +12,7 @@ export async function checksView(): Promise<string> {
   const issued = checks.filter(c => c.direction === "issued");
   const pending = checks.filter(c => c.status === "pending");
   const overdue = pending.filter(c => c.dueDate < Date.now());
-  const rows = checks.map(c => `<div class="check-row"><div class="check-icon">${c.direction === "received" ? "↓" : "↑"}</div><div><strong>${c.number || "بدون شماره"} · ${c.issuerName || c.bank}</strong><small>${c.direction === "received" ? "دریافتی" : "پرداختی"} · سررسید ${dateLabel(c.dueDate)} · ${statusLabel[c.status]}</small></div><b>${rial(c.amount)}</b><select class="check-status" data-check-id="${c.id}">${Object.entries(statusLabel).map(([k,v]) => `<option value="${k}" ${c.status===k?"selected":""}>${v}</option>`).join("")}</select></div>`).join("");
+  const rows = checks.map(c => `<div class="check-row"><div class="check-icon">${c.direction === "received" ? "↓" : "↑"}</div><div><strong>${c.number || "بدون شماره"} · ${c.issuerName || c.bank}</strong><small>${c.direction === "received" ? "دریافتی" : "پرداختی"} · سررسید ${dateLabel(c.dueDate)} · ${statusLabel[c.status]}</small></div><b>${rial(c.amount)}</b><button type="button" class="secondary-button check-edit" data-check-edit="${c.id}">ویرایش</button><button type="button" class="secondary-button check-delete" data-check-delete="${c.id}">حذف</button><select class="check-status" data-check-id="${c.id}">${Object.entries(statusLabel).map(([k,v]) => `<option value="${k}" ${c.status===k?"selected":""}>${v}</option>`).join("")}</select></div>`).join("");
   return `<section class="hero"><div><p class="hero-kicker">اسناد دریافتنی و پرداختنی</p><h2>چک‌ها و سررسیدها</h2><p class="muted">چک‌های دریافتی و پرداختی را پیگیری کنید.</p></div><div class="hero-mark">✓</div></section>
   <section class="stats-grid"><article class="stat-card primary"><span>چک‌های در انتظار</span><strong>${rial(pending.reduce((s,c)=>s+c.amount,0))}</strong></article><article class="stat-card warning"><span>سررسید گذشته</span><strong>${moneyFormat(overdue.length)}</strong></article></section>
   <section class="section"><div class="section-head"><h3>عملیات</h3><div><button class="secondary-button" id="new-received-check">＋ چک دریافتی</button> <button class="secondary-button" id="new-issued-check">＋ چک پرداختی</button></div></div></section>
@@ -53,6 +53,13 @@ export async function bindCheckModal(modal: HTMLElement, direction: CheckDirecti
       modal.remove();done("چک ثبت شد");
     } catch(e){done(e instanceof Error?e.message:"ثبت چک ناموفق بود");}
   });
+}
+export async function bindCheckActions(done:(m:string)=>void) {
+  document.querySelectorAll<HTMLElement>("[data-check-delete]").forEach(button => button.addEventListener("click", async () => {
+    const id=button.dataset.checkDelete||""; const check=(await listChecks()).find(x=>x.id===id); if(!check||!confirm("این چک حذف شود؟")) return;
+    try { await deleteCheck(id); done("چک حذف شد"); } catch(e) { done(e instanceof Error?e.message:"حذف چک ناموفق بود"); }
+    window.dispatchEvent(new Event("sai-sai-refresh"));
+  }));
 }
 export async function bindCheckStatuses(done:(m:string)=>void) {
   document.querySelectorAll<HTMLSelectElement>(".check-status").forEach(s=>s.addEventListener("change",async()=>{const id=s.dataset.checkId||""; if(s.value==="cleared"){ const accounts=await listAccounts(); const check=(await listChecks()).find(x=>x.id===id); if(!check){done("چک پیدا نشد");return;} const accountId=check.accountId||accounts[0]?.id||""; if(!accountId) throw new Error("برای وصول چک حداقل یک حساب مالی بسازید"); await clearCheck(id,accountId); } else { await updateCheck(id,{status:s.value as CheckStatus}); } done("وضعیت چک به‌روزرسانی شد");}));
