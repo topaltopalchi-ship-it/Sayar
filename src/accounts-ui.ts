@@ -1,4 +1,4 @@
-import { addAccount, addAccountEntry, getAccountBalances, getAccountLedger, listAccounts, listAccountEntries, transferBetweenAccounts } from "./db";
+import { addAccount, updateAccount, deleteAccount, addAccountEntry, getAccountBalances, getAccountLedger, listAccounts, listAccountEntries, transferBetweenAccounts } from "./db";
 import { formatMoney } from "./settings";
 import type { Account, AccountType } from "./domain";
 
@@ -10,19 +10,19 @@ const entryLabel = (type: Account["type"] | "deposit" | "withdraw" | "transfer")
 export async function accountsView(): Promise<string> {
   const [accounts, balances] = await Promise.all([listAccounts(), getAccountBalances()]);
   const total = accounts.reduce((s, a) => s + (balances[a.id] ?? 0), 0);
-  const cards = accounts.map(a => `<button class="account-card" data-account-ledger="${a.id}"><div class="account-icon">${a.type === "bank" ? "▣" : "▤"}</div><div><strong>${a.name}</strong><small>${a.type === "bank" ? "حساب بانکی" : "صندوق نقدی"} · مشاهده گردش</small></div><b>${rial(balances[a.id] ?? 0)}</b></button>`).join("");
+  const cards = accounts.map(a => `<div class="account-card" data-account-ledger="${a.id}"><div class="account-icon">${a.type === "bank" ? "▣" : "▤"}</div><div><strong>${a.name}</strong><small>${a.type === "bank" ? "حساب بانکی" : "صندوق نقدی"} · مشاهده گردش</small></div><b>${rial(balances[a.id] ?? 0)}</b><span class="account-actions"><button type="button" class="secondary-button account-edit" data-account-edit="${a.id}">ویرایش</button><button type="button" class="secondary-button account-delete" data-account-delete="${a.id}">حذف</button></span></div>`).join("");
   return `<section class="hero"><div><p class="hero-kicker">خزانه‌داری</p><h2>صندوق و بانک</h2><p class="muted">پول نقد و موجودی حساب‌های بانکی را یکجا مدیریت کنید.</p></div><div class="hero-mark">▣</div></section>
   <section class="stats-grid"><article class="stat-card primary"><span>موجودی کل</span><strong>${rial(total)}</strong></article><article class="stat-card success"><span>تعداد حساب‌ها</span><strong>${money.format(accounts.length)}</strong></article></section>
   <section class="section"><div class="section-head"><h3>حساب‌ها</h3><div><button class="secondary-button" id="new-account">＋ حساب جدید</button> <button class="secondary-button" id="new-transfer">↔ انتقال</button></div></div>
   <section class="panel account-list">${cards || '<div class="empty-inline"><span>◌</span><p>هنوز صندوق یا حساب بانکی ثبت نشده است.</p></div>'}</section></section>`;
 }
 
-export function accountModal(): string {
-  return `<div class="modal-backdrop" id="account-modal"><section class="modal"><button class="modal-close" id="account-close">×</button><span class="eyebrow">خزانه‌داری</span><h2>حساب جدید</h2>
-  <label class="field"><span>نام حساب</span><input id="account-name" placeholder="مثلاً صندوق فروشگاه یا بانک ملی"></label>
-  <label class="field"><span>نوع حساب</span><select id="account-type"><option value="cash">صندوق نقدی</option><option value="bank">حساب بانکی</option></select></label>
-  <label class="field"><span>موجودی اولیه</span><input id="account-opening" type="number" min="0" value="0"></label>
-  <button class="primary-button wide" id="account-submit">ثبت حساب</button></section></div>`;
+export function accountModal(account?: Account): string {
+  return `<div class="modal-backdrop" id="account-modal"><section class="modal"><button class="modal-close" id="account-close">×</button><span class="eyebrow">خزانه‌داری</span><h2>${account ? "ویرایش حساب" : "حساب جدید"}</h2>
+  <label class="field"><span>نام حساب</span><input id="account-name" placeholder="مثلاً صندوق فروشگاه یا بانک ملی" value="${account?.name || ""}"></label>
+  <label class="field"><span>نوع حساب</span><select id="account-type"><option value="cash" ${account?.type === "cash" ? "selected" : ""}>صندوق نقدی</option><option value="bank" ${account?.type === "bank" ? "selected" : ""}>حساب بانکی</option></select></label>
+  <label class="field"><span>موجودی اولیه</span><input id="account-opening" type="number" min="0" value="${account?.openingBalance ?? 0}"></label>
+  <button class="primary-button wide" id="account-submit">${account ? "ذخیره تغییرات" : "ثبت حساب"}</button></section></div>`;
 }
 
 export function transferModal(accounts: Account[], balances: Record<string, number>): string {
@@ -41,8 +41,13 @@ export async function bindAccountModal(modal: HTMLElement, done: (message: strin
       const type = (modal.querySelector<HTMLSelectElement>("#account-type")?.value || "cash") as AccountType;
       const openingBalance = Math.max(0, Number(modal.querySelector<HTMLInputElement>("#account-opening")?.value || 0));
       if (!name) throw new Error("نام حساب الزامی است");
-      await addAccount({ name, type, openingBalance });
-      modal.remove(); done("حساب با موفقیت ثبت شد");
+      const editId = modal.dataset.editId;
+      if (editId) {
+        await updateAccount({ id: editId, name, type, openingBalance, createdAt: Number(modal.dataset.createdAt || Date.now()) });
+      } else {
+        await addAccount({ name, type, openingBalance });
+      }
+      modal.remove(); done(editId ? "تغییرات حساب ذخیره شد" : "حساب با موفقیت ثبت شد");
     } catch (e) { done(e instanceof Error ? e.message : "ثبت حساب ناموفق بود"); }
   });
 }
