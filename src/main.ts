@@ -516,7 +516,8 @@ async function render(): Promise<void> {
   }));
   document.querySelector("#more-refresh")?.addEventListener("click", () => render());
   document.querySelector("#more-backup")?.addEventListener("click", async () => {
-    const payload = { products: await listProducts(), parties: await listParties(), transactions: await listTransactions(), expenses: await (await import("./db")).listExpenses() };
+    const [products, parties, transactions, expenses, accounts, accountEntries, checks] = await Promise.all([listProducts(), listParties(), listTransactions(), listExpenses(), listAccounts(), (await import("./db")).listAccountEntries(), (await import("./db")).listChecks()]);
+    const payload = { version: 2, exportedAt: Date.now(), products, parties, transactions, expenses, accounts, accountEntries, checks };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `sai-sai-backup-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
     showToast("فایل پشتیبان آماده شد");
