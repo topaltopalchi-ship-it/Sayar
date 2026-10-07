@@ -22,3 +22,9 @@ jobs:
         run: npm run build 2>&1 | tee build.log
           echo "---BUILD-LOG---"
           cat build.log
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
