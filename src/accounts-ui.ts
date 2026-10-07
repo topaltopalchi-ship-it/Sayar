@@ -96,6 +96,49 @@ export async function accountLedgerModal(accountId: string): Promise<string> {
 
 export async function bindAccountLedger(modal: HTMLElement): Promise<void> {
   modal.querySelector("#account-ledger-close")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#new-account-entry")?.addEventListener("click", async () => {
+    const accounts = await listAccounts();
+    document.body.insertAdjacentHTML("beforeend", accountEntryModal(accounts));
+    const entryModal = document.querySelector<HTMLElement>("#account-entry-modal");
+    if (entryModal) await bindAccountEntryModal(entryModal, message => {
+      modal.remove();
+      const toast = document.querySelector<HTMLDivElement>("#toast");
+      if (toast) { toast.textContent = message; toast.classList.add("show"); window.setTimeout(() => toast.classList.remove("show"), 2400); }
+      window.dispatchEvent(new Event("sai-sai-refresh"));
+    });
+  });
+  modal.querySelectorAll<HTMLElement>("[data-account-entry-edit]").forEach(button => button.addEventListener("click", async event => {
+    event.stopPropagation();
+    const id = button.dataset.accountEntryEdit || "";
+    const entry = (await (await import("./db")).listAccountEntries()).find(e => e.id === id);
+    if (!entry) return;
+    if (entry.referenceId || entry.transferId) { alert("این گردش باید از سند اصلی یا انتقال ویرایش شود."); return; }
+    const accounts = await listAccounts();
+    document.body.insertAdjacentHTML("beforeend", accountEntryModal(accounts, entry));
+    const entryModal = document.querySelector<HTMLElement>("#account-entry-modal");
+    if (entryModal) {
+      entryModal.dataset.editId = entry.id;
+      await bindAccountEntryModal(entryModal, message => {
+        entryModal.remove();
+        modal.remove();
+        const toast = document.querySelector<HTMLDivElement>("#toast");
+        if (toast) { toast.textContent = message; toast.classList.add("show"); window.setTimeout(() => toast.classList.remove("show"), 2400); }
+        window.dispatchEvent(new Event("sai-sai-refresh"));
+      });
+    }
+  }));
+  modal.querySelectorAll<HTMLElement>("[data-account-entry-delete]").forEach(button => button.addEventListener("click", async event => {
+    event.stopPropagation();
+    const id = button.dataset.accountEntryDelete || "";
+    if (!id || !confirm("این گردش حساب حذف شود؟")) return;
+    try {
+      await (await import("./db")).deleteAccountEntry(id);
+      modal.remove();
+      const toast = document.querySelector<HTMLDivElement>("#toast");
+      if (toast) { toast.textContent = "گردش حساب حذف شد"; toast.classList.add("show"); window.setTimeout(() => toast.classList.remove("show"), 2400); }
+      window.dispatchEvent(new Event("sai-sai-refresh"));
+    } catch (e) { alert(e instanceof Error ? e.message : "حذف گردش ناموفق بود"); }
+  }));
 }
 
 
