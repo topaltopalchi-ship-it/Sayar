@@ -603,7 +603,7 @@ export async function deleteTransfer(transferId: string): Promise<void> {
     tx.onerror = () => reject(tx.error);
   });
 }
-nexport async function transferBetweenAccounts(fromAccountId: string, toAccountId: string, amount: number, description: string): Promise<void> {
+export async function transferBetweenAccounts(fromAccountId: string, toAccountId: string, amount: number, description: string): Promise<void> {
   if (fromAccountId === toAccountId || amount <= 0) throw new Error("حساب مبدأ و مقصد را درست انتخاب کنید");
   const id = newId();
   const date = Date.now();
