@@ -565,7 +565,7 @@ async function render(): Promise<void> {
   } else if (activeTab === "purchases") {
     const tx = (await listTransactions()).filter(t => t.type === "purchase");
     content = pageHead("خرید", "دفتر خرید", "خریدها و افزایش خودکار موجودی.", `<button class="primary-button" id="new-purchase">＋ ثبت خرید</button>`) +
-      `<section class="panel">${tx.length ? tx.map(t => `<div class="transaction-actions-row"><div class="transaction-row">${transactionRow(t)}</div><button class="secondary-button" data-purchase-delete="${t.id}">حذف</button></div>`).join("") : `<div class="empty-inline"><span>↙</span><p>هنوز خریدی ثبت نشده است.</p></div>`}</section>`;
+      `<section class="panel">${tx.length ? tx.map(t => `<div class="transaction-actions-row"><div class="transaction-row">${transactionRow(t)}</div><button class="secondary-button" data-purchase-edit="${t.id}">ویرایش</button><button class="secondary-button" data-purchase-delete="${t.id}">حذف</button></div>`).join("") : `<div class="empty-inline"><span>↙</span><p>هنوز خریدی ثبت نشده است.</p></div>`}</section>`;
   } else if (activeTab === "inventory") content = await inventoryView();
   else if (activeTab === "people") { parties = await listParties(); content = peopleView(); }
   else if (activeTab === "reports") content = await reportsView(await listTransactions());
@@ -580,6 +580,7 @@ async function render(): Promise<void> {
   document.querySelector("#new-sale")?.addEventListener("click", () => void openSaleModal());
   document.querySelectorAll<HTMLElement>("[data-sale-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.saleEdit); if(t) await openSaleModal(t); }));
   document.querySelectorAll<HTMLElement>("[data-sale-delete]").forEach(b => b.addEventListener("click", async () => { const id=b.dataset.saleDelete||""; if(!id||!confirm("این فاکتور فروش حذف شود؟")) return; try { await deleteTransaction(id); showToast("فاکتور حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف فاکتور ناموفق بود"); } }));
+  document.querySelectorAll<HTMLElement>("[data-purchase-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.purchaseEdit); if(!t) return; products=await listProducts(); parties=await listParties(); openPurchaseModal(products, parties, rial, async m=>{showToast(m);await render();}, t); }));
   document.querySelectorAll<HTMLElement>("[data-purchase-delete]").forEach(b => b.addEventListener("click", async () => { const id=b.dataset.purchaseDelete||""; if(!id||!confirm("این فاکتور خرید حذف شود؟")) return; try { await deleteTransaction(id); showToast("فاکتور خرید حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف فاکتور خرید ناموفق بود"); } }));
   document.querySelector("#new-purchase")?.addEventListener("click", async () => {
     products = await listProducts(); parties = await listParties();
