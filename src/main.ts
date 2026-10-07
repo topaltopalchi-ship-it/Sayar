@@ -204,7 +204,8 @@ function invoiceModal(t: Transaction, productMap: Map<string, Product>, partyMap
       ${getInvoiceBranding().showStamp && getInvoiceBranding().stamp ? '<img class="invoice-stamp" src="' + getInvoiceBranding().stamp + '" alt="مهر">' : ''}
       ${getInvoiceBranding().showSignature && getInvoiceBranding().signature ? '<img class="invoice-signature" src="' + getInvoiceBranding().signature + '" alt="امضا">' : ''}
     </div>
-    <div class="invoice-branding no-print"><button class="secondary-button" id="invoice-branding-settings">⚙ امضا، مهر و شعار</button></div>\n    <button class="primary-button wide no-print" id="invoice-print">چاپ / ذخیره PDF</button>
+    <div class="invoice-branding no-print"><button class="secondary-button" id="invoice-branding-settings">⚙ امضا، مهر و شعار</button></div>
+    <button class="primary-button wide no-print" id="invoice-print">چاپ / ذخیره PDF</button>
   </section></div>`;
 }
 
@@ -212,7 +213,8 @@ async function openInvoice(t: Transaction): Promise<void> {
   const [productList, partyList] = await Promise.all([listProducts(), listParties()]);
   document.body.insertAdjacentHTML("beforeend", invoiceModal(t, new Map(productList.map(p => [p.id, p])), new Map(partyList.map(p => [p.id, p]))));
   document.querySelector("#invoice-close")?.addEventListener("click", () => document.querySelector("#invoice-modal")?.remove());
-  document.querySelector("#invoice-print")?.addEventListener("click", () => window.print());\n  document.querySelector("#invoice-branding-settings")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", invoiceBrandingModal()); bindInvoiceBrandingModal(); });
+  document.querySelector("#invoice-print")?.addEventListener("click", () => window.print());
+  document.querySelector("#invoice-branding-settings")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", invoiceBrandingModal()); bindInvoiceBrandingModal(); });
 }
 
 function saleModal(): string {
@@ -363,7 +365,8 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
 function reportExcelCsv(transactions: Transaction[]): void {
   const rows = [["نوع","تاریخ","مبلغ","پرداخت","شرح"]];
   for (const t of transactions) rows.push([t.type, dateLabel(t.date), String(t.amount), String(t.paid), t.description || ""]);
-  const csv = "\uFEFF" + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const csv = "\uFEFF" + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("
+");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href=url; a.download=`sai-sai-report-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url);
 }
@@ -380,7 +383,9 @@ function expenseModal(): string {
     <button class="primary-button wide" id="expense-submit">ثبت هزینه</button></section></div>`;
 }
 
-async function openExpenseModal(): Promise<void> { (window as typeof window & { __saiAccounts?: {id:string;name:string}[] }).__saiAccounts = await listAccounts(); document.body.insertAdjacentHTML("beforeend", expenseModal()); bindExpenseModal(); }\n\nfunction bindExpenseModal(): void {
+async function openExpenseModal(): Promise<void> { (window as typeof window & { __saiAccounts?: {id:string;name:string}[] }).__saiAccounts = await listAccounts(); document.body.insertAdjacentHTML("beforeend", expenseModal()); bindExpenseModal(); }
+
+function bindExpenseModal(): void {
   const modal = document.querySelector<HTMLDivElement>("#expense-modal")!;
   modal.querySelector("#expense-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#expense-submit")?.addEventListener("click", async () => {
@@ -552,4 +557,5 @@ function placeholder(title: string, text: string): string {
   return pageHead("سای‌سای", title, text) + `<section class="panel locked-panel"><div>◈</div><h3>این بخش در حال تکمیل است</h3><p class="muted">زیرساخت اصلی آماده است و قابلیت‌های تکمیلی در نسخه‌های بعدی اضافه می‌شوند.</p></section>`;
 }
 
-if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => undefined));\nrender();
+if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => undefined));
+render();
