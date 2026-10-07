@@ -203,6 +203,25 @@ export async function addSale(input: {
 }
 
 
+export async function addSettlement(input: {
+  type: "receipt" | "payment";
+  date: number;
+  partyId: string;
+  amount: number;
+  description: string;
+}): Promise<Transaction> {
+  if (!input.partyId) throw new Error("انتخاب شخص الزامی است");
+  if (input.amount <= 0) throw new Error("مبلغ باید بیشتر از صفر باشد");
+  return addTransaction({
+    type: input.type,
+    date: input.date,
+    partyId: input.partyId,
+    description: input.description,
+    lines: [],
+    paid: input.amount,
+  });
+}
+
 export async function addPurchase(input: {
   date: number;
   partyId?: string;
