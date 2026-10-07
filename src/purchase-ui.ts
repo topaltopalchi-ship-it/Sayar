@@ -1,4 +1,4 @@
-import { addPurchase } from "./db";
+import { addPurchase, listAccounts } from "./db";
 import type { Party, Product } from "./domain";
 
 type MoneyFormat = (value: number) => string;
@@ -11,6 +11,7 @@ export function openPurchaseModal(products: Product[], parties: Party[], rial: M
   const partyOptions = parties.filter(p => p.type === "supplier" || p.type === "both")
     .map(p => '<option value="' + p.id + '">' + p.name + '</option>').join("");
 
+  const accountOptionsPromise = listAccounts();
   const modal = document.createElement("div");
   modal.className = "modal-backdrop";
   modal.id = "purchase-modal";
@@ -26,10 +27,12 @@ export function openPurchaseModal(products: Product[], parties: Party[], rial: M
     '<label class="field"><span>تخفیف</span><input id="purchase-discount" type="number" min="0" value="0"></label>' +
     '<label class="field"><span>مبلغ پرداختی</span><input id="purchase-paid" type="number" min="0" value="0"></label></div>' +
     '<label class="field"><span>تأمین‌کننده</span><select id="purchase-party"><option value="">بدون انتخاب</option>' + partyOptions + '</select></label>' +
+    '<label class="field"><span>پرداخت از</span><select id="purchase-account"><option value="">بدون انتخاب حساب</option></select></label>' +
     '<div class="sale-summary"><span>مبلغ فاکتور</span><strong id="purchase-total">۰ ریال</strong></div>' +
     '<button class="primary-button wide" id="purchase-submit">ثبت خرید و افزایش موجودی</button></section>';
 
   document.body.appendChild(modal);
+  void accountOptionsPromise.then(accounts => { const select = modal.querySelector<HTMLSelectElement>("#purchase-account"); if (select) select.innerHTML = '<option value="">بدون انتخاب حساب</option>' + accounts.map(a => '<option value="' + a.id + '">' + a.name + '</option>').join(""); });
   const q = modal.querySelector<HTMLInputElement>("#purchase-quantity")!;
   const price = modal.querySelector<HTMLInputElement>("#purchase-price")!;
   const discount = modal.querySelector<HTMLInputElement>("#purchase-discount")!;
@@ -64,6 +67,7 @@ export function openPurchaseModal(products: Product[], parties: Party[], rial: M
       await addPurchase({
         date: Date.now(),
         partyId,
+        accountId: modal.querySelector<HTMLSelectElement>("#purchase-account")!.value || undefined,
         description: "خرید " + p.name,
         lines: [{ productId: p.id, quantity, unitPrice, discount: disc }],
         paid: paidValue,
