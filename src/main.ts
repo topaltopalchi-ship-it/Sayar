@@ -1,7 +1,7 @@
 import "./style.css";
-import { getDashboard, listProducts, getStock, listParties } from "./db";
+import { getDashboard, listProducts, getStock, listParties, addSale } from "./db";
 import { createMonthlyCheckout, getSubscription, type Subscription } from "./billing";
-import type { Product } from "./domain";
+import type { Product, Party, TransactionLine } from "./domain";
 
 type Tab = "dashboard" | "sales" | "purchases" | "inventory" | "people" | "reports" | "more";
 
@@ -14,6 +14,7 @@ const money = new Intl.NumberFormat("fa-IR");
 const dateTime = new Intl.DateTimeFormat("fa-IR-u-ca-persian", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" });
 let activeTab: Tab = "dashboard";
 let products: Product[] = [];
+let parties: Party[] = [];
 
 const rial = (value: number) => `${money.format(Math.round(value))} ریال`;
 const dateLabel = (value: number) => dateTime.format(new Date(value));
@@ -75,6 +76,90 @@ async function dashboardView(subscription: Subscription): Promise<string> {
     <section class="section panel"><div class="section-head"><h3>آخرین تراکنش‌ها</h3><span class="muted">۵ مورد اخیر</span></div>${recent}</section>`;
 }
 
+function saleModal(): string {
+  const productOptions = products.map(p =>
+    `<option value="${p.id}">${p.name} — ${rial(p.salePrice)} / ${p.unit}</option>`
+  ).join("");
+
+  const partyOptions = parties.filter(p => p.type === "customer" || p.type === "both")
+    .map(p => `<option value="${p.id}">${p.name}</option>`).join("");
+
+  return `
+    <div class="modal-backdrop" id="sale-modal">
+      <section class="modal" role="dialog" aria-modal="true" aria-label="ثبت فروش">
+        <button class="modal-close" id="sale-close">×</button>
+        <span class="eyebrow">فاکتور فروش</span>
+        <h2>ثبت فروش</h2>
+        <label class="field"><span>کالا</span><select id="sale-product">${productOptions}</select></label>
+        <div class="form-grid">
+          <label class="field"><span>مقدار</span><input id="sale-quantity" type="number" min="0.001" step="0.001" value="1"></label>
+          <label class="field"><span>تخفیف</span><input id="sale-discount" type="number" min="0" value="0"></label>
+        </div>
+        <label class="field"><span>مشتری</span><select id="sale-party"><option value="">بدون انتخاب</option>${partyOptions}</select></label>
+        <label class="field"><span>مبلغ پرداختی</span><input id="sale-paid" type="number" min="0" value="0"></label>
+        <div class="sale-summary"><span>مبلغ فاکتور</span><strong id="sale-total">۰ ریال</strong></div>
+        <button class="primary-button wide" id="sale-submit">ثبت فاکتور و کاهش موجودی</button>
+      </section>
+    </div>`;
+}
+
+function bindSaleModal(): void {
+  const modal = document.querySelector<HTMLDivElement>("#sale-modal");
+  if (!modal) return;
+  const product = document.querySelector<HTMLSelectElement>("#sale-product")!;
+  const quantity = document.querySelector<HTMLInputElement>("#sale-quantity")!;
+  const discount = document.querySelector<HTMLInputElement>("#sale-discount")!;
+  const paid = document.querySelector<HTMLInputElement>("#sale-paid")!;
+  const total = document.querySelector<HTMLElement>("#sale-total")!;
+
+  const updateTotal = () => {
+    const p = products.find(x => x.id === product.value);
+    const value = Math.max(0, (Number(quantity.value) || 0) * (p?.salePrice ?? 0) - (Number(discount.value) || 0));
+    total.textContent = rial(value);
+  };
+  product.addEventListener("change", updateTotal);
+  quantity.addEventListener("input", updateTotal);
+  discount.addEventListener("input", updateTotal);
+  document.querySelector<HTMLButtonElement>("#sale-close")?.addEventListener("click", () => modal.remove());
+  document.querySelector<HTMLButtonElement>("#sale-submit")?.addEventListener("click", async () => {
+    try {
+      const p = products.find(x => x.id === product.value);
+      const qty = Number(quantity.value);
+      const disc = Math.max(0, Number(discount.value) || 0);
+      const amount = Math.max(0, qty * (p?.salePrice ?? 0) - disc);
+      if (!p || qty <= 0) throw new Error("کالا و مقدار فروش را بررسی کنید");
+      const paidValue = Math.min(amount, Math.max(0, Number(paid.value) || 0));
+      const party = document.querySelector<HTMLSelectElement>("#sale-party")?.value || undefined;
+
+      const line: TransactionLine = { productId: p.id, quantity: qty, unitPrice: p.salePrice, discount: disc };
+      await addSale({
+        date: Date.now(),
+        partyId: party,
+        description: `فروش ${p.name}`,
+        lines: [line],
+        paid: paidValue,
+      });
+      modal.remove();
+      showToast(`فروش ثبت شد؛ مانده: ${rial(amount - paidValue)}`);
+      await render();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "ثبت فروش ناموفق بود");
+    }
+  });
+  updateTotal();
+}
+
+async function openSaleModal(): Promise<void> {
+  products = await listProducts();
+  parties = await listParties();
+  if (!products.length) {
+    showToast("ابتدا حداقل یک کالا در انبار ثبت کنید");
+    return;
+  }
+  document.body.insertAdjacentHTML("beforeend", saleModal());
+  bindSaleModal();
+}
+
 async function inventoryView(): Promise<string> {
   products = await listProducts();
   const rows = await Promise.all(products.map(async p => {
@@ -126,5 +211,8 @@ async function render(): Promise<void> {
   else if (activeTab==="reports") content=placeholder("گزارش‌ها","گزارش فروش، سود، موجودی، بدهی و مطالبات در بازه زمانی.");
   else content=placeholder("بیشتر","تنظیمات، پشتیبان‌گیری، حساب کاربری و مدیریت اشتراک.");
   layout(content, subscription);
-  document.querySelectorAll<HTMLButtonElement>("[data-locked]").forEach(b => b.addEventListener("click", () => showToast("این عملیات در مرحله بعد فعال می‌شود.")));
+  document.querySelectorAll<HTMLButtonElement>("[data-locked]").forEach(b => b.addEventListener("click", async () => {
+    if (b.dataset.locked === "sales") await openSaleModal();
+    else showToast("این عملیات در مرحله بعد فعال می‌شود.");
+  }));
 }
