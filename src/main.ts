@@ -1,6 +1,6 @@
 import "./style.css";
 import {
-  addParty, addProduct, addSale, addSettlement, getDashboard, getStock,
+  addParty, addProduct, addSale, addSettlement, addStockAdjustment, getDashboard, getStock,
   listParties, listProducts, listTransactions
 } from "./db";
 import { createMonthlyCheckout, getSubscription, type Subscription } from "./billing";
@@ -151,6 +151,28 @@ async function inventoryView(): Promise<string> {
   }));
   return pageHead("انبار", "موجودی کالا", "موجودی از روی گردش‌های ثبت‌شده محاسبه می‌شود.", `<button class="primary-button" id="new-product">＋ کالای جدید</button>`) +
     `<section class="panel">${rows.length ? rows.join("") : `<div class="empty-inline"><span>▤</span><p>هنوز کالایی ثبت نشده است.</p></div>`}</section>`;
+}
+
+function adjustmentModal(): string {
+  const options = products.map(p => `<option value="${p.id}">${p.name} · موجودی فعلی ${money.format(0)} ${p.unit}</option>`).join("");
+  return `<div class="modal-backdrop" id="adjust-modal"><section class="modal"><button class="modal-close" id="adjust-close">×</button><span class="eyebrow">کنترل انبار</span><h2>اصلاح موجودی</h2>
+    <label class="field"><span>کالا</span><select id="adjust-product">${options}</select></label>
+    <label class="field"><span>مقدار تغییر</span><input id="adjust-qty" type="number" step="0.001" placeholder="مثبت برای افزایش، منفی برای کاهش"></label>
+    <label class="field"><span>شرح</span><input id="adjust-desc" placeholder="مثلاً شمارش دوره‌ای انبار"></label>
+    <button class="primary-button wide" id="adjust-submit">ثبت اصلاح موجودی</button></section></div>`;
+}
+
+function bindAdjustmentModal(): void {
+  const modal = document.querySelector<HTMLDivElement>("#adjust-modal")!;
+  modal.querySelector("#adjust-close")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#adjust-submit")?.addEventListener("click", async () => {
+    try {
+      const productId = modal.querySelector<HTMLSelectElement>("#adjust-product")!.value;
+      const quantity = Number(modal.querySelector<HTMLInputElement>("#adjust-qty")!.value);
+      await addStockAdjustment({ date: Date.now(), productId, quantity, description: modal.querySelector<HTMLInputElement>("#adjust-desc")!.value.trim() || "اصلاح موجودی" });
+      modal.remove(); showToast("اصلاح موجودی ثبت شد"); await render();
+    } catch (e) { showToast(e instanceof Error ? e.message : "اصلاح موجودی ناموفق بود"); }
+  });
 }
 
 function productModal(): string {
@@ -304,6 +326,7 @@ async function render(): Promise<void> {
     products = await listProducts(); parties = await listParties();
     openPurchaseModal(products, parties, rial, async m => { showToast(m); await render(); });
   });
+  document.querySelector("#new-adjustment")?.addEventListener("click", async () => { products = await listProducts(); if (!products.length) { showToast("ابتدا یک کالا ثبت کنید"); return; } document.body.insertAdjacentHTML("beforeend", adjustmentModal()); bindAdjustmentModal(); });
   document.querySelector("#new-product")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", productModal()); bindProductModal(); });
   document.querySelector("#new-party")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", partyModal()); bindPartyModal(); });
   await bindActions();
