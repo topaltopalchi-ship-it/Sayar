@@ -7,16 +7,16 @@ import { createMonthlyCheckout, getSubscription, type Subscription } from "./bil
 import { lineTotal, type Party, type Product, type Transaction, type TransactionLine } from "./domain";
 import { formatMoney, getCurrencyUnit, setCurrencyUnit } from "./settings";
 import { openPurchaseModal } from "./purchase-ui";
-import { accountModal, accountsView, bindAccountModal, bindTransferModal, transferModal } from "./accounts-ui";
+import { accountModal, accountLedgerModal, accountsView, bindAccountLedger, bindAccountModal, bindTransferModal, transferModal } from "./accounts-ui";
 import { getAccountBalances, listAccounts } from "./db";
 import { checksView, checkModal, bindCheckModal, bindCheckStatuses } from "./checks-ui";
 
-type Tab = "dashboard" | "sales" | "purchases" | "inventory" | "people" | "reports" | "more";
+type Tab = "dashboard" | "sales" | "purchases" | "inventory" | "people" | "reports" | "more" | "checks";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 const navItems: Array<[Tab, string, string]> = [
   ["dashboard", "داشبورد", "⌂"], ["sales", "فروش", "↗"], ["purchases", "خرید", "↙"],
-  ["inventory", "موجودی", "▤"], ["people", "اشخاص", "♙"], ["reports", "گزارش‌ها", "◫"], ["more", "بیشتر", "⋯"],
+  ["inventory", "موجودی", "▤"], ["people", "اشخاص", "♙"], ["reports", "گزارش‌ها", "◫"], ["more", "خزانه", "▣"], ["checks", "چک‌ها", "✓"],
 ];
 const money = new Intl.NumberFormat("fa-IR");
 const dateTime = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
@@ -57,7 +57,7 @@ function bindUiModeModal(): void {
   modal.querySelector("#ui-mode-save")?.addEventListener("click", async () => {
     const enabled = modal.querySelector<HTMLInputElement>("#professional-mode")?.checked ?? false;
     setProfessionalMode(enabled);
-    if (!enabled && (activeTab === "reports" || activeTab === "more")) activeTab = "dashboard";
+    if (!enabled && (activeTab === "reports" || activeTab === "more" || activeTab === "checks")) activeTab = "dashboard";
     modal.remove();
     await render();
     showToast(enabled ? "حالت حرفه‌ای فعال شد" : "حالت ساده فعال شد");
@@ -90,7 +90,7 @@ function layout(content: string, subscription: Subscription): void {
       </header>
       <div id="view">${content}</div>
       <nav class="bottom-nav" aria-label="ناوبری اصلی">
-        ${navItems.filter(([id]) => isProfessionalMode() || (id !== "reports" && id !== "more")).map(([id,label,icon]) => `<button class="nav-item ${activeTab === id ? "active" : ""}" data-nav="${id}"><span>${icon}</span><small>${label}</small></button>`).join("")}
+        ${navItems.filter(([id]) => isProfessionalMode() || (id !== "reports" && id !== "more" && id !== "checks")).map(([id,label,icon]) => `<button class="nav-item ${activeTab === id ? "active" : ""}" data-nav="${id}"><span>${icon}</span><small>${label}</small></button>`).join("")}
       </nav>
       <div id="toast" class="toast" role="status" aria-live="polite"></div>
     </main>`;
@@ -500,4 +500,4 @@ function placeholder(title: string, text: string): string {
   return pageHead("سای‌سای", title, text) + `<section class="panel locked-panel"><div>◈</div><h3>این بخش در حال تکمیل است</h3><p class="muted">زیرساخت اصلی آماده است و قابلیت‌های تکمیلی در نسخه‌های بعدی اضافه می‌شوند.</p></section>`;
 }
 
-render();
+render();\n  document.querySelectorAll<HTMLElement>("[data-account-ledger]").forEach(async b => {\n    b.addEventListener("click", async () => {\n      try {\n        const id = b.dataset.accountLedger; if (!id) return;\n        document.body.insertAdjacentHTML("beforeend", await accountLedgerModal(id));\n        const modal = document.querySelector<HTMLElement>("#account-ledger-modal");\n        if (modal) await bindAccountLedger(modal);\n      } catch (e) { showToast(e instanceof Error ? e.message : "نمایش گردش حساب ناموفق بود"); }\n    });\n  });
