@@ -143,13 +143,19 @@ export async function updateExpense(expense: Expense): Promise<void> {
 }
 
 export async function deleteExpense(id: string): Promise<void> {
+  const expenses = await listExpenses();
+  const current = expenses.find(e => e.id === id);
+  if (!current) throw new Error("هزینه پیدا نشد");
   const entries = await listAccountEntries();
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(["expenses","accountEntries"], "readwrite");
     tx.objectStore("expenses").delete(id);
     for (const e of entries.filter(e => e.referenceId === id)) tx.objectStore("accountEntries").delete(e.id);
-    if (!entries.some(e => e.referenceId === id) && current.accountId && current.paid > 0) { const expected = current.type === "sale" || current.type === "receipt" ? Math.round(current.paid) : -Math.round(current.paid); const old = entries.find(e => e.accountId === current.accountId && e.date === current.date && e.amount === expected && e.description === current.description); if (old) tx.objectStore("accountEntries").delete(old.id); }
+    if (!entries.some(e => e.referenceId === id) && current.accountId && current.amount > 0) {
+      const old = entries.find(e => e.accountId === current.accountId && e.date === current.date && e.amount === -Math.round(current.amount) && e.description === current.title);
+      if (old) tx.objectStore("accountEntries").delete(old.id);
+    }
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
