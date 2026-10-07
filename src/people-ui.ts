@@ -102,7 +102,7 @@ async function enhancePeople(): Promise<void> {
             const amount = Number(sm.querySelector<HTMLInputElement>("#settlement-amount")!.value);
             const description = sm.querySelector<HTMLInputElement>("#settlement-description")!.value;
             await saveSettlement(party.id,type,amount,description);
-            sm.remove(); window.dispatchEvent(new Event("kasa-refresh"));
+            sm.remove(); window.dispatchEvent(new Event("sai-sai-refresh"));
           } catch(e) { alert(e instanceof Error ? e.message : "ثبت ناموفق بود"); }
         });
       }));
