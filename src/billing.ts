@@ -15,8 +15,10 @@ export interface StorePurchase {
 }
 
 const API_BASE = (import.meta.env.VITE_BILLING_API_URL as string | undefined)?.replace(/\/$/, "");
+const BILLING_DISABLED = (import.meta.env.VITE_BILLING_DISABLED as string | undefined) === "true";
 
 export async function getSubscription(): Promise<Subscription> {
+  if (BILLING_DISABLED) return { status: "active", plan: "monthly", expiresAt: null, provider: "web" };
   if (!API_BASE) return { status: "none", plan: "none" };
 
   const response = await fetch(`${API_BASE}/subscription/status`, {
