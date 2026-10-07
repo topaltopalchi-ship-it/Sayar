@@ -88,6 +88,15 @@ export async function addTransaction(
     amount: input.amount ?? transactionTotal(input.lines),
   };
 
+  if (transaction.type === "sale" || transaction.type === "purchase") {
+    const year = new Intl.DateTimeFormat("fa-IR-u-ca-persian", { year: "numeric" })
+      .format(new Date(transaction.date))
+      .replace(/\D/g, "");
+    const prefix = transaction.type === "sale" ? "SAI-F" : "SAI-K";
+    const count = (await listTransactions()).filter(t => t.type === transaction.type).length + 1;
+    transaction.invoiceNumber = `${prefix}-${year}-${String(count).padStart(4, "0")}`;
+  }
+
   if (transaction.type === "sale") {
     const [history, products] = await Promise.all([listTransactions(), listProducts()]);
     transaction.costOfGoods = calculateHistoricalCOGS([...history, transaction], products).get(transaction.id) ?? 0;
