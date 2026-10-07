@@ -62,3 +62,14 @@ body{background:radial-gradient(circle at 12% 0,#223657 0,#10182a 34%,#090e1b 78
 .account-icon{background:#1a2b46}
 .modal{background:linear-gradient(145deg,#121d31,#0e1626);border-color:#344765}
 .toast{background:#162238;border-color:#3a4d6d}
+
+/* Report filters: readable text on dark theme */
+.report-range{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+.report-range button{border:1px solid #30415f;border-radius:14px;background:#162238;color:#eef4ff;padding:13px 10px;font-weight:700;font-size:12px;min-height:48px}
+.report-range button:hover,.report-range button:focus{border-color:#4d91ff;background:#1b3150;color:#fff;outline:none}
+.report-custom-range{display:grid;gap:8px}
+.report-custom-range .field{margin:4px 0}
+.report-custom-range .field input{color:#111827;background:#fff;border-color:#cbd5e1;text-align:right;direction:ltr;font-variant-numeric:tabular-nums;font-size:16px}
+.report-custom-range .field input::placeholder{color:#94a3b8}
+.report-custom-range .primary-button{color:#fff}
+.report-list .muted{color:#aab8cc}
