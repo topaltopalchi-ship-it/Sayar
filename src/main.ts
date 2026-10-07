@@ -485,6 +485,14 @@ async function render(): Promise<void> {
   void bindCheckStatuses(m=>showToast(m));
   document.querySelector("#new-account")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", accountModal()); const modal = document.querySelector<HTMLElement>("#account-modal"); if (modal) void bindAccountModal(modal, async m => { showToast(m); await render(); }); });
   document.querySelector("#new-transfer")?.addEventListener("click", async () => { const accounts = await listAccounts(); if (accounts.length < 2) { showToast("برای انتقال حداقل دو حساب ثبت کنید"); return; } const balances = await getAccountBalances(); document.body.insertAdjacentHTML("beforeend", transferModal(accounts, balances)); const modal = document.querySelector<HTMLElement>("#transfer-modal"); if (modal) void bindTransferModal(modal, async m => { showToast(m); await render(); }); });
+  document.querySelectorAll<HTMLElement>("[data-account-ledger]").forEach(b => b.addEventListener("click", async () => {
+    try {
+      const id = b.dataset.accountLedger; if (!id) return;
+      document.body.insertAdjacentHTML("beforeend", await accountLedgerModal(id));
+      const modal = document.querySelector<HTMLElement>("#account-ledger-modal");
+      if (modal) await bindAccountLedger(modal);
+    } catch (e) { showToast(e instanceof Error ? e.message : "نمایش گردش حساب ناموفق بود"); }
+  }));
   document.querySelector("#more-refresh")?.addEventListener("click", () => render());
   document.querySelector("#more-backup")?.addEventListener("click", async () => {
     const payload = { products: await listProducts(), parties: await listParties(), transactions: await listTransactions(), expenses: await (await import("./db")).listExpenses() };
