@@ -420,18 +420,28 @@ export async function updateCheck(id: string, patch: Partial<Check>): Promise<vo
 }
 
 export async function clearCheck(id: string, accountId: string): Promise<void> {
-  const checks = await listChecks();
-  const check = checks.find(c => c.id === id);
-  if (!check) throw new Error("چک پیدا نشد");
-  if (check.status === "cleared") throw new Error("این چک قبلاً وصول شده است");
-  if (check.status !== "pending") throw new Error("فقط چک در انتظار قابل وصول است");
   if (!accountId) throw new Error("انتخاب حساب مالی الزامی است");
-  await addAccountEntry({
-    accountId,
-    date: Date.now(),
-    type: check.direction === "received" ? "deposit" : "withdraw",
-    amount: check.direction === "received" ? check.amount : -check.amount,
-    description: "وصول چک " + (check.number || ""),
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(["checks", "accountEntries"], "readwrite");
+    const checks = tx.objectStore("checks");
+    const entries = tx.objectStore("accountEntries");
+    const req = checks.get(id);
+    req.onsuccess = () => {
+      const check = req.result as Check | undefined;
+      if (!check) { tx.abort(); reject(new Error("چک پیدا نشد")); return; }
+      if (check.status === "cleared" || check.clearedEntryId) { tx.abort(); reject(new Error("این چک قبلاً وصول شده است")); return; }
+      if (check.status !== "pending") { tx.abort(); reject(new Error("فقط چک در انتظار قابل وصول است")); return; }
+      const entryId = newId();
+      entries.put({
+        id: entryId, accountId, date: Date.now(), type: check.direction === "received" ? "deposit" : "withdraw",
+        amount: check.direction === "received" ? check.amount : -check.amount,
+        description: "وصول چک " + (check.number || ""),
+      } satisfies AccountEntry);
+      checks.put({ ...check, status: "cleared", accountId, clearedEntryId: entryId } satisfies Check);
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error("وصول چک انجام نشد"));
   });
-  await updateCheck(id, { status: "cleared", accountId });
 }
