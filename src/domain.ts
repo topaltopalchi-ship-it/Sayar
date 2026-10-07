@@ -135,4 +135,5 @@ export interface Check {
   status: CheckStatus;
   description: string;
   createdAt: number;
+  clearedEntryId?: ID;
 }
