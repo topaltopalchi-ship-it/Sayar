@@ -103,7 +103,7 @@ function stat(label: string, value: string, tone: string): string {
 }
 
 function pageHead(eyebrow: string, title: string, text: string, action = ""): string {
-  return `<section class="page-head"><span class="eyebrow">${eyebrow}</span><div class="page-head-row"><div><h2>${title}</h2><p class="muted">${text}</p></div>${action}</div></section>`;
+  return `<section class="page-head"><span class="eyebrow">${eyebrow}</span><div class="page-head-row"><div><h2>${existing ? (type === "receipt" ? "ویرایش دریافت" : "ویرایش پرداخت") : title}</h2><p class="muted">${text}</p></div>${action}</div></section>`;
 }
 
 async function dashboardView(subscription: Subscription): Promise<string> {
@@ -421,22 +421,22 @@ function bindExpenseModal(): void {
   });
 }
 
-function settlementModal(type: "receipt" | "payment"): string {
+function settlementModal(type: "receipt" | "payment", existing?: Transaction): string {
   const title = type === "receipt" ? "ثبت دریافت" : "ثبت پرداخت";
   const options = parties.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
   return `<div class="modal-backdrop" id="settlement-modal"><section class="modal"><button class="modal-close" id="settlement-close">×</button><span class="eyebrow">حساب طرف‌حساب</span><h2>${title}</h2>
     <label class="field"><span>شخص</span><select id="settlement-party"><option value="">انتخاب کنید</option>${options}</select></label>
-    <label class="field"><span>مبلغ</span><input id="settlement-amount" type="number" min="1" value="0"></label><label class="field"><span>${type === "receipt" ? "دریافت به" : "پرداخت از"}</span><select id="settlement-account"><option value="">بدون انتخاب حساب</option>${(window as typeof window & { __saiAccounts?: {id:string;name:string}[] }).__saiAccounts?.map(a => `<option value="${a.id}">${a.name}</option>`).join("") || ""}</select></label>
-    <label class="field"><span>شرح</span><input id="settlement-description" placeholder="${title} بابت حساب"></label>
+    <label class="field"><span>مبلغ</span><input id="settlement-amount" type="number" min="1" value="${existing?.amount ?? 0}"></label><label class="field"><span>${type === "receipt" ? "دریافت به" : "پرداخت از"}</span><select id="settlement-account"><option value="">بدون انتخاب حساب</option>${(window as typeof window & { __saiAccounts?: {id:string;name:string}[] }).__saiAccounts?.map(a => `<option value="${a.id}">${a.name}</option>`).join("") || ""}</select></label>
+    <label class="field"><span>شرح</span><input id="settlement-description" placeholder="${title} بابت حساب" value="${existing?.description || ""}"></label>
     <button class="primary-button wide" id="settlement-submit">ثبت ${type === "receipt" ? "دریافت" : "پرداخت"}</button></section></div>`;
 }
 
-async function openSettlement(type: "receipt" | "payment"): Promise<void> {
+async function openSettlement(type: "receipt" | "payment", existing?: Transaction): Promise<void> {
   parties = await listParties();
   if (!parties.length) { showToast("ابتدا یک شخص ثبت کنید"); return; }
   (window as typeof window & { __saiAccounts?: unknown[] }).__saiAccounts = await listAccounts();
-  document.body.insertAdjacentHTML("beforeend", settlementModal(type));
-  const modal = document.querySelector<HTMLDivElement>("#settlement-modal")!;
+  document.body.insertAdjacentHTML("beforeend", settlementModal(type, existing));
+  const modal = document.querySelector<HTMLDivElement>("#settlement-modal")!;\n  if (existing) { modal.querySelector<HTMLSelectElement>("#settlement-party")!.value = existing.partyId || ""; modal.querySelector<HTMLSelectElement>("#settlement-account")!.value = existing.accountId || ""; modal.dataset.editId = existing.id; }
   modal.querySelector("#settlement-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#settlement-submit")?.addEventListener("click", async () => {
     try {
@@ -444,8 +444,8 @@ async function openSettlement(type: "receipt" | "payment"): Promise<void> {
       const amount = Number(modal.querySelector<HTMLInputElement>("#settlement-amount")!.value);
       if (!partyId || amount <= 0) throw new Error("شخص و مبلغ را وارد کنید");
       const accountId = modal.querySelector<HTMLSelectElement>("#settlement-account")!.value || undefined;
-      await addSettlement({ type, date: Date.now(), partyId, accountId, amount, description: modal.querySelector<HTMLInputElement>("#settlement-description")!.value.trim() || (type === "receipt" ? "دریافت وجه" : "پرداخت وجه") });
-      modal.remove(); showToast("ثبت شد"); await render();
+      const description = modal.querySelector<HTMLInputElement>("#settlement-description")!.value.trim() || (type === "receipt" ? "دریافت وجه" : "پرداخت وجه"); if (modal.dataset.editId) await updateTransaction(modal.dataset.editId, { date: Date.now(), partyId, accountId, amount: undefined as never, description, lines: [], paid: amount }); else await addSettlement({ type, date: Date.now(), partyId, accountId, amount, description });
+      modal.remove(); showToast(existing ? "تغییرات ذخیره شد" : "ثبت شد"); await render();
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت ناموفق بود"); }
   });
 }
