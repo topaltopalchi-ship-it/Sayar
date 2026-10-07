@@ -273,3 +273,23 @@ export async function seedDemoIfEmpty(): Promise<void> {
     lowStock: 4,
   });
 }
+
+
+export async function addStockAdjustment(input: {
+  date: number;
+  productId: string;
+  quantity: number;
+  description: string;
+}): Promise<void> {
+  if (!input.productId) throw new Error("انتخاب کالا الزامی است");
+  if (!Number.isFinite(input.quantity) || input.quantity === 0) throw new Error("مقدار اصلاح باید غیرصفر باشد");
+  const movement: StockMovement = {
+    id: newId(),
+    productId: input.productId,
+    date: input.date,
+    type: "adjustment",
+    quantity: input.quantity,
+    referenceId: newId(),
+  };
+  await put("movements", movement);
+}
