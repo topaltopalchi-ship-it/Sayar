@@ -1,7 +1,7 @@
 import "./style.css";
 import {
   addParty, addProduct, addSale, addSettlement, addExpense, addStockAdjustment, getDashboard, getStock,
-  listParties, listProducts, listTransactions
+  listParties, listProducts, listTransactions, listExpenses, calculateHistoricalCOGS
 } from "./db";
 import { createMonthlyCheckout, getSubscription, type Subscription } from "./billing";
 import { lineTotal, type Party, type Product, type Transaction, type TransactionLine } from "./domain";
@@ -330,17 +330,38 @@ function peopleView(): string {
     `<section class="panel">${parties.length ? parties.map(p => `<div class="person-row"><div class="person-avatar">${p.name.slice(0,1)}</div><div><strong>${p.name}</strong><small>${p.phone || "بدون شماره"} · ${p.type === "customer" ? "مشتری" : p.type === "supplier" ? "تأمین‌کننده" : "مشتری و تأمین‌کننده"}</small></div></div>`).join("") : `<div class="empty-inline"><span>♙</span><p>هنوز شخصی ثبت نشده است.</p></div>`}</section>`;
 }
 
-function reportsView(transactions: Transaction[]): string {
-  const sales = transactions.filter(t => t.type === "sale").reduce((s,t)=>s+t.amount,0);
-  const purchases = transactions.filter(t => t.type === "purchase").reduce((s,t)=>s+t.amount,0);
-  const receipts = transactions.filter(t => t.type === "receipt").reduce((s,t)=>s+t.paid,0);
-  const payments = transactions.filter(t => t.type === "payment").reduce((s,t)=>s+t.paid,0);
-  const expenses = transactions.filter(t => t.type === "expense").reduce((s,t)=>s+t.amount,0);
-  return pageHead("تحلیل مالی", "گزارش عملکرد", "خلاصه‌ی تمام اسناد ثبت‌شده در دفتر سای‌سای.") +
-    `<section class="stats-grid">${stat("کل فروش",rial(sales),"primary")}${stat("کل خرید",rial(purchases),"warning")}${stat("دریافت",rial(receipts),"success")}${stat("پرداخت",rial(payments + expenses),"danger")}</section>
-    <section class="panel report-list"><div><span>تعداد اسناد</span><b>${money.format(transactions.length)}</b></div><div><span>خالص فروش منهای خرید</span><b>${rial(sales - purchases)}</b></div><div><span>آخرین ثبت</span><b>${transactions[0] ? dateLabel(transactions[0].date) : "—"}</b></div></section>`;
+async function reportsView(transactions: Transaction[]): Promise<string> {
+  const products = await listProducts();
+  const expenses = await listExpenses();
+  const now = Date.now();
+  const d = new Date();
+  d.setHours(0,0,0,0);
+  const startOfMonth = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+  const periodSales = transactions.filter(t => t.type === "sale" && t.date >= startOfMonth && t.date <= now);
+  const periodPurchases = transactions.filter(t => t.type === "purchase" && t.date >= startOfMonth && t.date <= now);
+  const periodReceipts = transactions.filter(t => t.type === "receipt" && t.date >= startOfMonth && t.date <= now);
+  const periodPayments = transactions.filter(t => t.type === "payment" && t.date >= startOfMonth && t.date <= now);
+  const periodExpenses = expenses.filter(e => e.date >= startOfMonth && e.date <= now);
+  const cogs = calculateHistoricalCOGS(transactions, products);
+  const sales = periodSales.reduce((s,t)=>s+t.amount,0);
+  const purchaseTotal = periodPurchases.reduce((s,t)=>s+t.amount,0);
+  const receipts = periodReceipts.reduce((s,t)=>s+t.paid,0);
+  const payments = periodPayments.reduce((s,t)=>s+t.paid,0);
+  const expenseTotal = periodExpenses.reduce((s,e)=>s+e.amount,0);
+  const cost = periodSales.reduce((s,t)=>s+(cogs.get(t.id) ?? t.costOfGoods ?? 0),0);
+  const grossProfit = sales - cost;
+  const netProfit = grossProfit - expenseTotal;
+  return pageHead("تحلیل مالی", "گزارش سود و زیان", "گزارش ماه جاری بر اساس فروش، بهای تمام‌شده FIFO و هزینه‌های ثبت‌شده.") +
+    `<section class="stats-grid">${stat("فروش ماه جاری",rial(sales),"primary")}${stat("بهای تمام‌شده",rial(cost),"warning")}${stat("سود ناخالص",rial(grossProfit),"success")}${stat("سود خالص",rial(netProfit),"success")}</section>
+    <section class="panel report-list">
+      <div><span>خرید ماه جاری</span><b>${rial(purchaseTotal)}</b></div>
+      <div><span>هزینه‌های جاری</span><b>${rial(expenseTotal)}</b></div>
+      <div><span>دریافت‌ها</span><b>${rial(receipts)}</b></div>
+      <div><span>پرداخت‌ها</span><b>${rial(payments)}</b></div>
+      <div><span>خالص جریان نقدی ثبت‌شده</span><b>${rial(receipts - payments - expenseTotal)}</b></div>
+      <div><span>تعداد فاکتورهای فروش</span><b>${money.format(periodSales.length)}</b></div>
+    </section>`;
 }
-
 function expenseModal(): string {
   return `<div class="modal-backdrop" id="expense-modal"><section class="modal"><button class="modal-close" id="expense-close">×</button><span class="eyebrow">هزینه‌های جاری</span><h2>ثبت هزینه</h2>
     <label class="field"><span>عنوان هزینه</span><input id="expense-title" placeholder="مثلاً حمل‌ونقل، اجاره، حقوق"></label>
@@ -463,7 +484,7 @@ async function render(): Promise<void> {
       `<section class="panel">${tx.length ? tx.map(transactionRow).join("") : `<div class="empty-inline"><span>↙</span><p>هنوز خریدی ثبت نشده است.</p></div>`}</section>`;
   } else if (activeTab === "inventory") content = await inventoryView();
   else if (activeTab === "people") { parties = await listParties(); content = peopleView(); }
-  else if (activeTab === "reports") content = reportsView(await listTransactions());
+  else if (activeTab === "reports") content = await reportsView(await listTransactions());
   else if (activeTab === "more") content = await accountsView();
   else if (activeTab === "checks") content = await checksView();
   layout(content, subscription);
