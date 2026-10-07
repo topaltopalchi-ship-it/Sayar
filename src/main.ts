@@ -552,4 +552,4 @@ function placeholder(title: string, text: string): string {
   return pageHead("سای‌سای", title, text) + `<section class="panel locked-panel"><div>◈</div><h3>این بخش در حال تکمیل است</h3><p class="muted">زیرساخت اصلی آماده است و قابلیت‌های تکمیلی در نسخه‌های بعدی اضافه می‌شوند.</p></section>`;
 }
 
-render();\n  document.querySelectorAll<HTMLElement>("[data-account-ledger]").forEach(async b => {\n    b.addEventListener("click", async () => {\n      try {\n        const id = b.dataset.accountLedger; if (!id) return;\n        document.body.insertAdjacentHTML("beforeend", await accountLedgerModal(id));\n        const modal = document.querySelector<HTMLElement>("#account-ledger-modal");\n        if (modal) await bindAccountLedger(modal);\n      } catch (e) { showToast(e instanceof Error ? e.message : "نمایش گردش حساب ناموفق بود"); }\n    });\n  });
+if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => undefined));\nrender();
