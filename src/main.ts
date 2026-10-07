@@ -507,6 +507,8 @@ async function bindActions(): Promise<void> {
 
 async function render(): Promise<void> {
   const subscription = await getSubscription().catch(() => ({ status: "none", plan: "none", expiresAt: null } as Subscription));
+  // Bind global navigation/actions before the subscription gate so buttons always have a click handler.
+  await bindActions();
   if (subscription.status !== "active") {
     layout(paywall(subscription), subscription);
     document.querySelectorAll<HTMLButtonElement>("[data-subscribe]").forEach(b => b.addEventListener("click", subscribe));
@@ -568,7 +570,6 @@ async function render(): Promise<void> {
   });
   document.querySelector("#more-restore")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", backupRestoreModal()); const m=document.querySelector<HTMLElement>("#backup-restore-modal")!; m.querySelector("#backup-restore-close")?.addEventListener("click",()=>m.remove()); m.querySelector("#backup-restore-submit")?.addEventListener("click",async()=>{ try { const input=m.querySelector<HTMLInputElement>("#backup-file")!; const file=input.files?.[0]; if(!file) throw new Error("فایل پشتیبان را انتخاب کنید"); if(!confirm("اطلاعات فعلی با این پشتیبان جایگزین می‌شود. ادامه می‌دهید؟")) return; const data=JSON.parse(await file.text()); if(!Array.isArray(data.products)||!Array.isArray(data.parties)||!Array.isArray(data.transactions)) throw new Error("فایل پشتیبان معتبر نیست"); const db=await import("./db"); await db.restoreBackup(data); m.remove(); showToast("بازیابی با موفقیت انجام شد"); await render(); } catch(e){showToast(e instanceof Error?e.message:"بازیابی ناموفق بود");} }); });
 
-  await bindActions();
 }
 
 function placeholder(title: string, text: string): string {
