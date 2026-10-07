@@ -23,6 +23,8 @@ export interface Party {
   phone: string;
   type: PartyType;
   createdAt: number;
+  invoiceNumber?: string;
+  costOfGoods?: Money;
 }
 
 export type TransactionType =
