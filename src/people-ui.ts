@@ -1,6 +1,7 @@
 import { addParty, addSettlement, calculateHistoricalCOGS, getPartyBalances, listExpenses, listParties, listProducts, listTransactions } from "./db";
 import { lineTotal, type Party, type PartyType } from "./domain";
 import { formatMoney } from "./settings";
+import { jalaliToGregorianDate, todayJalaliInput } from "./calendar";
 
 const typeLabel: Record<PartyType,string> = {
   customer: "مشتری",
@@ -190,8 +191,8 @@ async function renderReport(from = 0, to = Date.now(), label = "همه دوره"
       <button class="report-filter" data-range="week">این هفته</button>
       <button class="report-filter" data-range="month">این ماه</button>
       <button class="report-filter" data-range="all">همه</button>
-      <label class="report-date"><span>از</span><input id="report-from" type="date"></label>
-      <label class="report-date"><span>تا</span><input id="report-to" type="date"></label>
+      <label class="report-date"><span>از تاریخ شمسی</span><input id="report-from" type="text" inputmode="numeric" placeholder="۱۴۰۵/۰۱/۰۱"></label>
+      <label class="report-date"><span>تا تاریخ شمسی</span><input id="report-to" type="text" inputmode="numeric" placeholder="۱۴۰۵/۰۱/۰۱"></label>
       <button class="primary-button report-apply" id="report-apply">اعمال بازه</button>
     </div>
     <div class="report-range-label">بازه: <b>${label}</b></div>
@@ -226,12 +227,22 @@ async function renderReport(from = 0, to = Date.now(), label = "همه دوره"
     const key = btn.dataset.range as RangeKey;
     await renderReport(startOf(key), Date.now(), btn.textContent || key);
   }));
+  const fromInput = box.querySelector<HTMLInputElement>("#report-from");
+  const toInput = box.querySelector<HTMLInputElement>("#report-to");
+  if (fromInput && toInput) {
+    fromInput.value = "";
+    toInput.value = todayJalaliInput();
+  }
   box.querySelector("#report-apply")?.addEventListener("click", async () => {
-    const a = (box.querySelector<HTMLInputElement>("#report-from")?.value || "");
-    const b = (box.querySelector<HTMLInputElement>("#report-to")?.value || "");
-    const fromTime = a ? new Date(`${a}T00:00:00`).getTime() : 0;
-    const toTime = b ? new Date(`${b}T23:59:59.999`).getTime() : Date.now();
-    if (fromTime <= toTime) await renderReport(fromTime, toTime, `${a || "ابتدا"} تا ${b || "امروز"}`);
+    const a = fromInput?.value.trim() || "";
+    const b = toInput?.value.trim() || "";
+    const fromDate = a ? jalaliToGregorianDate(a) : null;
+    const toDate = b ? jalaliToGregorianDate(b) : null;
+    const fromTime = fromDate ? new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate()).getTime() : 0;
+    const toTime = toDate ? new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate(), 23, 59, 59, 999).getTime() : Date.now();
+    if ((!a || fromDate) && (!b || toDate) && fromTime <= toTime) {
+      await renderReport(fromTime, toTime, `${a || "ابتدا"} تا ${b || "امروز"}`);
+    }
   });
 }
 
