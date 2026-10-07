@@ -89,13 +89,13 @@ export async function addExpense(input: Omit<Expense, "id">): Promise<Expense> {
 }
 
 export async function addTransaction(
-  input: Omit<Transaction, "id" | "createdAt" | "amount">
+  input: Omit<Transaction, "id" | "createdAt" | "amount"> & { amount?: number }
 ): Promise<Transaction> {
   const transaction: Transaction = {
     ...input,
     id: newId(),
     createdAt: Date.now(),
-    amount: transactionTotal(input.lines),
+    amount: input.amount ?? transactionTotal(input.lines),
   };
 
   const db = await openDb();
@@ -226,6 +226,7 @@ export async function addSettlement(input: {
     description: input.description,
     lines: [],
     paid: input.amount,
+    amount: input.amount,
   });
 }
 
