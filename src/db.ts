@@ -1,10 +1,10 @@
-import type { Account, AccountEntry, Dashboard, Expense, Party, Product, StockMovement, Transaction } from "./domain";
+import type { Account, AccountEntry, Check, Dashboard, Expense, Party, Product, StockMovement, Transaction } from "./domain";
 import { lineTotal, newId, transactionTotal } from "./domain";
 
 const DB_NAME = "sayar-db";
 const DB_VERSION = 2;
 
-const stores = ["products", "parties", "transactions", "movements", "expenses", "accounts", "accountEntries"] as const;
+const stores = ["products", "parties", "transactions", "movements", "expenses", "accounts", "accountEntries", "checks"] as const;
 type StoreName = typeof stores[number];
 
 let database: IDBDatabase | null = null;
@@ -351,4 +351,23 @@ export async function getAccountBalances(): Promise<Record<string, number>> {
   for (const account of accounts) balances[account.id] = account.openingBalance;
   for (const entry of entries) balances[entry.accountId] = (balances[entry.accountId] ?? 0) + entry.amount;
   return balances;
+}
+
+
+export async function listChecks(): Promise<Check[]> {
+  const items = await getAll<Check>("checks");
+  return items.sort((a, b) => a.dueDate - b.dueDate);
+}
+
+export async function addCheck(input: Omit<Check, "id" | "createdAt">): Promise<Check> {
+  const check: Check = { ...input, id: newId(), createdAt: Date.now() };
+  await put("checks", check);
+  return check;
+}
+
+export async function updateCheck(id: string, patch: Partial<Check>): Promise<void> {
+  const items = await listChecks();
+  const current = items.find(x => x.id === id);
+  if (!current) throw new Error("چک پیدا نشد");
+  await put("checks", { ...current, ...patch, id } as Check);
 }
