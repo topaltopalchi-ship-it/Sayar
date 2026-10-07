@@ -128,6 +128,31 @@ export async function addParty(input: Omit<Party, "id" | "createdAt">): Promise<
   return party;
 }
 
+export async function updateExpense(expense: Expense): Promise<void> {
+  const entries = await listAccountEntries();
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(["expenses","accountEntries"], "readwrite");
+    for (const e of entries.filter(e => e.referenceId === expense.id)) tx.objectStore("accountEntries").delete(e.id);
+    tx.objectStore("expenses").put(expense);
+    if (expense.accountId && expense.amount > 0) tx.objectStore("accountEntries").put({ id: newId(), accountId: expense.accountId, date: expense.date, type: "withdraw", amount: -Math.round(expense.amount), description: expense.title, referenceId: expense.id } satisfies AccountEntry);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function deleteExpense(id: string): Promise<void> {
+  const entries = await listAccountEntries();
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(["expenses","accountEntries"], "readwrite");
+    tx.objectStore("expenses").delete(id);
+    for (const e of entries.filter(e => e.referenceId === id)) tx.objectStore("accountEntries").delete(e.id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 export async function addExpense(input: Omit<Expense, "id">): Promise<Expense> {
   const expense: Expense = { ...input, id: newId() };
   const db = await openDb();
@@ -547,6 +572,20 @@ export async function addCheck(input: Omit<Check, "id" | "createdAt">): Promise<
   const check: Check = { ...input, id: newId(), createdAt: Date.now() };
   await put("checks", check);
   return check;
+}
+
+export async function deleteCheck(id: string): Promise<void> {
+  const checks = await listChecks();
+  const check = checks.find(c => c.id === id);
+  if (!check) throw new Error("چک پیدا نشد");
+  if (check.clearedEntryId) throw new Error("چک وصول‌شده را نمی‌توان حذف کرد؛ ابتدا وضعیت آن را اصلاح کنید");
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("checks", "readwrite");
+    tx.objectStore("checks").delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 export async function updateCheck(id: string, patch: Partial<Check>): Promise<void> {
