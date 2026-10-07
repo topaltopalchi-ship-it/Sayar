@@ -21,7 +21,7 @@ const TRIAL_DAYS = 30;
 // This versioned key starts a fresh 30-day trial for the current test/release build.
 // A production store release should move entitlement enforcement to the store/backend.
 const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000;
-const TRIAL_STARTED_KEY = "sai-sai-trial-started-at-v2";
+const TRIAL_STARTED_KEY = "sai-sai-trial-started-at-v3";
 
 function getTrialStartedAt(): number {
   const stored = Number(localStorage.getItem(TRIAL_STARTED_KEY));
@@ -42,7 +42,8 @@ function getLocalTrialSubscription(): Subscription {
 export async function getSubscription(): Promise<Subscription> {
   if (BILLING_DISABLED) return getLocalTrialSubscription();
   // Without a configured billing server, every fresh installation gets a 30-day local trial.
-  // Once the trial ends, the normal subscription paywall is shown.\n  if (!API_BASE) return getLocalTrialSubscription();
+  // Once the trial ends, the normal subscription paywall is shown.
+  if (!API_BASE) return getLocalTrialSubscription();
 
   const response = await fetch(`${API_BASE}/subscription/status`, {
     credentials: "include",
