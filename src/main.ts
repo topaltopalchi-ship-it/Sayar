@@ -333,34 +333,32 @@ function peopleView(): string {
 async function reportsView(transactions: Transaction[]): Promise<string> {
   const products = await listProducts();
   const expenses = await listExpenses();
-  const now = Date.now();
-  const d = new Date();
-  d.setHours(0,0,0,0);
-  const startOfMonth = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
-  const periodSales = transactions.filter(t => t.type === "sale" && t.date >= startOfMonth && t.date <= now);
-  const periodPurchases = transactions.filter(t => t.type === "purchase" && t.date >= startOfMonth && t.date <= now);
-  const periodReceipts = transactions.filter(t => t.type === "receipt" && t.date >= startOfMonth && t.date <= now);
-  const periodPayments = transactions.filter(t => t.type === "payment" && t.date >= startOfMonth && t.date <= now);
-  const periodExpenses = expenses.filter(e => e.date >= startOfMonth && e.date <= now);
+  const range = localStorage.getItem("sai-sai-report-range") || "month";
+  const now = new Date(); now.setHours(23,59,59,999);
+  const start = new Date(now); start.setHours(0,0,0,0);
+  if (range === "week") start.setDate(start.getDate() - 6);
+  else if (range === "all") start.setTime(0);
+  else if (range === "month") start.setDate(1);
+  const from = start.getTime(), to = now.getTime();
+  const inRange = (d: number) => d >= from && d <= to;
+  const salesTx = transactions.filter(t => t.type === "sale" && inRange(t.date));
+  const purchaseTx = transactions.filter(t => t.type === "purchase" && inRange(t.date));
+  const receiptTx = transactions.filter(t => t.type === "receipt" && inRange(t.date));
+  const paymentTx = transactions.filter(t => t.type === "payment" && inRange(t.date));
+  const expenseTx = expenses.filter(e => inRange(e.date));
   const cogs = calculateHistoricalCOGS(transactions, products);
-  const sales = periodSales.reduce((s,t)=>s+t.amount,0);
-  const purchaseTotal = periodPurchases.reduce((s,t)=>s+t.amount,0);
-  const receipts = periodReceipts.reduce((s,t)=>s+t.paid,0);
-  const payments = periodPayments.reduce((s,t)=>s+t.paid,0);
-  const expenseTotal = periodExpenses.reduce((s,e)=>s+e.amount,0);
-  const cost = periodSales.reduce((s,t)=>s+(cogs.get(t.id) ?? t.costOfGoods ?? 0),0);
-  const grossProfit = sales - cost;
-  const netProfit = grossProfit - expenseTotal;
-  return pageHead("تحلیل مالی", "گزارش سود و زیان", "گزارش ماه جاری بر اساس فروش، بهای تمام‌شده FIFO و هزینه‌های ثبت‌شده.") +
-    `<section class="stats-grid">${stat("فروش ماه جاری",rial(sales),"primary")}${stat("بهای تمام‌شده",rial(cost),"warning")}${stat("سود ناخالص",rial(grossProfit),"success")}${stat("سود خالص",rial(netProfit),"success")}</section>
-    <section class="panel report-list">
-      <div><span>خرید ماه جاری</span><b>${rial(purchaseTotal)}</b></div>
-      <div><span>هزینه‌های جاری</span><b>${rial(expenseTotal)}</b></div>
-      <div><span>دریافت‌ها</span><b>${rial(receipts)}</b></div>
-      <div><span>پرداخت‌ها</span><b>${rial(payments)}</b></div>
-      <div><span>خالص جریان نقدی ثبت‌شده</span><b>${rial(receipts - payments - expenseTotal)}</b></div>
-      <div><span>تعداد فاکتورهای فروش</span><b>${money.format(periodSales.length)}</b></div>
-    </section>`;
+  const sales = salesTx.reduce((s,t)=>s+t.amount,0);
+  const purchases = purchaseTx.reduce((s,t)=>s+t.amount,0);
+  const receipts = receiptTx.reduce((s,t)=>s+t.paid,0);
+  const payments = paymentTx.reduce((s,t)=>s+t.paid,0);
+  const expenseTotal = expenseTx.reduce((s,e)=>s+e.amount,0);
+  const cost = salesTx.reduce((s,t)=>s+(cogs.get(t.id) ?? t.costOfGoods ?? 0),0);
+  const gross = sales-cost, net=gross-expenseTotal;
+  const label = range==="today"?"امروز":range==="week"?"۷ روز اخیر":range==="all"?"همه":"ماه جاری";
+  return pageHead("تحلیل مالی", "گزارش سود و زیان", "گزارش بر اساس بازه انتخابی و بهای تمام‌شده FIFO.") +
+    `<section class="panel report-list"><div class="report-range"><button data-report-range="today">امروز</button><button data-report-range="week">۷ روز</button><button data-report-range="month">ماه جاری</button><button data-report-range="all">همه</button></div><p class="muted">بازه فعال: ${label}</p></section>` +
+    `<section class="stats-grid">${stat("فروش",rial(sales),"primary")}${stat("بهای تمام‌شده",rial(cost),"warning")}${stat("سود ناخالص",rial(gross),"success")}${stat("سود خالص",rial(net),"success")}</section>` +
+    `<section class="panel report-list"><div><span>خرید</span><b>${rial(purchases)}</b></div><div><span>هزینه</span><b>${rial(expenseTotal)}</b></div><div><span>دریافت</span><b>${rial(receipts)}</b></div><div><span>پرداخت</span><b>${rial(payments)}</b></div><div><span>خالص جریان نقدی</span><b>${rial(receipts-payments-expenseTotal)}</b></div><div><span>تعداد فروش</span><b>${money.format(salesTx.length)}</b></div></section>`;
 }
 function expenseModal(): string {
   return `<div class="modal-backdrop" id="expense-modal"><section class="modal"><button class="modal-close" id="expense-close">×</button><span class="eyebrow">هزینه‌های جاری</span><h2>ثبت هزینه</h2>
@@ -519,6 +517,7 @@ async function render(): Promise<void> {
     } catch (e) { showToast(e instanceof Error ? e.message : "نمایش گردش حساب ناموفق بود"); }
   }));
   document.querySelector("#more-refresh")?.addEventListener("click", () => render());
+  document.querySelectorAll<HTMLElement>("[data-report-range]").forEach(b => b.addEventListener("click", async () => { localStorage.setItem("sai-sai-report-range", b.dataset.reportRange || "month"); await render(); }));
   document.querySelector("#more-backup")?.addEventListener("click", async () => {
     const [products, parties, transactions, expenses, accounts, accountEntries, checks] = await Promise.all([listProducts(), listParties(), listTransactions(), listExpenses(), listAccounts(), (await import("./db")).listAccountEntries(), (await import("./db")).listChecks()]);
     const payload = { version: 2, exportedAt: Date.now(), products, parties, transactions, expenses, accounts, accountEntries, checks };
