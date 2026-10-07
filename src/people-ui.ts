@@ -140,6 +140,22 @@ async function renderReport(from = 0, to = Date.now(), label = "همه دوره"
   const cogs = calculateHistoricalCOGS(transactions, products);
   const grossProfit = sales.reduce((sum,t)=>sum+t.amount-(cogs.get(t.id) ?? t.costOfGoods ?? 0),0);
   const netProfit = grossProfit - expensesTotal;
+  const daily = new Map<string, { sales: number; profit: number }>();
+  for (const sale of sales) {
+    const d = new Date(sale.date);
+    const key = new Intl.DateTimeFormat("fa-IR-u-ca-persian", { month: "2-digit", day: "2-digit" }).format(d);
+    const item = daily.get(key) ?? { sales: 0, profit: 0 };
+    item.sales += sale.amount;
+    item.profit += sale.amount - (cogs.get(sale.id) ?? sale.costOfGoods ?? 0);
+    daily.set(key, item);
+  }
+  const chartData = [...daily.entries()].slice(-10);
+  const maxChart = Math.max(1, ...chartData.map(([,v]) => Math.max(v.sales, Math.abs(v.profit))));
+  const chartRows = chartData.map(([day,v]) => {
+    const salesWidth = Math.round((v.sales / maxChart) * 100);
+    const profitWidth = Math.round((Math.max(0,v.profit) / maxChart) * 100);
+    return `<div class="trend-row"><span>${day}</span><div class="trend-bars"><i style="width:${salesWidth}%"></i><b style="width:${profitWidth}%"></b></div><strong>${rial(v.profit)}</strong></div>`;
+  }).join("");
   const productMap = new Map(products.map(p => [p.id, p]));
   const productStats = new Map<string, { quantity: number; sales: number; cogs: number }>();
   for (const sale of sales) {
@@ -183,6 +199,11 @@ async function renderReport(from = 0, to = Date.now(), label = "همه دوره"
       <article class="stat-card warning"><span>خرید</span><strong>${rial(purchasesTotal)}</strong></article>
       <article class="stat-card success"><span>دریافت</span><strong>${rial(receiptsTotal)}</strong></article>
       <article class="stat-card danger"><span>هزینه</span><strong>${rial(expensesTotal)}</strong></article>
+    </section>
+    <section class="panel trend-panel">
+      <div class="product-profit-title"><span>روند فروش و سود</span><small>۱۰ روز اخیر در بازه</small></div>
+      <div class="trend-legend"><span>فروش</span><span>سود</span></div>
+      <div class="trend-list">${chartRows || '<div class="empty-inline"><span>◌</span><p>برای نمایش نمودار فروش ثبت کنید.</p></div>'}</div>
     </section>
     <section class="panel product-profit-panel">
       <div class="product-profit-title"><span>سود هر کالا</span><small>بر اساس بازه انتخاب‌شده</small></div>
