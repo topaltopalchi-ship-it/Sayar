@@ -81,7 +81,7 @@ jobs:
           if "signingConfigs {" not in s:
               s = s.replace("    buildTypes {", signing + "    buildTypes {", 1)
           if "signingConfig signingConfigs.release" not in s:
-              s = s.replace("        release {", "        release {\n            signingConfig signingConfigs.release", 1)
+              s = s.replace("    buildTypes {\n        release {", "    buildTypes {\n        release {\n            signingConfig signingConfigs.release", 1)
           p.write_text(s)
           PY
 
