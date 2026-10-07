@@ -1,4 +1,4 @@
-import { addParty, addSettlement, getPartyBalances, listExpenses, listParties, listProducts, listTransactions } from "./db";
+import { addParty, addSettlement, calculateHistoricalCOGS, getPartyBalances, listExpenses, listParties, listProducts, listTransactions } from "./db";
 import type { Party, PartyType } from "./domain";
 import { lineTotal } from "./domain";
 
@@ -129,7 +129,6 @@ async function renderReport(from = 0, to = Date.now(), label = "همه دوره"
 
   const tx = transactions.filter(t => t.date >= from && t.date <= to);
   const exp = expenses.filter(e => e.date >= from && e.date <= to);
-  const costs = new Map(products.map(p => [p.id, p.purchasePrice]));
   const sales = tx.filter(t => t.type === "sale");
   const purchases = tx.filter(t => t.type === "purchase");
   const receipts = tx.filter(t => t.type === "receipt");
@@ -139,7 +138,8 @@ async function renderReport(from = 0, to = Date.now(), label = "همه دوره"
   const receiptsTotal = receipts.reduce((s,t)=>s+t.amount,0);
   const paymentsTotal = payments.reduce((s,t)=>s+t.amount,0);
   const expensesTotal = exp.reduce((s,e)=>s+e.amount,0);
-  const grossProfit = sales.reduce((sum,t)=>sum+t.lines.reduce((a,line)=>a+lineTotal(line)-line.quantity*(costs.get(line.productId)??0),0),0);
+  const cogs = calculateHistoricalCOGS(transactions, products);
+  const grossProfit = sales.reduce((sum,t)=>sum+t.amount-(cogs.get(t.id) ?? t.costOfGoods ?? 0),0);
   const netProfit = grossProfit - expensesTotal;
 
   const anchor = view.querySelector(".report-list");
@@ -173,7 +173,7 @@ async function renderReport(from = 0, to = Date.now(), label = "همه دوره"
       <div><span>تعداد اسناد و هزینه‌ها</span><b>${money.format(tx.length + exp.length)}</b></div>
       <div><span>آخرین ثبت در بازه</span><b>${tx[0] ? dateLabel(tx[0].date) : exp[0] ? dateLabel(exp[0].date) : "—"}</b></div>
     </section>
-    <p class="report-note">* سود بر اساس قیمت خرید فعلی کالا محاسبه شده است؛ بهای تمام‌شده تاریخی در مرحله بعدی با لایه‌های خرید دقیق‌تر می‌شود.</p>
+    <p class="report-note">* سود بر اساس بهای تمام‌شده تاریخی و روش FIFO محاسبه می‌شود؛ برای موجودی بدون سابقه خرید، قیمت خرید فعلی به‌عنوان برآورد استفاده می‌شود.</p>
   `;
   parent.insertBefore(box, anchor);
   anchor.remove();
