@@ -388,7 +388,7 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   if (range === "week") start.setDate(start.getDate() - 6);
   else if (range === "all") start.setTime(0);
   else if (range === "month") start.setDate(1);
-  const from = start.getTime(), to = now.getTime();
+  let from = start.getTime(), to = now.getTime();
   if (range === "custom") {
     const fromDate = jalaliToGregorianDate(localStorage.getItem("sai-sai-report-from") || "");
     const toDate = jalaliToGregorianDate(localStorage.getItem("sai-sai-report-to") || "");
