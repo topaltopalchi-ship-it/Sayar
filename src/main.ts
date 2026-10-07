@@ -1,7 +1,7 @@
 import "./style.css";
 import {
-  addParty, addProduct, addSale, addSettlement, addExpense, addStockAdjustment, getDashboard, getStock,
-  listParties, listProducts, listTransactions, listExpenses, listMovements, calculateHistoricalCOGS
+  addParty, addProduct, updateProduct, deleteProduct, addSale, addSettlement, addExpense, addStockAdjustment, getDashboard, getStock,
+  listParties, updateParty, deleteParty, listProducts, listTransactions, listExpenses, listMovements, calculateHistoricalCOGS
 } from "./db";
 import { createMonthlyCheckout, getSubscription, type Subscription } from "./billing";
 import { lineTotal, type Party, type Product, type Transaction, type TransactionLine } from "./domain";
@@ -271,7 +271,7 @@ async function inventoryView(): Promise<string> {
   products = await listProducts();
   const rows = await Promise.all(products.map(async p => {
     const stock = await getStock(p.id);
-    return `<div class="product-row"><div><strong>${p.name}</strong><small>${p.sku || "بدون کد"} · ${p.unit}</small></div><div class="stock-number ${stock <= p.lowStock ? "low" : ""}">${money.format(stock)}<small>موجودی</small></div><b>${rial(p.salePrice)}</b></div>`;
+    return `<div class="product-row" data-product-id="${p.id}"><div><strong>${p.name}</strong><small>${p.sku || "بدون کد"} · ${p.unit}</small></div><div class="stock-number ${stock <= p.lowStock ? "low" : ""}">${money.format(stock)}<small>موجودی</small></div><b>${rial(p.salePrice)}</b><span class="account-actions"><button type="button" class="secondary-button product-edit" data-product-edit="${p.id}">ویرایش</button><button type="button" class="secondary-button product-delete" data-product-delete="${p.id}">حذف</button></span></div>`;
   }));
   return pageHead("انبار", "موجودی کالا", "موجودی از روی گردش‌های ثبت‌شده محاسبه می‌شود.", `<button class="primary-button" id="new-product">＋ کالای جدید</button>`) +
     `<section class="panel">${rows.length ? rows.join("") : `<div class="empty-inline"><span>▤</span><p>هنوز کالایی ثبت نشده است.</p></div>`}</section>`;
@@ -299,13 +299,13 @@ function bindAdjustmentModal(): void {
   });
 }
 
-function productModal(): string {
-  return `<div class="modal-backdrop" id="product-modal"><section class="modal"><button class="modal-close" id="product-close">×</button><span class="eyebrow">کاتالوگ کالا</span><h2>افزودن کالا</h2>
-    <label class="field"><span>نام کالا</span><input id="p-name" placeholder="مثلاً برنج ایرانی"></label>
-    <div class="form-grid"><label class="field"><span>کد کالا</span><input id="p-sku" placeholder="اختیاری"></label><label class="field"><span>واحد</span><select id="p-unit"><option>عدد</option><option>کیلوگرم</option><option>گرم</option><option>لیتر</option><option>متر</option><option>بسته</option></select></label></div>
-    <div class="form-grid"><label class="field"><span>قیمت خرید</span><input id="p-buy" type="number" min="0"></label><label class="field"><span>قیمت فروش</span><input id="p-sale" type="number" min="0"></label></div>
-    <label class="field"><span>حداقل موجودی</span><input id="p-low" type="number" min="0" step="0.001" value="5"></label>
-    <button class="primary-button wide" id="product-submit">ذخیره کالا</button></section></div>`;
+function productModal(product?: Product): string {
+  return `<div class="modal-backdrop" id="product-modal"><section class="modal"><button class="modal-close" id="product-close">×</button><span class="eyebrow">کاتالوگ کالا</span><h2>${product ? "ویرایش کالا" : "افزودن کالا"}</h2>
+    <label class="field"><span>نام کالا</span><input id="p-name" placeholder="مثلاً برنج ایرانی" value="${product?.name || ""}"></label>
+    <div class="form-grid"><label class="field"><span>کد کالا</span><input id="p-sku" placeholder="اختیاری" value="${product?.sku || ""}"></label><label class="field"><span>واحد</span><select id="p-unit">${["عدد","کیلوگرم","گرم","لیتر","متر","بسته"].map(u => `<option ${product?.unit === u ? "selected" : ""}>${u}</option>`).join("")}</select></label></div>
+    <div class="form-grid"><label class="field"><span>قیمت خرید</span><input id="p-buy" type="number" min="0" value="${product?.purchasePrice ?? 0}"></label><label class="field"><span>قیمت فروش</span><input id="p-sale" type="number" min="0" value="${product?.salePrice ?? 0}"></label></div>
+    <label class="field"><span>حداقل موجودی</span><input id="p-low" type="number" min="0" step="0.001" value="${product?.lowStock ?? 5}"></label>
+    <button class="primary-button wide" id="product-submit">${product ? "ذخیره تغییرات" : "ذخیره کالا"}</button></section></div>`;
 }
 
 function bindProductModal(): void {
@@ -316,11 +316,23 @@ function bindProductModal(): void {
       const name = (modal.querySelector<HTMLInputElement>("#p-name")!.value).trim();
       const unit = modal.querySelector<HTMLSelectElement>("#p-unit")!.value as Product["unit"];
       if (!name) throw new Error("نام کالا الزامی است");
-      await addProduct({ name, sku: modal.querySelector<HTMLInputElement>("#p-sku")!.value.trim(), unit,
+      const values = {
+        name,
+        sku: modal.querySelector<HTMLInputElement>("#p-sku")!.value.trim(),
+        unit,
         purchasePrice: Math.max(0, Number(modal.querySelector<HTMLInputElement>("#p-buy")!.value) || 0),
         salePrice: Math.max(0, Number(modal.querySelector<HTMLInputElement>("#p-sale")!.value) || 0),
-        lowStock: Math.max(0, Number(modal.querySelector<HTMLInputElement>("#p-low")!.value) || 0) });
-      modal.remove(); showToast("کالا با موفقیت ثبت شد"); await render();
+        lowStock: Math.max(0, Number(modal.querySelector<HTMLInputElement>("#p-low")!.value) || 0),
+      };
+      const editId = modal.dataset.editId;
+      if (editId) {
+        const existing = (await listProducts()).find(p => p.id === editId);
+        if (!existing) throw new Error("کالا پیدا نشد");
+        await updateProduct({ ...existing, ...values });
+      } else {
+        await addProduct(values);
+      }
+      modal.remove(); showToast(editId ? "تغییرات کالا ذخیره شد" : "کالا با موفقیت ثبت شد"); await render();
     } catch (e) { showToast(e instanceof Error ? e.message : "ذخیره کالا ناموفق بود"); }
   });
 }
@@ -546,6 +558,19 @@ async function render(): Promise<void> {
   });
   document.querySelector("#new-adjustment")?.addEventListener("click", async () => { products = await listProducts(); if (!products.length) { showToast("ابتدا یک کالا ثبت کنید"); return; } document.body.insertAdjacentHTML("beforeend", adjustmentModal()); bindAdjustmentModal(); });
   document.querySelector("#new-product")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", productModal()); bindProductModal(); });
+  document.querySelectorAll<HTMLElement>("[data-product-edit]").forEach(button => button.addEventListener("click", async event => {
+    event.stopPropagation();
+    const id = button.dataset.productEdit; const product = id ? (await listProducts()).find(p => p.id === id) : undefined;
+    if (!product) return;
+    document.body.insertAdjacentHTML("beforeend", productModal(product));
+    const modal = document.querySelector<HTMLElement>("#product-modal"); if (modal) { modal.dataset.editId = product.id; bindProductModal(); }
+  }));
+  document.querySelectorAll<HTMLElement>("[data-product-delete]").forEach(button => button.addEventListener("click", async event => {
+    event.stopPropagation();
+    const id = button.dataset.productDelete; const product = id ? (await listProducts()).find(p => p.id === id) : undefined;
+    if (!product || !confirm(`کالای «${product.name}» حذف شود؟`)) return;
+    try { await deleteProduct(product.id); showToast("کالا حذف شد"); await render(); } catch (e) { showToast(e instanceof Error ? e.message : "حذف کالا ناموفق بود"); }
+  });
   document.querySelector("#new-party")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", partyModal()); bindPartyModal(); });
   document.querySelector("#new-received-check")?.addEventListener("click", async () => { const [parties,accounts]=await Promise.all([listParties(),listAccounts()]); document.body.insertAdjacentHTML("beforeend", checkModal("received",parties,accounts)); const modal=document.querySelector<HTMLElement>("#check-modal"); if(modal) void bindCheckModal(modal,"received",async m=>{showToast(m);await render();}); });
   document.querySelector("#new-issued-check")?.addEventListener("click", async () => { const [parties,accounts]=await Promise.all([listParties(),listAccounts()]); document.body.insertAdjacentHTML("beforeend", checkModal("issued",parties,accounts)); const modal=document.querySelector<HTMLElement>("#check-modal"); if(modal) void bindCheckModal(modal,"issued",async m=>{showToast(m);await render();}); });
