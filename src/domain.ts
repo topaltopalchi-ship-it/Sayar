@@ -23,8 +23,6 @@ export interface Party {
   phone: string;
   type: PartyType;
   createdAt: number;
-  invoiceNumber?: string;
-  costOfGoods?: Money;
 }
 
 export type TransactionType =
@@ -55,6 +53,8 @@ export interface Transaction {
   amount: Money;
   paid: Money;
   createdAt: number;
+  invoiceNumber?: string;
+  costOfGoods?: Money;
 }
 
 export interface StockMovement {
@@ -71,6 +71,7 @@ export interface Expense {
   date: number;
   title: string;
   amount: Money;
+  accountId?: ID;
   description: string;
 }
 
