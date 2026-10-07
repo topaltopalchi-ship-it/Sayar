@@ -98,12 +98,12 @@ async function dashboardView(subscription: Subscription): Promise<string> {
       ${stat("فروش امروز", rial(d.salesToday), "primary")}${stat("دریافت امروز", rial(d.receiptsToday), "success")}
       ${stat("مطالبات", rial(d.receivables), "warning")}${stat("موجودی کم", `${money.format(d.lowStock)} کالا`, "danger")}
     </section>
-    <section class="section"><div class="section-head"><h3>عملیات سریع</h3><span class="muted">ثبت سریع</span></div>
+    <section class="section"><div class="section-head"><h3>${isProfessionalMode() ? "عملیات سریع" : "امروز چه کاری دارید؟"}</h3><span class="muted">${isProfessionalMode() ? "ثبت سریع" : "ساده و سریع"}</span></div>
       <div class="quick-grid">
-        <button class="quick-card" data-action="sale"><b>＋</b><span>ثبت فروش</span></button>
-        <button class="quick-card" data-action="purchase"><b>⇩</b><span>ثبت خرید</span></button>
-        <button class="quick-card" data-action="receipt"><b>↙</b><span>دریافت وجه</span></button>
-        <button class="quick-card" data-action="expense"><b>−</b><span>ثبت هزینه</span></button>
+        <button class="quick-card" data-action="sale"><b>＋</b><span>${isProfessionalMode() ? "ثبت فروش" : "فروش جدید"}</span><small>${isProfessionalMode() ? "صدور فاکتور فروش" : "یک فاکتور در چند مرحله"}</small></button>
+        <button class="quick-card" data-action="purchase"><b>⇩</b><span>${isProfessionalMode() ? "ثبت خرید" : "خرید کالا"}</span><small>${isProfessionalMode() ? "ثبت خرید و افزایش موجودی" : "موجودی را بیشتر کنید"}</small></button>
+        <button class="quick-card" data-action="receipt"><b>↙</b><span>دریافت وجه</span><small>ثبت پول دریافتی از مشتری</small></button>
+        ${isProfessionalMode() ? `<button class="quick-card" data-action="expense"><b>−</b><span>ثبت هزینه</span><small>هزینه‌های کسب‌وکار</small></button>` : `<button class="quick-card" data-nav-shortcut="inventory"><b>▤</b><span>کالاها</span><small>مشاهده و مدیریت موجودی</small></button>`}
       </div>
     </section>
     <section class="section panel"><div class="section-head"><h3>آخرین تراکنش‌ها</h3><span class="muted">۵ مورد اخیر</span></div>${recent}</section>`;
@@ -459,6 +459,7 @@ async function render(): Promise<void> {
     const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `sai-sai-backup-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
     showToast("فایل پشتیبان آماده شد");
   });
+  document.querySelectorAll<HTMLButtonElement>("[data-nav-shortcut]").forEach(b => b.addEventListener("click", async () => { activeTab = b.dataset.navShortcut as Tab; await render(); }));
   await bindActions();
 }
 
