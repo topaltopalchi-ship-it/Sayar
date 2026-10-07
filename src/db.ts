@@ -155,32 +155,36 @@ export async function updateTransaction(id: string, input: {
 }): Promise<Transaction> {
   const current = (await listTransactions()).find(t => t.id === id);
   if (!current) throw new Error("تراکنش پیدا نشد");
-  if (current.type !== "sale" && current.type !== "purchase" && current.type !== "receipt" && current.type !== "payment") {
-    throw new Error("ویرایش این نوع تراکنش هنوز پشتیبانی نمی‌شود");
-  }
+  if (!["sale","purchase","receipt","payment"].includes(current.type)) throw new Error("ویرایش این نوع تراکنش هنوز پشتیبانی نمی‌شود");
   if ((current.type === "sale" || current.type === "purchase") && !input.lines.length) throw new Error("حداقل یک کالا لازم است");
-  const transactions = await listTransactions();
   const products = await listProducts();
+  const movements = await listMovements();
   if (current.type === "sale") {
     const stock = new Map(products.map(p => [p.id, 0]));
-    for (const m of await listMovements()) if (m.referenceId !== id) stock.set(m.productId, (stock.get(m.productId) ?? 0) + m.quantity);
+    for (const m of movements) if (m.referenceId !== id) stock.set(m.productId, (stock.get(m.productId) ?? 0) + m.quantity);
     for (const line of input.lines) {
       if (line.quantity <= 0) throw new Error("مقدار کالا باید بیشتر از صفر باشد");
       if ((stock.get(line.productId) ?? 0) < line.quantity) throw new Error("موجودی کالا برای این فروش کافی نیست");
     }
   }
-  const amount = input.amount ?? transactionTotal(input.lines);
+  const amount = transactionTotal(input.lines);
   const updated: Transaction = { ...current, date: input.date, partyId: input.partyId, accountId: input.accountId, description: input.description, lines: input.lines, paid: Math.max(0, input.paid), amount };
-  if (updated.type === "sale") updated.costOfGoods = calculateHistoricalCOGS(transactions.filter(t => t.id !== id).concat(updated), products).get(id) ?? 0;
+  if (updated.type === "sale") updated.costOfGoods = calculateHistoricalCOGS((await listTransactions()).filter(t => t.id !== id).concat(updated), products).get(id) ?? 0;
+  const entries = await listAccountEntries();
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(["transactions","movements","accountEntries"], "readwrite");
-    const movements = tx.objectStore("movements");
-    const entries = tx.objectStore("accountEntries");
-    for (const m of (current.type === "sale" || current.type === "purchase" ? (async () => []) : [])) void m;
-    // Remove movements belonging to this transaction.
-    // IndexedDB has no query index here, so clear matching records from the loaded list below is done before this write.
+    const ms = tx.objectStore("movements"); const es = tx.objectStore("accountEntries");
+    for (const m of movements.filter(m => m.referenceId === id)) ms.delete(m.id);
+    for (const e of entries.filter(e => e.referenceId === id)) es.delete(e.id);
     tx.objectStore("transactions").put(updated);
+    if (updated.accountId && updated.paid > 0) {
+      const entryType = updated.type === "sale" || updated.type === "receipt" ? "deposit" : "withdraw";
+      es.put({ id: newId(), accountId: updated.accountId, date: updated.date, type: entryType, amount: entryType === "deposit" ? Math.round(updated.paid) : -Math.round(updated.paid), description: updated.description, referenceId: updated.id } satisfies AccountEntry);
+    }
+    if (updated.type === "sale" || updated.type === "purchase") {
+      for (const line of updated.lines) ms.put({ id: newId(), productId: line.productId, date: updated.date, type: updated.type, quantity: updated.type === "sale" ? -line.quantity : line.quantity, referenceId: updated.id } satisfies StockMovement);
+    }
     tx.oncomplete = () => resolve(updated);
     tx.onerror = () => reject(tx.error);
   });
