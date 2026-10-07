@@ -612,7 +612,7 @@ async function render(): Promise<void> {
   void bindCheckStatuses(m=>showToast(m)); void bindCheckActions(m=>{showToast(m); void render();});
   document.querySelectorAll<HTMLElement>("[data-check-edit]").forEach(b => b.addEventListener("click", async () => {
     const id=b.dataset.checkEdit||""; const check=(await (await import("./db")).listChecks()).find(x=>x.id===id); if(!check) return;
-    const [ps,as]=await Promise.all([listParties(),listAccounts()]);
+    if(check.clearedEntryId){ showToast("چک وصول‌شده قابل ویرایش نیست"); return; } const [ps,as]=await Promise.all([listParties(),listAccounts()]);
     document.body.insertAdjacentHTML("beforeend", checkModal(check.direction, ps, as, check));
     const m=document.querySelector<HTMLElement>("#check-modal"); if(m){m.dataset.editId=check.id; void bindCheckModal(m,check.direction,async msg=>{showToast(msg);await render();});}
   }));
