@@ -6,6 +6,7 @@ export interface Subscription {
   plan: "monthly" | "none";
   expiresAt: number | null;
   provider?: BillingProvider;
+  isTrial?: boolean;
 }
 
 export interface StorePurchase {
@@ -32,13 +33,13 @@ function getLocalTrialSubscription(): Subscription {
   const startedAt = getTrialStartedAt();
   const expiresAt = startedAt + TRIAL_MS;
   return Date.now() < expiresAt
-    ? { status: "active", plan: "monthly", expiresAt, provider: "web" }
-    : { status: "expired", plan: "none", expiresAt, provider: "web" };
+    ? { status: "active", plan: "monthly", expiresAt, provider: "web", isTrial: true }
+    : { status: "expired", plan: "none", expiresAt, provider: "web", isTrial: true };
 }
 
 export async function getSubscription(): Promise<Subscription> {
   if (BILLING_DISABLED) return getLocalTrialSubscription();
-  if (!API_BASE) return { status: "none", plan: "none", expiresAt: null };
+  // Without a configured billing server, every fresh installation gets a 30-day local trial.\n  // Once the trial ends, the normal subscription paywall is shown.\n  if (!API_BASE) return getLocalTrialSubscription();
 
   const response = await fetch(`${API_BASE}/subscription/status`, {
     credentials: "include",
