@@ -96,7 +96,7 @@ async function dashboardView(subscription: Subscription): Promise<string> {
     ${subscription.status !== "active" ? `<section class="subscription-card"><div><span class="eyebrow">اشتراک سای‌سای</span><h3>برای استفاده از نسخه کامل، اشتراک ماهانه فعال کنید.</h3><p class="muted">بعد از تأیید موفق پرداخت، دسترسی از سمت سرور فعال می‌شود.</p></div><button class="primary-button" data-subscribe>خرید اشتراک ماهانه</button></section>` : ""}
     <section class="stats-grid">
       ${stat("فروش امروز", rial(d.salesToday), "primary")}${stat("دریافت امروز", rial(d.receiptsToday), "success")}
-      ${stat("مطالبات", rial(d.receivables), "warning")}${stat("موجودی کم", `${money.format(d.lowStock)} کالا`, "danger")}
+      ${isProfessionalMode() ? stat("مطالبات", rial(d.receivables), "warning") + stat("موجودی کم", `${money.format(d.lowStock)} کالا`, "danger") : ""}
     </section>
     <section class="section"><div class="section-head"><h3>${isProfessionalMode() ? "عملیات سریع" : "امروز چه کاری دارید؟"}</h3><span class="muted">${isProfessionalMode() ? "ثبت سریع" : "ساده و سریع"}</span></div>
       <div class="quick-grid">
