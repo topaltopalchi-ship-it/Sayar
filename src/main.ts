@@ -572,16 +572,24 @@ async function subscribe(): Promise<void> {
   catch (e) { showToast(e instanceof Error ? e.message : "پرداخت در دسترس نیست"); }
 }
 
+
 function formatReportDateInput(input: HTMLInputElement): void {
-  const pos = input.selectionStart ?? input.value.length;
-  const rawBefore = input.value.slice(0, pos);
-  const formatted = formatJalaliInput(input.value);
-  const formattedBefore = formatJalaliInput(rawBefore);
-  if (input.value !== formatted) {
-    input.value = formatted;
-    const caret = Math.min(formatted.length, formattedBefore.length);
-    try { input.setSelectionRange(caret, caret); } catch {}
+  const raw = input.value
+    .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+    .replace(/[^0-9]/g, "")
+    .slice(0, 8);
+
+  let formatted = raw;
+
+  if (raw.length > 4) {
+    formatted = `${raw.slice(0, 4)}/${raw.slice(4, 6)}`;
   }
+
+  if (raw.length > 6) {
+    formatted += `/${raw.slice(6, 8)}`;
+  }
+
+  input.value = formatted;
 }
 
 async function applyReportRange(): Promise<void> {
@@ -677,11 +685,22 @@ async function bindActions(): Promise<void> {
 
 function bindReportControls(): void {
   if (activeTab !== "reports") return;
-  document.querySelectorAll<HTMLInputElement>("[data-jalali-input]").forEach(input => {
+document.querySelectorAll<HTMLInputElement>("[data-jalali-input]").forEach(input => {
+  input.addEventListener("input", () => {
     formatReportDateInput(input);
-    input.addEventListener("input", () => formatReportDateInput(input));
-    input.addEventListener("change", () => formatReportDateInput(input));
   });
+
+  input.addEventListener("change", () => {
+    formatReportDateInput(input);
+  });
+
+  input.addEventListener("blur", () => {
+    formatReportDateInput(input);
+  });
+
+  formatReportDateInput(input);
+});
+
   document.querySelectorAll<HTMLElement>("[data-report-range]").forEach(button => {
     button.setAttribute("aria-pressed", (button.dataset.reportRange || "month") === (localStorage.getItem("sai-sai-report-range") || "month") ? "true" : "false");
     button.addEventListener("click", async () => {
