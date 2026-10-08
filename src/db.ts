@@ -133,13 +133,19 @@ export async function listOrders(): Promise<Order[]> {
   return items.sort((a, b) => a.deliveryDate - b.deliveryDate || b.createdAt - a.createdAt);
 }
 
-export async function addOrder(input: Omit<Order, "id" | "createdAt">): Promise<Order> {
-  const order: Order = { ...input, id: newId(), createdAt: Date.now(), status: input.status || "pending" };
+export async function addOrder(input: Omit<Order, "id" | "createdAt" | "status">): Promise<Order> {
+  if (!input.partyId) throw new Error("انتخاب مشتری برای سفارش الزامی است");
+  if (!input.productId) throw new Error("انتخاب کالا الزامی است");
+  if (!Number.isFinite(input.quantity) || input.quantity <= 0) throw new Error("مقدار سفارش باید بیشتر از صفر باشد");
+  if (!Number.isFinite(input.unitPrice) || input.unitPrice < 0) throw new Error("قیمت سفارش معتبر نیست");
+  if (!Number.isFinite(input.deliveryDate) || input.deliveryDate <= 0) throw new Error("تاریخ تحویل معتبر نیست");
+  const order: Order = { ...input, id: newId(), status: "pending", createdAt: Date.now() };
   await put("orders", order);
   return order;
 }
 
 export async function updateOrder(order: Order): Promise<void> {
+  if (!order.partyId || !order.productId || order.quantity <= 0 || order.deliveryDate <= 0) throw new Error("اطلاعات سفارش کامل نیست");
   await put("orders", order);
 }
 
@@ -151,7 +157,7 @@ export async function deleteOrder(id: string): Promise<void> {
     const tx = db.transaction("orders", "readwrite");
     tx.objectStore("orders").delete(id);
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    tx.onerror = () => reject(tx.error ?? new Error("حذف سفارش ناموفق بود"));
   });
 }
 
