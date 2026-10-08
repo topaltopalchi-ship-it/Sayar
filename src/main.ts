@@ -437,10 +437,10 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const defaultTo = formatJalaliInput(localStorage.getItem("sai-sai-report-to") || todayJalaliInput());
   const summary = `<section class="panel report-list"><div class="report-range" role="group" aria-label="بازه گزارش"><div class="report-range-item" role="button" tabindex="0" data-report-range="today">امروز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="week">۷ روز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="month">ماه جاری</div><div class="report-range-item" role="button" tabindex="0" data-report-range="all">همه</div></div><form id="report-range-form" class="report-custom-range">
   <label class="field"><span>از تاریخ شمسی</span>
-    <input id="report-from-date-v4" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" placeholder="۱۴۰۵/۰۷/۱۶" value="${defaultFrom}" aria-label="تاریخ شروع">
+    <input id="report-from-date-v4" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="new-password" name="report-from-v4" maxlength="10" placeholder="۱۴۰۵/۰۷/۱۶" value="${defaultFrom}" aria-label="تاریخ شروع">
   </label>
   <label class="field"><span>تا تاریخ شمسی</span>
-    <input id="report-to-date-v4" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" placeholder="۱۴۰۵/۰۷/۱۶" value="${defaultTo}" aria-label="تاریخ پایان">
+    <input id="report-to-date-v4" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="new-password" name="report-to-v4" maxlength="10" placeholder="۱۴۰۵/۰۷/۱۶" value="${defaultTo}" aria-label="تاریخ پایان">
   </label>
   <button type="button" class="primary-button wide" id="report-apply-range">اعمال بازه</button>
 </div><p class="muted">بازه فعال: ${label}</p></section>`;
