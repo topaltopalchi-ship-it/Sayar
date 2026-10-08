@@ -33,18 +33,18 @@ function firstNumber(text: string): number {
 
 function moneyNumber(text: string): number {
   const raw = digits(text).replace(/[٬,،]/g, " ").replace(/\s+/g, " ").trim();
-  const direct = raw.match(/\d+(?:\.\d+)?/);
-  if (direct) return Number(direct[0]);
-
   const units: Record<string, number> = { هزار: 1_000, هزارتا: 1_000, میلیون: 1_000_000, میلیونی: 1_000_000, میلیارد: 1_000_000_000, میلیاردی: 1_000_000_000 };
   const parts = raw.split(" ");
   let total = 0;
   let current = 0;
+  let sawUnit = false;
   for (const part of parts) {
-    if (/^\d+$/.test(part)) current = Number(part);
-    else if (units[part]) { total += (current || 1) * units[part]; current = 0; }
+    if (/^\d+(?:\.\d+)?$/.test(part)) current = Number(part);
+    else if (units[part]) { total += (current || 1) * units[part]; current = 0; sawUnit = true; }
   }
-  return total + current;
+  if (sawUnit) return total + current;
+  const direct = raw.match(/\d+(?:\.\d+)?/);
+  return direct ? Number(direct[0]) : 0;
 }
 
 function parseVoiceSale(transcript: string): VoiceSaleDraft {
@@ -99,7 +99,7 @@ function spokenMoney(text: string): number {
 export function parseVoiceProduct(transcript: string): VoiceProductDraft {
   const text = transcript.trim();
   const nameMatch = text.match(/(?:کالا(?:ی)?|جنس)\s+(.+?)(?=\s+(?:کد|شماره|موجودی|تعداد|قیمت|خرید|فروش|واحد|حداقل)|[،,.]|$)/i);
-  const name = (nameMatch?.[1] || text.split(/[،,.]/)[0] || "").replace(/^(یک|یه)\s+/i, "").trim();
+  const name = (nameMatch?.[1] || text.split(/[،,.]/)[0] || "").replace(/^(یک|یه|این|اون)\s+/i, "").trim();
   const sku = text.match(/(?:کد|شماره(?:\s+کالا)?)\s*([A-Za-z0-9۰-۹_-]+)/i)?.[1] || "";
   const stockText = text.match(/(?:موجودی|تعداد)\s*(?:اولیه)?\s*(?:[=:]\s*)?([^،,.]+?)(?=\s+(?:عدد|تا|قیمت|کد|واحد|حداقل)|[،,.]|$)/i)?.[1] || "";
   const initialStock = firstNumber(stockText) || 0;
