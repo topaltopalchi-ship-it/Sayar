@@ -671,7 +671,8 @@ async function bindActions(): Promise<void> {
     const target = event.target as HTMLElement;
     const invoiceButton = target.closest<HTMLElement>("[data-invoice-id]");
     if (invoiceButton) {
-      const transaction = transactions.find(t => t.id === invoiceButton.dataset.invoiceId);
+      const transactionList = await listTransactions();
+      const transaction = transactionList.find(t => t.id === invoiceButton.dataset.invoiceId);
       if (transaction) await openInvoice(transaction);
       return;
     }
