@@ -6,14 +6,37 @@ function normalizeDigits(text: string): string {
 }
 
 function wordNumbers(text: string): string {
-  const words: Record<string,string> = {
-    صفر:"0",یک:"1",یکی:"1",دو:"2",سه:"3",چهار:"4",پنج:"5",شش:"6",هفت:"7",هشت:"8",نه:"9",ده:"10",
-    یازده:"11",دوازده:"12",سیزده:"13",چهارده:"14",پانزده:"15",شانزده:"16",هفده:"17",هجده:"18",نوزده:"19",
-    بیست:"20",سی:"30",چهل:"40",پنجاه:"50",شصت:"60",هفتاد:"70",هشتاد:"80",نود:"90",صد:"100"
+  const units: Record<string,number> = {
+    صفر:0,یک:1,یکی:1,دو:2,سه:3,چهار:4,پنج:5,شش:6,هفت:7,هشت:8,نه:9,ده:10,
+    یازده:11,دوازده:12,سیزده:13,چهارده:14,پانزده:15,شانزده:16,هفده:17,هجده:18,نوزده:19
   };
-  let out=text;
-  for (const [k,v] of Object.entries(words)) out=out.replace(new RegExp("\\b"+k+"\\b","g"),v);
-  return out;
+  const tens: Record<string,number> = { بیست:20,سی:30,چهل:40,پنجاه:50,شصت:60,هفتاد:70,هشتاد:80,نود:90 };
+  const scales: Record<string,number> = { صد:100,یکصد:100,دویست:200,سیصد:300,چهارصد:400,پانصد:500,ششصد:600,هفتصد:700,هشتصد:800,نهصد:900,هزار:1000,میلیون:1000000 };
+  const isNumberWord=(w:string)=>w==="و"||w in units||w in tens||w in scales;
+  const parseWords=(words:string[]): number => {
+    let total=0, current=0;
+    for (const w of words) {
+      if (w==="و") continue;
+      if (w==="هزار"||w==="میلیون") {
+        const scale=scales[w];
+        total += (current || 1) * scale;
+        current=0;
+      } else if (w in scales) current += scales[w];
+      else if (w in tens) current += tens[w];
+      else current += units[w];
+    }
+    return total+current;
+  };
+  const tokens=text.split(/(\\s+)/);
+  const out:string[]=[];
+  let pending:string[]=[];
+  const flush=()=>{ if(pending.length){ out.push(String(parseWords(pending))); pending=[]; } };
+  for (const token of tokens) {
+    if (/^\\s+$/.test(token)) { out.push(token); continue; }
+    if (isNumberWord(token)) pending.push(token); else { flush(); out.push(token); }
+  }
+  flush();
+  return out.join("");
 }
 
 function expressionFromSpeech(text: string): string {
