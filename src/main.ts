@@ -458,7 +458,7 @@ function orderModal(existing?: Order): string {
   const productOptions = products.map(p => `<option value="${p.id}" ${existing?.productId === p.id ? "selected" : ""}>${p.name} · ${rial(p.salePrice)}</option>`).join("");
   const delivery = new Date(existing?.deliveryDate ?? Date.now() + 86400000);
   const dateValue = `${delivery.getFullYear()}-${String(delivery.getMonth()+1).padStart(2,"0")}-${String(delivery.getDate()).padStart(2,"0")}`;
-  return \`
+  return `
     <div class="modal-backdrop" id="order-modal"><section class="modal">
       <button class="modal-close" id="order-close">×</button>
       <span class="eyebrow">مدیریت سفارش</span><h2>${existing ? "ویرایش سفارش" : "دریافت سفارش جدید"}</h2>
@@ -469,7 +469,7 @@ function orderModal(existing?: Order): string {
       <label class="field"><span>تاریخ تحویل</span><input id="order-delivery" type="date" value="${dateValue}"></label>
       <label class="field"><span>یادداشت</span><input id="order-note" placeholder="مثلاً تحویل درب مغازه" value="${existing?.note || ""}"></label>
       <button class="primary-button wide" id="order-submit">${existing ? "ذخیره تغییرات" : "ثبت سفارش و یادآوری"}</button>
-    </section></div>\`;
+    </section></div>`;
 }
 
 async function ordersView(): Promise<string> {
@@ -480,19 +480,19 @@ async function ordersView(): Promise<string> {
   const rows = orders.map(o => {
     const party = partyMap.get(o.partyId);
     const product = productMap.get(o.productId);
-    return \`<article class="order-card ${o.status}">
+    return `<article class="order-card ${o.status}">
       <div class="order-card-head"><div><span class="eyebrow">سفارش</span><h3>${party?.name || "مشتری حذف‌شده"}</h3></div><span class="order-status">${statusLabel[o.status]}</span></div>
       <div class="order-details"><span>کالا: <b>${product?.name || "کالای حذف‌شده"}</b></span><span>تعداد: <b>${money.format(o.quantity)}</b></span><span>تحویل: <b>${dateLabel(o.deliveryDate)}</b></span></div>
       <p class="muted">${o.note || "بدون یادداشت"} · مبلغ تقریبی ${rial(o.quantity * o.unitPrice)}</p>
       <div class="order-actions">
-        ${o.status === "pending" ? \`<button class="primary-button" data-order-complete="${o.id}">انجام شد</button>\` : ""}
+        ${o.status === "pending" ? `<button class="primary-button" data-order-complete="${o.id}">انجام شد</button>` : ""}
         <button class="secondary-button" data-order-edit="${o.id}">ویرایش</button>
         <button class="secondary-button" data-order-delete="${o.id}">حذف</button>
       </div>
-    </article>\`;
+    </article>`;
   }).join("");
-  return pageHead("سفارشات", "دریافت و پیگیری سفارش‌ها", "نام مشتری، کالا، تاریخ تحویل و یادآوری یک‌روز قبل در یکجا.", \`<button class="primary-button" id="new-order">＋ سفارش جدید</button>\`) +
-    \`<section class="panel">${rows || '<div class="empty-inline"><span>▣</span><p>هنوز سفارشی ثبت نشده است.</p></div>'}</section>\`;
+  return pageHead("سفارشات", "دریافت و پیگیری سفارش‌ها", "نام مشتری، کالا، تاریخ تحویل و یادآوری یک‌روز قبل در یکجا.", `<button class="primary-button" id="new-order">＋ سفارش جدید</button>`) +
+    `<section class="panel">${rows || '<div class="empty-inline"><span>▣</span><p>هنوز سفارشی ثبت نشده است.</p></div>'}</section>`;
 }
 
 function bindOrderModal(existing?: Order): void {
