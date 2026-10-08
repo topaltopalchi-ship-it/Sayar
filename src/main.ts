@@ -698,6 +698,28 @@ function compactJalaliInput(value: string): string {
     .slice(0, 8);
 }
 
+let nativeBackListenerRegistered = false;
+
+async function setupNativeExitConfirmation(): Promise<void> {
+  if (!nativeApp() || nativeBackListenerRegistered) return;
+  nativeBackListenerRegistered = true;
+  await App.addListener("backButton", ({ canGoBack }) => {
+    const openModal = document.querySelector<HTMLElement>(".modal-backdrop");
+    if (openModal) {
+      openModal.remove();
+      return;
+    }
+    if (canGoBack || activeTab !== "dashboard") {
+      activeTab = "dashboard";
+      void render();
+      return;
+    }
+    if (window.confirm("آیا می‌خواهید از سای‌سای خارج شوید؟")) {
+      void App.exitApp();
+    }
+  });
+}
+
 function nativeApp(): boolean {
   return Capacitor.isNativePlatform();
 }
@@ -849,10 +871,6 @@ function bindReportControls(): void {
   const activeRange = localStorage.getItem("sai-sai-report-range") || "month";
   document.querySelectorAll<HTMLButtonElement>("[data-report-range]").forEach(button => {
     button.setAttribute("aria-pressed", (button.dataset.reportRange || "month") === activeRange ? "true" : "false");
-    button.addEventListener("click", async () => {
-      localStorage.setItem("sai-sai-report-range", button.dataset.reportRange || "month");
-      await render();
-    });
   });
   const normalizePart = (input: HTMLInputElement, max: number) => {
     input.value = input.value
@@ -1072,10 +1090,11 @@ if ("serviceWorker" in navigator) {
 
 void (async () => {
   try {
+    await setupNativeExitConfirmation();
     // Repair legacy/missing sale-purchase stock movements before the first render.
     await repairDataIntegrity();
   } catch (error) {
-    console.error("Sayar data integrity repair failed", error);
+    console.error("Sayar startup repair/setup failed", error);
   }
   await render();
 })();
