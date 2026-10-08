@@ -309,34 +309,45 @@ async function shareInvoiceAsImage(invoiceElement: HTMLElement, title: string, i
 async function openInvoice(t: Transaction): Promise<void> {
   const [productList, partyList] = await Promise.all([listProducts(), listParties()]);
 
-  // Never leave a stale invoice overlay around. Mount a fresh invoice directly
-  // on body so it cannot be covered by the app/root navigation layer.
   document.querySelector("#invoice-modal")?.remove();
-  document.body.insertAdjacentHTML("beforeend", invoiceModal(
+
+  // Build the node explicitly instead of relying on body.innerHTML. This is
+  // more reliable in Android WebView immediately after saving a sale.
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = invoiceModal(
     t,
     new Map(productList.map(p => [p.id, p])),
     new Map(partyList.map(p => [p.id, p])),
-  ));
+  ).trim();
 
-  const invoice = document.querySelector<HTMLDivElement>("#invoice-modal");
-  if (!invoice) throw new Error("پنجره فاکتور ساخته نشد");
+  const invoice = wrapper.firstElementChild as HTMLDivElement | null;
+  if (!invoice || invoice.id !== "invoice-modal") {
+    throw new Error("پنجره فاکتور ساخته نشد");
+  }
+
+  document.body.appendChild(invoice);
   invoice.style.zIndex = "1000";
-  document.querySelector("#invoice-close")?.addEventListener("click", () => invoice.remove());
-  document.querySelector("#invoice-print")?.addEventListener("click", async () => {
+  invoice.scrollTop = 0;
+
+  invoice.querySelector("#invoice-close")?.addEventListener("click", () => {
+    invoice.remove();
+    void render();
+  });
+  invoice.querySelector("#invoice-print")?.addEventListener("click", async () => {
     try {
       await printHtml("فاکتور سای‌سای", invoice.querySelector(".invoice-modal")?.outerHTML || invoice.innerHTML);
     } catch (e) {
       showToast(e instanceof Error ? e.message : "چاپ / PDF در دسترس نیست");
     }
   });
-  document.querySelector("#invoice-share")?.addEventListener("click", async () => {
+  invoice.querySelector("#invoice-share")?.addEventListener("click", async () => {
     const title = t.type === "purchase" ? "فاکتور خرید سای‌سای" : "فاکتور فروش سای‌سای";
     const invoiceElement = invoice.querySelector<HTMLElement>(".invoice-modal");
     if (!invoiceElement) {
       showToast("فاکتور برای ارسال آماده نیست");
       return;
     }
-    const button = document.querySelector<HTMLButtonElement>("#invoice-share");
+    const button = invoice.querySelector<HTMLButtonElement>("#invoice-share");
     if (button) { button.disabled = true; button.textContent = "در حال آماده‌سازی…"; }
     try {
       await shareInvoiceAsImage(invoiceElement, title, t.invoiceNumber);
@@ -347,7 +358,7 @@ async function openInvoice(t: Transaction): Promise<void> {
       if (button) { button.disabled = false; button.textContent = "ارسال فاکتور"; }
     }
   });
-  document.querySelector("#invoice-branding-settings")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", invoiceBrandingModal()); bindInvoiceBrandingModal(); });
+  invoice.querySelector("#invoice-branding-settings")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", invoiceBrandingModal()); bindInvoiceBrandingModal(); });
 }
 
 function saleModal(existing?: Transaction): string {
@@ -1071,8 +1082,7 @@ function bindReportControls(): void {
       });
     });
   });
-  document.querySelector("#report-range-form")?.addEventListener("submit", async event => {
-    event.preventDefault();
+  const applyReportRange = async (): Promise<void> => {
     const readDate = (prefix: "from" | "to"): string => {
       const group = document.querySelector<HTMLElement>(`[data-report-date="${prefix}"]`);
       if (!group) return "";
@@ -1081,10 +1091,12 @@ function bindReportControls(): void {
       const day = group.querySelector<HTMLInputElement>("[data-date-part='day']")?.value ?? "";
       return `${year.padStart(4, "0")}${month.padStart(2, "0")}${day.padStart(2, "0")}`;
     };
+
     const from = readDate("from");
     const to = readDate("to");
     const fromDate = jalaliToGregorianDate(from);
     const toDate = jalaliToGregorianDate(to);
+
     if (from.length !== 8 || to.length !== 8 || !fromDate || !toDate) {
       showToast("تاریخ را کامل وارد کنید");
       return;
@@ -1093,11 +1105,21 @@ function bindReportControls(): void {
       showToast("تاریخ شروع نباید بعد از تاریخ پایان باشد");
       return;
     }
+
     localStorage.setItem("sai-sai-report-from", from);
     localStorage.setItem("sai-sai-report-to", to);
     localStorage.setItem("sai-sai-report-range", "custom");
     await render();
     showToast("بازه گزارش اعمال شد");
+  };
+
+  document.querySelector("#report-range-form")?.addEventListener("submit", event => {
+    event.preventDefault();
+    void applyReportRange();
+  });
+  document.querySelector("#report-apply-range")?.addEventListener("click", event => {
+    event.preventDefault();
+    void applyReportRange();
   });
 }
 
