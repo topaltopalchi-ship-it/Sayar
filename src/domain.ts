@@ -147,6 +147,7 @@ export interface Order {
   note: string;
   status: OrderStatus;
   createdAt: number;
+  saleTransactionId?: ID;
 }
 
 export type CheckDirection = "received" | "issued";
