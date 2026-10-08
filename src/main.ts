@@ -625,8 +625,8 @@ async function applyReportRange(): Promise<void> {
     input.value = formatted;
     return formatted;
   };
-  const fromValue = readDateParts("from");
-  const toValue = readDateParts("to");
+  const fromValue = readDateValue("from");
+  const toValue = readDateValue("to");
   const from = jalaliToGregorianDate(fromValue);
   const to = jalaliToGregorianDate(toValue);
   if (!from || !to) {
