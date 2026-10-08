@@ -679,10 +679,31 @@ function bindProductModal(): void {
   });
 }
 
-function peopleView(): string {
+async function peopleView(): Promise<string> {
   const customerCount = parties.filter(p => p.type === "customer" || p.type === "both").length;
   const supplierCount = parties.filter(p => p.type === "supplier" || p.type === "both").length;
+  const transactions = await listTransactions();
+  const partyMap = new Map(parties.map(p => [p.id, p]));
+  const debtors = transactions
+    .filter(t => t.type === "sale" && t.amount > t.paid)
+    .map(t => ({
+      transaction: t,
+      name: t.customerName || (t.partyId ? partyMap.get(t.partyId)?.name : undefined) || "مشتری ثبت نشده",
+      debt: Math.max(0, t.amount - t.paid),
+    }))
+    .filter(x => x.debt > 0)
+    .sort((a, b) => b.debt - a.debt);
+  const totalDebt = debtors.reduce((sum, x) => sum + x.debt, 0);
+  const debtorSection = `<section class="panel debtor-panel">
+      <div class="section-head"><div><h3>لیست بدهکاران</h3><span class="muted">فقط فاکتورهای فروش تسویه‌نشده</span></div><strong>${rial(totalDebt)}</strong></div>
+      ${debtors.length ? debtors.map(({transaction:t,name,debt}) => `<div class="person-row debtor-row">
+        <div class="person-avatar">₺</div>
+        <div><strong>${name}</strong><small>${t.invoiceNumber ? "فاکتور " + t.invoiceNumber + " · " : ""}${dateLabel(t.date)} · مبلغ فاکتور ${rial(t.amount)} · پرداخت‌شده ${rial(t.paid)}</small></div>
+        <b class="debt-amount">${rial(debt)}</b>
+      </div>`).join("") : `<div class="empty-inline"><span>✓</span><p>هیچ فاکتور تسویه‌نشده‌ای وجود ندارد.</p></div>`}
+    </section>`;
   return pageHead("دفتر اشخاص", "مشتریان و تأمین‌کنندگان", `${money.format(customerCount)} مشتری · ${money.format(supplierCount)} تأمین‌کننده`, `<button class="primary-button" id="new-party">＋ افزودن شخص</button>`) +
+    debtorSection +
     `<section class="panel">${parties.length ? parties.map(p => `<div class="person-row"><div class="person-avatar">${p.name.slice(0,1)}</div><div><strong>${p.name}</strong><small>${p.phone || "بدون شماره"} · ${p.type === "customer" ? "مشتری" : p.type === "supplier" ? "تأمین‌کننده" : "مشتری و تأمین‌کننده"}</small></div><span class="account-actions"><button type="button" class="secondary-button" data-party-edit="${p.id}">ویرایش</button><button type="button" class="secondary-button" data-party-delete="${p.id}">حذف</button></span></div>`).join("") : `<div class="empty-inline"><span>♙</span><p>هنوز شخصی ثبت نشده است.</p></div>`}</section>`;
 }
 
@@ -1150,7 +1171,7 @@ async function render(): Promise<void> {
     content = pageHead("خرید", "دفتر خرید", "خریدها و افزایش خودکار موجودی.", `<button class="primary-button" id="new-purchase">＋ ثبت خرید</button>`) +
       `<section class="panel">${tx.length ? tx.map(t => `<div class="transaction-actions-row"><div class="transaction-row">${transactionRow(t)}</div><button class="secondary-button" data-purchase-edit="${t.id}">ویرایش</button><button class="secondary-button" data-purchase-delete="${t.id}">حذف</button></div>`).join("") : `<div class="empty-inline"><span>↙</span><p>هنوز خریدی ثبت نشده است.</p></div>`}</section>`;
   } else if (activeTab === "inventory") content = await inventoryView();
-  else if (activeTab === "people") { parties = await listParties(); content = peopleView(); }
+  else if (activeTab === "people") { parties = await listParties(); content = await peopleView(); }
   else if (activeTab === "reports") content = await reportsView(await listTransactions());
   else if (activeTab === "more") content = await accountsView();
   else if (activeTab === "checks") content = await checksView();
