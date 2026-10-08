@@ -622,7 +622,7 @@ function orderNotificationId(orderId: string): number {
   return Math.abs(hash) % 2000000000 + 1000;
 }
 
-async function scheduleOrderReminder(order: Order): Promise<void> {
+async async function scheduleOrderReminder(order: Order): Promise<void> {
   if (order.status !== "pending" || !Capacitor.isNativePlatform()) return;
   const reminderAt = new Date(order.deliveryDate);
   reminderAt.setDate(reminderAt.getDate() - 1);
