@@ -21,6 +21,7 @@ import { checksView, checkModal, bindCheckModal, bindCheckStatuses, bindCheckAct
 import { jalaliToGregorianDate, todayJalaliInput, formatJalaliInput, toPersianDigits } from "./calendar";
 import { bindVoiceAssistant, bindVoiceQuestionAssistant, type VoiceSaleDraft, type VoiceSaleItem } from "./voice-assistant";
 import { getCustomerTier, getMarketSettings, setMarketSettings, recommendPrice, tierLabel } from "./pricing";
+import { buildBusinessInsights, dailyBrief, customerScore, type BusinessInsight } from "./intelligence";
 
 type Tab = "dashboard" | "sales" | "purchases" | "orders" | "inventory" | "people" | "reports" | "more" | "checks";
 
@@ -233,32 +234,34 @@ function pageHead(eyebrow: string, title: string, text: string, action = ""): st
 
 async function dashboardView(subscription: Subscription): Promise<string> {
   const d = await getDashboard();
-  const lowStock = await getLowStockItems();
-  const supplierParties = await listParties();
-  const lowStockHtml = lowStock.length ? '<section class="panel low-stock-alert-panel"><div class="section-head"><div><h3>⚠️ کالاهای نیازمند تأمین</h3><span class="muted">موجودی به حد هشدار رسیده است</span></div><strong>' + money.format(lowStock.length) + ' کالا</strong></div>' + lowStock.map(x => '<div class="person-row"><div class="person-avatar">!</div><div><strong>' + x.product.name + '</strong><small>حد هشدار: ' + money.format(x.product.lowStock) + ' ' + x.product.unit + (x.product.supplierId ? ' · تأمین‌کننده: ' + (supplierParties.find(p => p.id === x.product.supplierId)?.name || 'ثبت نشده') : '') + '</small></div><b class="debt-amount">' + money.format(x.stock) + ' ' + x.product.unit + '</b><span class="account-actions"><button type="button" class="secondary-button supply-item" data-supply-product="' + x.product.id + '">تأمین کالا</button>' + ((supplierParties.find(p => p.id === x.product.supplierId)?.phone || "").trim() ? '<a class="secondary-button" href="tel:' + (supplierParties.find(p => p.id === x.product.supplierId)?.phone || "").trim() + '">📞 تماس</a>' : '') + '</span></div>').join("") + '</section>' : "";
-  const recent = d.recent.length ? d.recent.map(t => transactionRow(t)).join("") :
-    `<div class="empty-inline"><span>◌</span><p>هنوز تراکنشی ثبت نشده است.</p></div>`;
-
-  return `
-    <section class="hero"><div><p class="hero-kicker">داشبورد مدیریت</p><h2>وضعیت کسب‌وکار شما</h2><p class="muted">فروش، دریافت، مطالبات و موجودی را از یکجا کنترل کنید.</p></div><div class="hero-mark">س</div></section>
-    ${subscription.status !== "active" ? `<section class="subscription-card"><div><span class="eyebrow">اشتراک سای‌سای</span><h3>برای استفاده از نسخه کامل، اشتراک ماهانه فعال کنید.</h3><p class="muted">بعد از تأیید موفق پرداخت، دسترسی از سمت سرور فعال می‌شود.</p></div><button class="primary-button" data-subscribe>خرید اشتراک ماهانه</button></section>` : ""}
-    ${lowStockHtml}
-    <section class="stats-grid">
-      ${stat("فروش امروز", rial(d.salesToday), "primary")}${stat("دریافت امروز", rial(d.receiptsToday), "success")}
-      ${isProfessionalMode() ? stat("مطالبات", rial(d.receivables), "warning") + stat("موجودی کم", `${money.format(d.lowStock)} کالا`, "danger") : ""}
-    </section>
-    <section class="section"><div class="section-head"><h3>${isProfessionalMode() ? "عملیات سریع" : "امروز چه کاری دارید؟"}</h3><span class="muted">${isProfessionalMode() ? "ثبت سریع" : "ساده و سریع"}</span></div>
-      <div class="quick-grid">
-        <button class="quick-card" data-action="sale"><b>＋</b><span>${isProfessionalMode() ? "ثبت فروش" : "فروش جدید"}</span><small>${isProfessionalMode() ? "صدور فاکتور فروش" : "یک فاکتور در چند مرحله"}</small></button>
-        <button class="quick-card" data-action="purchase"><b>⇩</b><span>${isProfessionalMode() ? "ثبت خرید" : "خرید کالا"}</span><small>${isProfessionalMode() ? "ثبت خرید و افزایش موجودی" : "موجودی را بیشتر کنید"}</small></button>
-        <button class="quick-card" data-action="receipt"><b>↙</b><span>دریافت وجه</span><small>ثبت پول دریافتی از مشتری</small></button>
-        <button class="quick-card voice-quick-card" id="voice-sale"><b>🎙</b><span>ثبت فروش با صدا</span><small>فروش را به فارسی بگویید</small></button><button class="quick-card voice-quick-card" id="voice-query"><b>🔊</b><span>از سای‌سای بپرس</span><small>فروش، دریافت و موجودی</small></button>
-        ${isProfessionalMode() ? `<button class="quick-card" data-action="expense"><b>−</b><span>ثبت هزینه</span><small>هزینه‌های کسب‌وکار</small></button>` : `<button class="quick-card" data-nav-shortcut="inventory"><b>▤</b><span>کالاها</span><small>مشاهده و مدیریت موجودی</small></button>`}
-      </div>
-    </section>
-    <section class="section panel"><div class="section-head"><h3>آخرین تراکنش‌ها</h3><span class="muted">۵ مورد اخیر</span></div>${recent}</section>`;
+  const [lowStock, supplierParties, tx, allProducts, allParties, expenses] = await Promise.all([
+    getLowStockItems(), listParties(), listTransactions(), listProducts(), listParties(), listExpenses()
+  ]);
+  const insights = await buildBusinessInsights(allProducts, allParties, tx, expenses);
+  const brief = dailyBrief(insights);
+  const insightHtml = insights.slice(0, 6).map((x: BusinessInsight) =>
+    '<div class="transaction-row"><div class="transaction-icon">' + (x.tone === "danger" ? "!" : x.tone === "warning" ? "⚠" : x.tone === "success" ? "↑" : "💡") + '</div><div class="transaction-main"><strong>' + x.title + '</strong><small>' + x.text + '</small></div>' + (x.action ? '<span class="muted">' + x.action + '</span>' : '') + '</div>'
+  ).join("");
+  const lowStockHtml = lowStock.length ? '<section class="panel low-stock-alert-panel"><div class="section-head"><div><h3>⚠️ کالاهای نیازمند تأمین</h3><span class="muted">موجودی به حد هشدار رسیده است</span></div><strong>' + money.format(lowStock.length) + ' کالا</strong></div>' +
+    lowStock.map(x => '<div class="person-row"><div class="person-avatar">!</div><div><strong>' + x.product.name + '</strong><small>حد هشدار: ' + money.format(x.product.lowStock) + ' ' + x.product.unit + (x.product.supplierId ? ' · تأمین‌کننده: ' + (supplierParties.find(p => p.id === x.product.supplierId)?.name || 'ثبت نشده') : '') + '</small></div><b class="debt-amount">' + money.format(x.stock) + ' ' + x.product.unit + '</b><span class="account-actions"><button type="button" class="secondary-button supply-item" data-supply-product="' + x.product.id + '">تأمین کالا</button>' + ((supplierParties.find(p => p.id === x.product.supplierId)?.phone || "").trim() ? '<a class="secondary-button" href="tel:' + (supplierParties.find(p => p.id === x.product.supplierId)?.phone || "").trim() + '">📞 تماس</a>' : '') + '</span></div>').join("") + '</section>' : "";
+  const recent = d.recent.length ? d.recent.map(t => transactionRow(t)).join("") : '<div class="empty-inline"><span>◌</span><p>هنوز تراکنشی ثبت نشده است.</p></div>';
+  return '<section class="hero"><div><p class="hero-kicker">داشبورد مدیریت هوشمند</p><h2>سای‌سای مراقب کسب‌وکار شماست</h2><p class="muted">' + brief + '</p></div><div class="hero-mark">س</div></section>' +
+    (subscription.status !== "active" ? '<section class="subscription-card"><div><span class="eyebrow">اشتراک سای‌سای</span><h3>برای استفاده از نسخه کامل، اشتراک ماهانه فعال کنید.</h3><p class="muted">بعد از تأیید موفق پرداخت، دسترسی از سمت سرور فعال می‌شود.</p></div><button class="primary-button" data-subscribe>خرید اشتراک ماهانه</button></section>' : "") +
+    lowStockHtml +
+    '<section class="stats-grid">' + stat("فروش امروز", rial(d.salesToday), "primary") + stat("دریافت امروز", rial(d.receiptsToday), "success") +
+    (isProfessionalMode() ? stat("مطالبات", rial(d.receivables), "warning") + stat("موجودی کم", money.format(d.lowStock) + " کالا", "danger") : "") + '</section>' +
+    '<section class="panel"><div class="section-head"><div><h3>🧠 مغز سای‌سای</h3><span class="muted">سای‌سای به‌جای نمایش عدد، تصمیم پیشنهادی می‌دهد.</span></div><strong>' + money.format(insights.length) + ' نکته</strong></div>' +
+    (insightHtml || '<div class="empty-inline"><p>فعلاً نکته مهمی پیدا نشد.</p></div>') + '</section>' +
+    '<section class="section"><div class="section-head"><h3>✈️ امروز چه کار کنم؟</h3><span class="muted">مدیریت هوشمند</span></div><div class="quick-grid">' +
+    '<button class="quick-card" data-action="daily-brief"><b>🧠</b><span>گزارش امروز</span><small>اولویت‌های کسب‌وکار</small></button>' +
+    '<button class="quick-card" data-action="sale"><b>＋</b><span>فروش جدید</span><small>ثبت سریع فاکتور</small></button>' +
+    '<button class="quick-card" data-action="purchase"><b>⇩</b><span>ثبت خرید</span><small>افزایش موجودی</small></button>' +
+    '<button class="quick-card" data-action="receipt"><b>↙</b><span>دریافت وجه</span><small>پیگیری مطالبات</small></button>' +
+    '<button class="quick-card voice-quick-card" id="voice-sale"><b>🎙</b><span>ثبت فروش با صدا</span><small>فارسی صحبت کنید</small></button>' +
+    '<button class="quick-card voice-quick-card" id="voice-query"><b>🔊</b><span>از سای‌سای بپرس</span><small>فروش، قیمت، موجودی</small></button>' +
+    '</div></section>' +
+    '<section class="section panel"><div class="section-head"><h3>آخرین تراکنش‌ها</h3><span class="muted">۵ مورد اخیر</span></div>' + recent + '</section>';
 }
-
 function transactionRow(t: Transaction): string {
   const labels: Record<Transaction["type"], string> = {
     sale: "فروش", purchase: "خرید", receipt: "دریافت", payment: "پرداخت", expense: "هزینه", stockAdjustment: "اصلاح موجودی"
@@ -973,7 +976,7 @@ function partyModal(party?: Party): string {
   return `<div class="modal-backdrop" id="party-modal"><section class="modal"><button class="modal-close" id="party-close">×</button><span class="eyebrow">دفتر اشخاص</span><h2>${party ? "ویرایش شخص" : "افزودن شخص"}</h2>
     <label class="field"><span>نام</span><input id="party-name" placeholder="نام مشتری یا تأمین‌کننده" value="${party?.name || ""}"></label>
     <label class="field"><span>شماره تماس</span><input id="party-phone" inputmode="tel" placeholder="اختیاری" value="${party?.phone || ""}"></label>
-    <label class="field"><span>نوع</span><select id="party-type"><option value="customer" ${party?.type === "customer" ? "selected" : ""}>مشتری</option><option value="supplier" ${party?.type === "supplier" ? "selected" : ""}>تأمین‌کننده</option><option value="both" ${party?.type === "both" ? "selected" : ""}>هر دو</option></select></label>
+    <label class="field"><span>نوع</span><select id="party-type"><option value="customer" ${party?.type === "customer" ? "selected" : ""}>مشتری</option><option value="supplier" ${party?.type === "supplier" ? "selected" : ""}>تأمین‌کننده</option><option value="both" ${party?.type === "both" ? "selected" : ""}>هر دو</option></select></label><label class="field"><span>سطح مشتری</span><select id="party-tier"><option value="auto" ${!party?.tierLocked ? "selected" : ""}>🤖 خودکار</option><option value="regular" ${party?.customerTier === "regular" && party?.tierLocked ? "selected" : ""}>عادی</option><option value="silver" ${party?.customerTier === "silver" && party?.tierLocked ? "selected" : ""}>🥈 نقره‌ای</option><option value="gold" ${party?.customerTier === "gold" && party?.tierLocked ? "selected" : ""}>🥇 طلایی</option></select></label>
     <button class="primary-button wide" id="party-submit">${party ? "ذخیره تغییرات" : "ذخیره شخص"}</button></section></div>`;
 }
 
@@ -1190,6 +1193,10 @@ async function bindActions(): Promise<void> {
       } else if (action === "expense") {
         document.body.insertAdjacentHTML("beforeend", expenseModal());
         bindExpenseModal();
+      } else if (action === "daily-brief") {
+        const [ps, pts, es, prods] = await Promise.all([listParties(), listTransactions(), listExpenses(), listProducts()]);
+        const msg = dailyBrief(await buildBusinessInsights(prods, ps, pts, es)); showToast(msg);
+        if ("speechSynthesis" in window) { const u = new SpeechSynthesisUtterance(msg); u.lang = "fa-IR"; u.rate = 0.9; window.speechSynthesis.cancel(); window.speechSynthesis.speak(u); }
       }
     } catch (e) {
       showToast(e instanceof Error ? e.message : "باز کردن این بخش ناموفق بود");
@@ -1385,7 +1392,7 @@ return receiptCommand ? ("دریافت " + rial(commandAmount) + " از " + comm
       return `موجودی ${product.name} الان ${stock.toLocaleString("fa-IR")} ${product.unit} است.`;
     }
     if (product && /قیمت|چنده|چند است|فروشی|به نظرت|بفروشم|چقدر بزنم/.test(q)) { const tier = party ? getCustomerTier(party.id, transactions) : "regular"; const rec = recommendPrice(product, tier); return `${product.name}: قیمت پیشنهادی ${rial(rec.recommendedPrice)}؛ کف امن فروش ${rial(rec.floorPrice)}. برای مشتری ${party ? party.name + " سطح " + tierLabel(tier) : "عادی"} تا ${rial(rec.maxDiscountAmount)} تخفیف پیشنهاد می‌کنم.`; }
-    if (/فروش|فروخت|فروشم|درآمد|گردش/.test(q) && /امروز|امروزم|الان|تا الان/.test(q)) return `امروز ${rial(dashboard.salesToday)} فروش داشتی.`;
+    if (/امروز چی کار کنم|امروز چه کار کنم|کارهای امروز|گزارش امروز|مراقب کسب و کار/.test(q)) { const msg = dailyBrief(await buildBusinessInsights(products, parties, transactions, await listExpenses())); return msg; }\n    if (/فروش|فروخت|فروشم|درآمد|گردش/.test(q) && /امروز|امروزم|الان|تا الان/.test(q)) return `امروز ${rial(dashboard.salesToday)} فروش داشتی.`;
     if (/فروش|فروخت|درآمد|گردش/.test(q) && /ماه|این ماه|ماه جاری/.test(q)) return `فروش این ماه تا امروز ${rial(monthSales)} بوده است.`;
     if (/اوضاع فروش|وضع فروش|چطور فروختم|خوب فروختم|فروش خوب/.test(q)) return `تا امروز فروش این ماه ${rial(monthSales)} بوده و امروز ${rial(dashboard.salesToday)} فروش داشتی.`;
     if (/دریافت|وصول|پول گرفتم|گرفتم/.test(q) && /امروز|امروزم|الان|تا الان/.test(q)) return `امروز ${rial(dashboard.receiptsToday)} دریافت داشتی.`;
