@@ -29,6 +29,22 @@ function firstNumber(text: string): number {
   return m ? Number(m[0]) : 0;
 }
 
+function moneyNumber(text: string): number {
+  const raw = digits(text).replace(/[٬,،]/g, " ").replace(/\s+/g, " ").trim();
+  const direct = raw.match(/\d+(?:\.\d+)?/);
+  if (direct) return Number(direct[0]);
+
+  const units: Record<string, number> = { هزار: 1_000, هزارتا: 1_000, میلیون: 1_000_000, میلیونی: 1_000_000 };
+  const parts = raw.split(" ");
+  let total = 0;
+  let current = 0;
+  for (const part of parts) {
+    if (/^\d+$/.test(part)) current = Number(part);
+    else if (units[part]) { total += (current || 1) * units[part]; current = 0; }
+  }
+  return total + current;
+}
+
 function parseVoiceSale(transcript: string): VoiceSaleDraft {
   const text = transcript.trim();
   const customer = text.match(/(?:برای|به)\s+([^،,.]+?)(?=\s+(?:یک|دو|سه|چهار|پنج|\d|از|به|با|فروختم|خریده|برد|پرداخت|داد)|[،,.]|$)/i)?.[1]?.trim() || "";
@@ -36,9 +52,9 @@ function parseVoiceSale(transcript: string): VoiceSaleDraft {
   const quantityMatch = text.match(/(?:^|\s)([۰-۹٠-٩\d]+|یک|دو|سه|چهار|پنج|شش|هفت|هشت|نه|ده)\s*(?:تا|عدد|عددِ)/i);
   const quantity = quantityMatch ? firstNumber(quantityMatch[1]) : 1;
   const priceMatch = text.match(/(?:هر\s*(?:کدوم|کدام|دونه|دانه)?\s*|قیمت(?:ش)?\s*|دونه‌ای\s*)([۰-۹٠-٩\d][۰-۹٠-٩\d٬,]*)/i);
-  const unitPrice = priceMatch ? firstNumber(priceMatch[1]) : 0;
+  const unitPrice = priceMatch ? moneyNumber(priceMatch[1]) : 0;
   const paidMatch = text.match(/(?:پرداخت(?:\s*کرد)?|داد|داده|واریز(?:\s*کرد)?)\s*(?:مبلغ\s*)?([۰-۹٠-٩\d][۰-۹٠-٩\d٬,]*)/i);
-  const paid = paidMatch ? firstNumber(paidMatch[1]) : 0;
+  const paid = paidMatch ? moneyNumber(paidMatch[1]) : 0;
   return { transcript: text, customerName: customer, productHint: product, quantity: quantity || 1, unitPrice, paid };
 }
 
