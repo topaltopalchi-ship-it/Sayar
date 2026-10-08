@@ -4,6 +4,7 @@ import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import { Printer } from "@gingersnapsoftware/capacitor-plugin-printer";
 import * as XLSX from "xlsx";
+import html2canvas from "html2canvas";
 import {
   addParty, addProduct, updateProduct, deleteProduct, addSale, addSettlement, addExpense, addStockAdjustment, getDashboard, getStock, updateTransaction, deleteTransaction, updateExpense, deleteExpense,
   listParties, updateParty, deleteParty, listProducts, listTransactions, listExpenses, listMovements, calculateHistoricalCOGS, repairDataIntegrity
@@ -214,32 +215,93 @@ function invoiceModal(t: Transaction, productMap: Map<string, Product>, partyMap
   const party = t.partyId ? partyMap.get(t.partyId) : undefined;
   const rows = t.lines.map((line, i) => {
     const p = productMap.get(line.productId);
-    return `<tr><td>${money.format(i + 1)}</td><td>${p?.name || "کالای حذف‌شده"}</td><td>${money.format(line.quantity)} ${p?.unit || ""}</td><td>${rial(line.unitPrice)}</td><td>${rial(line.discount)}</td><td>${rial(lineTotal(line))}</td></tr>`;
+    return `<tr><td>${money.format(i + 1)}</td><td><strong>${p?.name || "کالای حذف‌شده"}</strong></td><td>${money.format(line.quantity)} ${p?.unit || ""}</td><td>${rial(line.unitPrice)}</td><td>${rial(line.discount)}</td><td><strong>${rial(lineTotal(line))}</strong></td></tr>`;
   }).join("");
   const title = t.type === "purchase" ? "فاکتور خرید" : "فاکتور فروش";
-  return `<div class="modal-backdrop invoice-backdrop" id="invoice-modal"><section class="modal invoice-modal">
-    <button class="modal-close no-print" id="invoice-close">×</button>
-    <div class="invoice-cover">
-      <div><span class="invoice-kicker">سای‌سای · مدیریت مالی و فروش</span><h2>${title}</h2><p>${t.invoiceNumber || "بدون شماره"} · ${dateLabel(t.date)}</p></div>
-      <div class="invoice-logo">سای</div>
-    </div>
-    ${t.type === "sale" && t.amount > t.paid ? '<div class="invoice-unsettled">تسویه نشده</div>' : ''}
-    <div class="invoice-party-card"><div><span>طرف حساب</span><strong>${party?.name || "ثبت نشده"}</strong></div><div><span>تماس</span><strong>${party?.phone || "—"}</strong></div></div>
-    <div class="invoice-section-title">اقلام فاکتور</div>
-    <div class="invoice-table-wrap"><table class="invoice-table"><thead><tr><th>#</th><th>کالا</th><th>مقدار</th><th>قیمت</th><th>تخفیف</th><th>جمع</th></tr></thead><tbody>${rows || '<tr><td colspan="6">بدون ردیف</td></tr>'}</tbody></table></div>
-    <div class="invoice-summary">
-      <div><span>جمع فاکتور</span><b>${rial(t.amount)}</b></div>
-      <div><span>پرداخت‌شده</span><b>${rial(t.paid)}</b></div>
-      <div class="invoice-balance"><span>مانده</span><b>${rial(Math.max(0, t.amount - t.paid))}</b></div>
-    </div>
-    <div class="invoice-signatures">
-      ${getInvoiceBranding().showSlogan && getInvoiceBranding().slogan ? '<img class="invoice-slogan" src="' + getInvoiceBranding().slogan + '" alt="شعار">' : ''}
-      ${getInvoiceBranding().showStamp && getInvoiceBranding().stamp ? '<img class="invoice-stamp" src="' + getInvoiceBranding().stamp + '" alt="مهر">' : ''}
-      ${getInvoiceBranding().showSignature && getInvoiceBranding().signature ? '<img class="invoice-signature" src="' + getInvoiceBranding().signature + '" alt="امضا">' : ''}
-    </div>
-    <div class="invoice-branding no-print"><button class="secondary-button" id="invoice-branding-settings">⚙ امضا، مهر و شعار</button></div>
-    <div class="invoice-actions no-print"><button class="secondary-button" id="invoice-share">ارسال فاکتور</button><button class="primary-button" id="invoice-print">چاپ / ذخیره PDF</button></div>
-  </section></div>`;
+  const branding = getInvoiceBranding();
+  return `<div class="modal-backdrop invoice-backdrop" id="invoice-modal">
+    <section class="modal invoice-modal" role="dialog" aria-modal="true" aria-label="${title}">
+      <button class="modal-close no-print" id="invoice-close" aria-label="بستن">×</button>
+      <header class="invoice-head">
+        <div>
+          <span class="eyebrow">سای‌سای · مدیریت مالی و فروش</span>
+          <h2>${title}</h2>
+          <p>شماره: ${t.invoiceNumber || "بدون شماره"} · ${dateLabel(t.date)}</p>
+        </div>
+        <img class="invoice-brand-logo" src="/icon-192.svg" alt="سای‌سای">
+      </header>
+      ${t.type === "sale" && t.amount > t.paid ? '<div class="invoice-unsettled">تسویه نشده</div>' : ""}
+      <div class="invoice-party">
+        <div><span>طرف حساب</span><strong>${party?.name || "ثبت نشده"}</strong><small>${party?.phone ? "تماس: " + party.phone : "شماره تماس ثبت نشده"}</small></div>
+      </div>
+      <div class="invoice-section-title">اقلام فاکتور</div>
+      <div class="invoice-table-wrap">
+        <table class="invoice-table" aria-label="اقلام فاکتور">
+          <thead><tr><th>#</th><th>کالا</th><th>مقدار</th><th>قیمت واحد</th><th>تخفیف</th><th>جمع</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="6">بدون ردیف</td></tr>'}</tbody>
+        </table>
+      </div>
+      <div class="invoice-summary">
+        <div><span>جمع فاکتور</span><b>${rial(t.amount)}</b></div>
+        <div><span>پرداخت‌شده</span><b>${rial(t.paid)}</b></div>
+        <div class="invoice-balance"><span>مانده</span><b>${rial(Math.max(0, t.amount - t.paid))}</b></div>
+      </div>
+      <div class="invoice-signatures">
+        ${branding.showSlogan && branding.slogan ? '<img class="invoice-slogan" src="' + branding.slogan + '" alt="شعار">' : ""}
+        ${branding.showStamp && branding.stamp ? '<img class="invoice-stamp" src="' + branding.stamp + '" alt="مهر">' : ""}
+        ${branding.showSignature && branding.signature ? '<img class="invoice-signature" src="' + branding.signature + '" alt="امضا">' : ""}
+      </div>
+      <div class="invoice-branding no-print">
+        <button class="secondary-button" id="invoice-branding-settings">⚙ امضا، مهر و شعار</button>
+      </div>
+      <div class="invoice-actions no-print">
+        <button class="secondary-button" id="invoice-share">ارسال فاکتور</button>
+        <button class="primary-button" id="invoice-print">چاپ / ذخیره PDF</button>
+      </div>
+    </section>
+  </div>`;
+}
+
+async function shareInvoiceAsImage(invoiceElement: HTMLElement, title: string, invoiceNumber?: string): Promise<void> {
+  const images = Array.from(invoiceElement.querySelectorAll("img"));
+  await Promise.all(images.map(img => img.complete ? Promise.resolve() : new Promise<void>(resolve => {
+    img.addEventListener("load", () => resolve(), { once: true });
+    img.addEventListener("error", () => resolve(), { once: true });
+  })));
+
+  const canvas = await html2canvas(invoiceElement, {
+    backgroundColor: "#f7fbff",
+    scale: Math.min(2, Math.max(1, window.devicePixelRatio || 1)),
+    useCORS: true,
+    logging: false,
+    ignoreElements: element => element.classList.contains("no-print"),
+  });
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.94);
+  const base64 = dataUrl.split(",")[1];
+  if (!base64) throw new Error("تصویر فاکتور ساخته نشد");
+
+  const safeNumber = (invoiceNumber || String(Date.now())).replace(/[^a-zA-Z0-9_-]/g, "_");
+  const filename = `sai-sai-invoice-${safeNumber}.jpg`;
+
+  if (nativeApp()) {
+    await shareBase64File(filename, base64, title);
+    return;
+  }
+
+  const bytes = Uint8Array.from(atob(base64), char => char.charCodeAt(0));
+  const blob = new Blob([bytes], { type: "image/jpeg" });
+  const file = new File([blob], filename, { type: "image/jpeg" });
+  if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+    await navigator.share({ title, text: "فاکتور سای‌سای", files: [file] });
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast("تصویر فاکتور آماده شد");
 }
 
 async function openInvoice(t: Transaction): Promise<void> {
@@ -266,32 +328,21 @@ async function openInvoice(t: Transaction): Promise<void> {
     }
   });
   document.querySelector("#invoice-share")?.addEventListener("click", async () => {
-    const party = t.partyId ? partyList.find(p => p.id === t.partyId) : undefined;
-    const title = t.type === "purchase" ? "فاکتور خرید" : "فاکتور فروش";
-    const balance = Math.max(0, t.amount - t.paid);
-    const text = [
-      "سای‌سای | " + title,
-      "شماره: " + (t.invoiceNumber || "بدون شماره"),
-      "تاریخ: " + dateLabel(t.date),
-      "طرف حساب: " + (party?.name || "ثبت نشده"),
-      "مبلغ: " + rial(t.amount),
-      "پرداخت‌شده: " + rial(t.paid),
-      "مانده: " + rial(balance)
-    ].join("\n");
+    const title = t.type === "purchase" ? "فاکتور خرید سای‌سای" : "فاکتور فروش سای‌سای";
+    const invoiceElement = invoice.querySelector<HTMLElement>(".invoice-modal");
+    if (!invoiceElement) {
+      showToast("فاکتور برای ارسال آماده نیست");
+      return;
+    }
+    const button = document.querySelector<HTMLButtonElement>("#invoice-share");
+    if (button) { button.disabled = true; button.textContent = "در حال آماده‌سازی…"; }
     try {
-      if (nativeApp()) {
-        await Share.share({ title: title + " سای‌سای", text, dialogTitle: "ارسال فاکتور" });
-      } else if (navigator.share) {
-        await navigator.share({ title: title + " سای‌سای", text });
-      } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(text);
-        showToast("اطلاعات فاکتور کپی شد");
-      } else {
-        showToast("اشتراک‌گذاری در این دستگاه در دسترس نیست");
-      }
+      await shareInvoiceAsImage(invoiceElement, title, t.invoiceNumber);
     } catch (error) {
       if (error instanceof Error && /cancel|abort/i.test(error.name + error.message)) return;
-      showToast("ارسال فاکتور ناموفق بود");
+      showToast("ارسال فاکتور ناموفق بود؛ دوباره تلاش کنید");
+    } finally {
+      if (button) { button.disabled = false; button.textContent = "ارسال فاکتور"; }
     }
   });
   document.querySelector("#invoice-branding-settings")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", invoiceBrandingModal()); bindInvoiceBrandingModal(); });
