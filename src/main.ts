@@ -305,17 +305,15 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
         : await addSale({ date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
       modal.remove();
 
-      // Render the sales list first, then mount the invoice on top of the fresh UI.
-      // This avoids Android WebView repaint/navigation timing issues that could
-      // make a just-created invoice disappear immediately after saving.
-      await render();
-
+      // Open the invoice immediately from the exact saved transaction.
+      // Only then rerender the underlying page, so Android WebView cannot
+      // repaint the page between save and invoice mounting.
       try {
-        const freshSale = (await listTransactions()).find(t => t.id === savedSale.id) || savedSale;
-        await openInvoice(freshSale);
+        await openInvoice(savedSale);
       } catch (error) {
         showToast(error instanceof Error ? `فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود: ${error.message}` : "فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود");
       }
+      await render();
       showToast(`${existing ? "فاکتور ویرایش شد" : "فروش ثبت شد"}؛ مانده ${rial(amount - paidValue)}`);
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت فروش ناموفق بود"); }
   });
@@ -439,10 +437,10 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const defaultTo = formatJalaliInput(localStorage.getItem("sai-sai-report-to") || todayJalaliInput());
   const summary = `<section class="panel report-list"><div class="report-range" role="group" aria-label="بازه گزارش"><div class="report-range-item" role="button" tabindex="0" data-report-range="today">امروز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="week">۷ روز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="month">ماه جاری</div><div class="report-range-item" role="button" tabindex="0" data-report-range="all">همه</div></div><form id="report-range-form" class="report-custom-range">
   <label class="field"><span>از تاریخ شمسی</span>
-    <input id="report-from-date" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" placeholder="۱۴۰۵/۰۷/۱۶" value="${defaultFrom}" aria-label="تاریخ شروع">
+    <input id="report-from-date-v4" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" placeholder="۱۴۰۵/۰۷/۱۶" value="${defaultFrom}" aria-label="تاریخ شروع">
   </label>
   <label class="field"><span>تا تاریخ شمسی</span>
-    <input id="report-to-date" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" placeholder="۱۴۰۵/۰۷/۱۶" value="${defaultTo}" aria-label="تاریخ پایان">
+    <input id="report-to-date-v4" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" placeholder="۱۴۰۵/۰۷/۱۶" value="${defaultTo}" aria-label="تاریخ پایان">
   </label>
   <button type="button" class="primary-button wide" id="report-apply-range">اعمال بازه</button>
 </div><p class="muted">بازه فعال: ${label}</p></section>`;
@@ -624,7 +622,7 @@ function enforceReportDateFormat(input: HTMLInputElement): void {
 
 async function applyReportRange(): Promise<void> {
   const readDateValue = (prefix: "from" | "to"): string => {
-    const input = document.querySelector<HTMLInputElement>(`#report-${prefix}-date`);
+    const input = document.querySelector<HTMLInputElement>(`#report-${prefix}-date-v4`);
     if (!input) return "";
     const raw = input.value
       .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
@@ -824,6 +822,13 @@ async function render(): Promise<void> {
   else if (activeTab === "checks") content = await checksView();
   layout(content, subscription);
   bindReportControls();
+
+  // Direct binding is intentional here: Android WebView can retain the #app
+  // node while replacing its innerHTML, so a fresh listener guarantees the
+  // range button remains actionable on every render.
+  document.querySelector<HTMLButtonElement>("#report-apply-range")?.addEventListener("click", () => {
+    void applyReportRange();
+  });
 
   document.querySelectorAll<HTMLButtonElement>("[data-invoice-id]").forEach(b => b.addEventListener("click", async () => {
     const tx = (await listTransactions()).find(t => t.id === b.dataset.invoiceId);
