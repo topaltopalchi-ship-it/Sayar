@@ -358,9 +358,9 @@ function saleModal(existing?: Transaction): string {
       <button class="modal-close" id="sale-close">×</button><span class="eyebrow">فاکتور فروش</span><h2>${existing ? "ویرایش فروش" : "ثبت فروش"}</h2>
       <label class="field"><span>کالا</span><select id="sale-product">${productOptions}</select></label>
       <div class="form-grid"><label class="field"><span>مقدار</span><input id="sale-quantity" type="text" inputmode="decimal" autocomplete="off" value="${existing?.lines[0]?.quantity ?? 1}"></label>
-      <label class="field"><span>تخفیف</span><input id="sale-discount" type="text" inputmode="numeric" autocomplete="off" value="${existing?.lines[0]?.discount ?? 0}"></label></div>
+      <label class="field"><span>تخفیف (${getCurrencyLabel()})</span><input id="sale-discount" type="text" inputmode="numeric" autocomplete="off" value="${moneyInputValue(existing?.lines[0]?.discount ?? 0)}"></label></div>
       <label class="field"><span>مشتری</span><select id="sale-party"><option value="">بدون انتخاب</option>${partyOptions}</select></label>
-      <label class="field"><span>مبلغ پرداختی</span><input id="sale-paid" type="text" inputmode="numeric" autocomplete="off" value="${existing?.paid ?? 0}"></label><label class="field"><span>دریافت به</span><select id="sale-account"><option value="">بدون انتخاب حساب</option>${accountOptions}</select></label>
+      <label class="field"><span>مبلغ پرداختی (${getCurrencyLabel()})</span><input id="sale-paid" type="text" inputmode="numeric" autocomplete="off" value="${moneyInputValue(existing?.paid ?? 0)}"></label><label class="field"><span>دریافت به</span><select id="sale-account"><option value="">بدون انتخاب حساب</option>${accountOptions}</select></label>
       <div class="sale-summary"><span>مبلغ فاکتور</span><strong id="sale-total">۰ ریال</strong></div>
       <button class="primary-button wide" id="sale-submit">${existing ? "ذخیره تغییرات فاکتور" : "ثبت فاکتور و کاهش موجودی"}</button>
     </section></div>`;
@@ -389,9 +389,9 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
     try {
       const p = products.find(x => x.id === product.value); const qty = numericValue(quantity.value);
       if (!p || qty <= 0) throw new Error("کالا و مقدار فروش را بررسی کنید");
-      const disc = Math.max(0, numericValue(discount.value));
+      const disc = parseMoneyInput(discount.value);
       const amount = Math.max(0, qty * p.salePrice - disc);
-      const paidValue = Math.min(amount, Math.max(0, numericValue(paid.value)));
+      const paidValue = Math.min(amount, parseMoneyInput(paid.value));
       const line: TransactionLine = { productId: p.id, quantity: qty, unitPrice: p.salePrice, discount: disc };
       const savedSale = existing
         ? await updateTransaction(existing.id, { date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue })
@@ -449,7 +449,7 @@ function productModal(product?: Product): string {
   return `<div class="modal-backdrop" id="product-modal"><section class="modal"><button class="modal-close" id="product-close">×</button><span class="eyebrow">کاتالوگ کالا</span><h2>${product ? "ویرایش کالا" : "افزودن کالا"}</h2>
     <label class="field"><span>نام کالا</span><input id="p-name" placeholder="مثلاً برنج ایرانی" value="${product?.name || ""}"></label>
     <div class="form-grid"><label class="field"><span>کد کالا</span><input id="p-sku" placeholder="اختیاری" value="${product?.sku || ""}"></label><label class="field"><span>واحد</span><select id="p-unit">${["عدد","کیلوگرم","گرم","لیتر","متر","بسته"].map(u => `<option ${product?.unit === u ? "selected" : ""}>${u}</option>`).join("")}</select></label></div>
-    <div class="form-grid"><label class="field"><span>قیمت خرید</span><input id="p-buy" type="number" min="0" value="${product?.purchasePrice ?? 0}"></label><label class="field"><span>قیمت فروش</span><input id="p-sale" type="number" min="0" value="${product?.salePrice ?? 0}"></label></div>
+    <div class="form-grid"><label class="field"><span>قیمت خرید (${getCurrencyLabel()})</span><input id="p-buy" type="number" min="0" value="${moneyInputValue(product?.purchasePrice ?? 0)}"></label><label class="field"><span>قیمت فروش (${getCurrencyLabel()})</span><input id="p-sale" type="number" min="0" value="${moneyInputValue(product?.salePrice ?? 0)}"></label></div>
     <label class="field"><span>حداقل موجودی (هشدار)</span><input id="p-low" type="number" min="0" step="0.001" value="${product?.lowStock ?? 5}"></label>
     ${product ? "" : '<label class="field"><span>موجودی اولیه</span><input id="p-initial-stock" type="text" inputmode="decimal" autocomplete="off" value="0" placeholder="مثلاً 20"></label>'}
     <button class="primary-button wide" id="product-submit">${product ? "ذخیره تغییرات" : "ذخیره کالا"}</button></section></div>`;
@@ -467,8 +467,8 @@ function bindProductModal(): void {
         name,
         sku: modal.querySelector<HTMLInputElement>("#p-sku")!.value.trim(),
         unit,
-        purchasePrice: Math.max(0, Number(modal.querySelector<HTMLInputElement>("#p-buy")!.value) || 0),
-        salePrice: Math.max(0, Number(modal.querySelector<HTMLInputElement>("#p-sale")!.value) || 0),
+        purchasePrice: parseMoneyInput(modal.querySelector<HTMLInputElement>("#p-buy")!.value),
+        salePrice: parseMoneyInput(modal.querySelector<HTMLInputElement>("#p-sale")!.value),
         lowStock: Math.max(0, Number(modal.querySelector<HTMLInputElement>("#p-low")!.value) || 0),
       };
       const editId = modal.dataset.editId;
@@ -579,7 +579,7 @@ function reportExportButtons(): string {
 function expenseModal(existing?: import("./domain").Expense): string {
   return `<div class="modal-backdrop" id="expense-modal"><section class="modal"><button class="modal-close" id="expense-close">×</button><span class="eyebrow">هزینه‌های جاری</span><h2>${existing ? "ویرایش هزینه" : "ثبت هزینه"}</h2>
     <label class="field"><span>عنوان هزینه</span><input id="expense-title" placeholder="مثلاً حمل‌ونقل، اجاره، حقوق" value="${existing?.title || ""}"></label>
-    <label class="field"><span>مبلغ</span><input id="expense-amount" type="number" min="1" value="${existing?.amount ?? 0}"></label><label class="field"><span>پرداخت از</span><select id="expense-account"><option value="">بدون انتخاب حساب</option>${(window as typeof window & { __saiAccounts?: {id:string;name:string}[] }).__saiAccounts?.map(a => `<option value="${a.id}">${a.name}</option>`).join("") || ""}</select>
+    <label class="field"><span>مبلغ (${getCurrencyLabel()})</span><input id="expense-amount" type="number" min="1" value="${moneyInputValue(existing?.amount ?? 0)}"></label><label class="field"><span>پرداخت از</span><select id="expense-account"><option value="">بدون انتخاب حساب</option>${(window as typeof window & { __saiAccounts?: {id:string;name:string}[] }).__saiAccounts?.map(a => `<option value="${a.id}">${a.name}</option>`).join("") || ""}</select>
     <label class="field"><span>شرح</span><input id="expense-desc" placeholder="اختیاری" value="${existing?.description || ""}"></label>
     <button class="primary-button wide" id="expense-submit">${existing ? "ذخیره تغییرات" : "ثبت هزینه"}</button></section></div>`;
 }
@@ -592,7 +592,7 @@ function bindExpenseModal(): void {
   modal.querySelector("#expense-submit")?.addEventListener("click", async () => {
     try {
       const title = modal.querySelector<HTMLInputElement>("#expense-title")!.value.trim();
-      const amount = Number(modal.querySelector<HTMLInputElement>("#expense-amount")!.value);
+      const amount = parseMoneyInput(modal.querySelector<HTMLInputElement>("#expense-amount")!.value);
       if (!title || amount <= 0) throw new Error("عنوان و مبلغ هزینه را وارد کنید");
       const expenseValues = { date: Date.now(), title, amount, accountId: modal.querySelector<HTMLSelectElement>("#expense-account")?.value || undefined, description: modal.querySelector<HTMLInputElement>("#expense-desc")!.value.trim() };
       const editId = modal.dataset.editId;
@@ -613,7 +613,7 @@ function settlementModal(type: "receipt" | "payment", existing?: Transaction): s
   const options = parties.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
   return `<div class="modal-backdrop" id="settlement-modal"><section class="modal"><button class="modal-close" id="settlement-close">×</button><span class="eyebrow">حساب طرف‌حساب</span><h2>${title}</h2>
     <label class="field"><span>شخص</span><select id="settlement-party"><option value="">انتخاب کنید</option>${options}</select></label>
-    <label class="field"><span>مبلغ</span><input id="settlement-amount" type="number" min="1" value="${existing?.amount ?? 0}"></label><label class="field"><span>${type === "receipt" ? "دریافت به" : "پرداخت از"}</span><select id="settlement-account"><option value="">بدون انتخاب حساب</option>${(window as typeof window & { __saiAccounts?: {id:string;name:string}[] }).__saiAccounts?.map(a => `<option value="${a.id}">${a.name}</option>`).join("") || ""}</select></label>
+    <label class="field"><span>مبلغ (${getCurrencyLabel()})</span><input id="settlement-amount" type="number" min="1" value="${moneyInputValue(existing?.amount ?? 0)}"></label><label class="field"><span>${type === "receipt" ? "دریافت به" : "پرداخت از"}</span><select id="settlement-account"><option value="">بدون انتخاب حساب</option>${(window as typeof window & { __saiAccounts?: {id:string;name:string}[] }).__saiAccounts?.map(a => `<option value="${a.id}">${a.name}</option>`).join("") || ""}</select></label>
     <label class="field"><span>شرح</span><input id="settlement-description" placeholder="${title} بابت حساب" value="${existing?.description || ""}"></label>
     <button class="primary-button wide" id="settlement-submit">ثبت ${type === "receipt" ? "دریافت" : "پرداخت"}</button></section></div>`;
 }
@@ -629,7 +629,7 @@ async function openSettlement(type: "receipt" | "payment", existing?: Transactio
   modal.querySelector("#settlement-submit")?.addEventListener("click", async () => {
     try {
       const partyId = modal.querySelector<HTMLSelectElement>("#settlement-party")!.value;
-      const amount = Number(modal.querySelector<HTMLInputElement>("#settlement-amount")!.value);
+      const amount = parseMoneyInput(modal.querySelector<HTMLInputElement>("#settlement-amount")!.value);
       if (!partyId || amount <= 0) throw new Error("شخص و مبلغ را وارد کنید");
       const accountId = modal.querySelector<HTMLSelectElement>("#settlement-account")!.value || undefined;
       const description = modal.querySelector<HTMLInputElement>("#settlement-description")!.value.trim() || (type === "receipt" ? "دریافت وجه" : "پرداخت وجه"); if (modal.dataset.editId) await updateTransaction(modal.dataset.editId, { date: Date.now(), partyId, accountId, description, lines: [], paid: amount }); else await addSettlement({ type, date: Date.now(), partyId, accountId, amount, description });
