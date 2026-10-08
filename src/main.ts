@@ -35,6 +35,17 @@ function numericValue(value: string | number | undefined | null): number {
   const n = Number(normalized);
   return Number.isFinite(n) ? n : 0;
 }
+
+function signedNumericValue(value: string | number | undefined | null): number {
+  const normalized = String(value ?? "")
+    .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+    .replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+    .replace(/[٬,]/g, "")
+    .trim()
+    .replace(/(?!^)-/g, "");
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : 0;
+}
 const dateTime = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
   year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit"
 });
@@ -366,7 +377,7 @@ function bindAdjustmentModal(): void {
   modal.querySelector("#adjust-submit")?.addEventListener("click", async () => {
     try {
       const productId = modal.querySelector<HTMLSelectElement>("#adjust-product")!.value;
-      const quantity = numericValue(modal.querySelector<HTMLInputElement>("#adjust-qty")!.value);
+      const quantity = signedNumericValue(modal.querySelector<HTMLInputElement>("#adjust-qty")!.value);
       await addStockAdjustment({ date: Date.now(), productId, quantity, description: modal.querySelector<HTMLInputElement>("#adjust-desc")!.value.trim() || "اصلاح موجودی" });
       modal.remove(); showToast("اصلاح موجودی ثبت شد"); await render();
     } catch (e) { showToast(e instanceof Error ? e.message : "اصلاح موجودی ناموفق بود"); }
