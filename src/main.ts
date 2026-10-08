@@ -889,7 +889,6 @@ async function render(): Promise<void> {
   });
   document.querySelectorAll<HTMLElement>("[data-settlement-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.settlementEdit); if(t && (t.type==="receipt"||t.type==="payment")) await openSettlement(t.type,t); }));
   document.querySelectorAll<HTMLElement>("[data-settlement-delete]").forEach(b => b.addEventListener("click", async () => { const id=b.dataset.settlementDelete||""; if(!id||!confirm("این دریافت/پرداخت حذف شود؟")) return; try { await deleteTransaction(id); showToast("ثبت حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف ناموفق بود"); } }));
-  document.querySelector("#report-csv")?.addEventListener("click", async () => reportExcelCsv(await listTransactions()));
   document.querySelectorAll<HTMLElement>("[data-expense-edit]").forEach(b => b.addEventListener("click", async () => {
     const e=(await listExpenses()).find(x=>x.id===b.dataset.expenseEdit); if(!e) return;
     (window as typeof window & { __saiAccounts?: unknown[] }).__saiAccounts=await listAccounts();
