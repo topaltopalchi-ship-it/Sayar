@@ -1,5 +1,5 @@
 import { addCheck, listChecks, updateCheck, deleteCheck, clearCheck, listAccounts, listParties } from "./db";
-import { formatMoney } from "./settings";
+import { formatMoney, getCurrencyLabel, moneyInputValue, parseMoneyInput } from "./settings";
 import type { Check, CheckDirection, CheckStatus } from "./domain";
 
 const rial = (v: number) => formatMoney(v);
@@ -30,7 +30,7 @@ export function checkModal(direction: CheckDirection, parties: Array<{id:string;
   <label class="field"><span>نام صادرکننده / صاحب چک</span><input id="check-issuer" value="${existing?.issuerName || ""}"></label>
   <label class="field"><span>طرف حساب</span><select id="check-party"><option value="">بدون انتخاب</option>${parties.map(p => `<option value="${p.id}" ${option(p.id, existing?.partyId)}>${p.name}</option>`).join("")}</select></label>
   <label class="field"><span>حساب مالی</span><select id="check-account"><option value="">بدون انتخاب</option>${accounts.map(a => `<option value="${a.id}" ${option(a.id, existing?.accountId)}>${a.name}</option>`).join("")}</select></label>
-  <label class="field"><span>مبلغ</span><input id="check-amount" type="number" min="1" value="${existing?.amount ?? ""}"></label>
+  <label class="field"><span>مبلغ (${getCurrencyLabel()})</span><input id="check-amount" type="number" min="1" value="${moneyInputValue(existing?.amount ?? 0)}"></label>
   <label class="field"><span>تاریخ صدور شمسی</span><input id="check-issue" placeholder="۱۴۰۵/۰۱/۰۱" value="${j(existing?.issueDate)}"></label>
   <label class="field"><span>تاریخ سررسید شمسی</span><input id="check-due" placeholder="۱۴۰۵/۰۲/۰۱" value="${j(existing?.dueDate)}"></label>
   <label class="field"><span>شرح</span><input id="check-description" placeholder="توضیحات اختیاری" value="${existing?.description || ""}"></label>
@@ -51,7 +51,7 @@ export async function bindCheckModal(modal: HTMLElement, direction: CheckDirecti
     try {
       const issue=jalaliDate((modal.querySelector<HTMLInputElement>("#check-issue")?.value||"").trim());
       const due=jalaliDate((modal.querySelector<HTMLInputElement>("#check-due")?.value||"").trim());
-      const amount=Math.round(Number(modal.querySelector<HTMLInputElement>("#check-amount")?.value||0));
+      const amount=parseMoneyInput(modal.querySelector<HTMLInputElement>("#check-amount")?.value||0);
       if(!issue||!due||due<issue||amount<=0) throw new Error("مبلغ و تاریخ‌های چک را بررسی کنید");
       const values: Omit<Check, "id" | "createdAt"> = {direction,number:(modal.querySelector<HTMLInputElement>("#check-number")?.value||"").trim(),bank:(modal.querySelector<HTMLInputElement>("#check-bank")?.value||"").trim(),issuerName:(modal.querySelector<HTMLInputElement>("#check-issuer")?.value||"").trim(),amount,issueDate:issue,dueDate:due,status:"pending",partyId:(modal.querySelector<HTMLSelectElement>("#check-party")?.value||undefined),accountId:(modal.querySelector<HTMLSelectElement>("#check-account")?.value||undefined),description:(modal.querySelector<HTMLInputElement>("#check-description")?.value||"").trim()};
       const editId = modal.dataset.editId;
