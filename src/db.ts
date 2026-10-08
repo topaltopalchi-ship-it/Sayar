@@ -113,7 +113,7 @@ export async function listOrders(): Promise<Order[]> {
 }
 
 export async function addOrder(input: Omit<Order, "id" | "createdAt" | "status">): Promise<Order> {
-  if (!input.partyId) throw new Error("انتخاب مشتری برای سفارش الزامی است");
+  if (!input.customerName?.trim() && !input.partyId) throw new Error("نام مشتری برای سفارش الزامی است");
   if (!input.productId) throw new Error("انتخاب کالا الزامی است");
   if (!Number.isFinite(input.quantity) || input.quantity <= 0) throw new Error("مقدار سفارش باید بیشتر از صفر باشد");
   if (!Number.isFinite(input.unitPrice) || input.unitPrice < 0) throw new Error("قیمت سفارش معتبر نیست");
@@ -124,7 +124,7 @@ export async function addOrder(input: Omit<Order, "id" | "createdAt" | "status">
 }
 
 export async function updateOrder(order: Order): Promise<void> {
-  if (!order.partyId || !order.productId || order.quantity <= 0 || order.deliveryDate <= 0) throw new Error("اطلاعات سفارش کامل نیست");
+  if ((!order.customerName?.trim() && !order.partyId) || !order.productId || order.quantity <= 0 || order.deliveryDate <= 0) throw new Error("اطلاعات سفارش کامل نیست");
   await put("orders", order);
 }
 
@@ -278,7 +278,7 @@ export async function addExpense(input: Omit<Expense, "id">): Promise<Expense> {
 }
 
 export async function updateTransaction(id: string, input: {
-  date: number; partyId?: string; accountId?: string; description: string; lines: Transaction["lines"]; paid: number;
+  date: number; partyId?: string; customerName?: string; accountId?: string; description: string; lines: Transaction["lines"]; paid: number;
 }): Promise<Transaction> {
   const current = (await listTransactions()).find(t => t.id === id);
   if (!current) throw new Error("تراکنش پیدا نشد");
@@ -294,7 +294,7 @@ export async function updateTransaction(id: string, input: {
     }
   }
   const amount = current.type === "receipt" || current.type === "payment" ? Math.max(0, Math.round(input.paid)) : transactionTotal(input.lines);
-  const updated: Transaction = { ...current, date: input.date, partyId: input.partyId, accountId: input.accountId, description: input.description, lines: input.lines, paid: Math.max(0, input.paid), amount };
+  const updated: Transaction = { ...current, date: input.date, partyId: input.partyId, customerName: input.customerName?.trim() || undefined, accountId: input.accountId, description: input.description, lines: input.lines, paid: Math.max(0, input.paid), amount };
   if (updated.type === "sale") updated.costOfGoods = calculateHistoricalCOGS((await listTransactions()).filter(t => t.id !== id).concat(updated), products).get(id) ?? 0;
   const entries = await listAccountEntries();
   const db = await openDb();
