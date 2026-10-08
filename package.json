@@ -21,7 +21,7 @@
     "@capacitor/core": "^7.4.3",
     "@capacitor/android": "^7.4.3",
     "@capacitor/filesystem": "^7.1.9",
-    "@capacitor/share": "^7.1.2",
+    "@capacitor/share": "^7.0.4",
     "@gingersnapsoftware/capacitor-plugin-printer": "^0.0.15",
     "xlsx": "^0.20.3"
   }
