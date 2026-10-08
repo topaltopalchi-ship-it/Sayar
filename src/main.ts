@@ -411,8 +411,8 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const defaultFrom = toPersianDigits(localStorage.getItem("sai-sai-report-from") || todayJalaliInput());
   const defaultTo = toPersianDigits(localStorage.getItem("sai-sai-report-to") || todayJalaliInput());
   const summary = `<section class="panel report-list"><div class="report-range"><button data-report-range="today">امروز</button><button data-report-range="week">۷ روز</button><button data-report-range="month">ماه جاری</button><button data-report-range="all">همه</button></div><div class="report-custom-range">
-  <label class="field"><span>از تاریخ شمسی</span><div class="report-date-input"><input id="report-from-date" type="text" inputmode="text" dir="ltr" autocomplete="off" maxlength="10" placeholder="۱۴۰۵/۰۸/۰۷" value="${defaultFrom}"><button type="button" class="report-slash" data-date-slash="report-from-date">/</button></div></label>
-  <label class="field"><span>تا تاریخ شمسی</span><div class="report-date-input"><input id="report-to-date" type="text" inputmode="text" dir="ltr" autocomplete="off" maxlength="10" placeholder="۱۴۰۵/۰۸/۰۷" value="${defaultTo}"><button type="button" class="report-slash" data-date-slash="report-to-date">/</button></div></label>
+  <label class="field"><span>از تاریخ شمسی</span><div class="report-date-input"><input id="report-from-date" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" placeholder="۱۴۰۵/۰۸/۰۷" value="${defaultFrom}" style="color:#111827!important;background:#ffffff!important;text-align:center!important;font-size:17px!important;font-weight:700!important;"><button type="button" class="report-slash" data-date-slash="report-from-date" style="color:#ffffff!important;background:#162238!important;">/</button></div></label>
+  <label class="field"><span>تا تاریخ شمسی</span><div class="report-date-input"><input id="report-to-date" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" placeholder="۱۴۰۵/۰۸/۰۷" value="${defaultTo}" style="color:#111827!important;background:#ffffff!important;text-align:center!important;font-size:17px!important;font-weight:700!important;"><button type="button" class="report-slash" data-date-slash="report-to-date" style="color:#ffffff!important;background:#162238!important;">/</button></div></label>
   <button class="primary-button wide" id="report-apply-range">اعمال بازه</button>
 </div><p class="muted">بازه فعال: ${label}</p></section>`;
   const stats = `<section class="stats-grid">${stat("فروش",rial(sales),"primary")}${stat("بهای تمام‌شده",rial(cost),"warning")}${stat("سود ناخالص",rial(gross),"success")}${stat("سود خالص",rial(net),"success")}</section>`;
@@ -741,8 +741,9 @@ async function render(): Promise<void> {
   }));
   document.querySelector("#more-refresh")?.addEventListener("click", () => render());
   window.addEventListener("sai-sai-refresh", () => { void render(); });
-  document.addEventListener("input", (event: Event) => {
-    const input = (event.target as HTMLElement).closest<HTMLInputElement>("#report-from-date, #report-to-date");
+  // Date inputs are handled by the persistent #app event delegation so they keep working after every render.
+  root.addEventListener("input", event => {
+    const input = (event.target as HTMLElement).closest<HTMLInputElement>("[data-jalali-input]");
     if (!input) return;
     const pos = input.selectionStart ?? input.value.length;
     const beforeRaw = input.value.slice(0, pos);
@@ -754,8 +755,9 @@ async function render(): Promise<void> {
       input.setSelectionRange(caret, caret);
     }
   });
-  document.addEventListener("keydown", (event: KeyboardEvent) => {
-    if ((event.target as HTMLElement).closest<HTMLInputElement>("#report-from-date, #report-to-date") && event.key === "Enter") {
+  root.addEventListener("keydown", event => {
+    const target = event.target as HTMLElement;
+    if (target.closest<HTMLInputElement>("[data-jalali-input]") && event.key === "Enter") {
       event.preventDefault();
       document.querySelector<HTMLElement>("#report-apply-range")?.click();
     }
