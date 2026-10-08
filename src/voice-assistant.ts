@@ -79,6 +79,8 @@ export type VoiceProductDraft = {
   lowStock: number;
 };
 
+function escapeHtml(value: string): string { return value.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
 function spokenMoney(text: string): number {
   const direct = moneyNumber(text);
   if (direct) return direct;
@@ -139,8 +141,12 @@ export function bindVoiceProductAssistant(onConfirm: (draft: VoiceProductDraft) 
         modal.innerHTML='<section class="modal" role="dialog" aria-modal="true"><button class="modal-close" id="voice-product-close">×</button><span class="eyebrow">ورود گروهی کالا</span><h2>بررسی کالاها</h2><p class="muted">همه کالاهای تشخیص‌داده‌شده را قبل از ثبت بررسی کنید.</p><div id="vp-many"></div><div class="form-actions"><button class="secondary-button" id="vp-cancel">لغو</button><button class="primary-button" id="vp-confirm">تأیید و ثبت همه</button></div></section>';
         document.body.appendChild(modal);
         const list=modal.querySelector("#vp-many")!;
-        list.innerHTML=drafts.map((d,i)=>'<div class="voice-product-item"><strong>'+String(i+1)+'. '+(d.name||"بدون نام")+'</strong><small>موجودی: '+d.initialStock+' · خرید: '+(d.purchasePrice?d.purchasePrice.toLocaleString("fa-IR"):"—")+' · فروش: '+(d.salePrice?d.salePrice.toLocaleString("fa-IR"):"—")+'</small></div>').join("");
-        modal.querySelector("#voice-product-close")?.addEventListener("click",()=>modal.remove()); modal.querySelector("#vp-cancel")?.addEventListener("click",()=>modal.remove()); modal.querySelector("#vp-confirm")?.addEventListener("click",async()=>{ modal.remove(); if(onConfirmMany) await onConfirmMany(drafts); else for(const d of drafts) await onConfirm(d); });
+        list.innerHTML=drafts.map((d,i)=>'<div class="voice-product-item"><div class="form-grid"><label class="field"><span>نام کالا '+String(i+1)+'</span><input data-vp-field="name" data-vp-index="'+i+'" value="'+escapeHtml(d.name)+'"></label><label class="field"><span>کد کالا</span><input data-vp-field="sku" data-vp-index="'+i+'" value="'+escapeHtml(d.sku)+'"></label><label class="field"><span>موجودی اولیه</span><input type="number" data-vp-field="initialStock" data-vp-index="'+i+'" value="'+d.initialStock+'"></label><label class="field"><span>قیمت خرید</span><input type="number" data-vp-field="purchasePrice" data-vp-index="'+i+'" value="'+d.purchasePrice+'"></label><label class="field"><span>قیمت فروش</span><input type="number" data-vp-field="salePrice" data-vp-index="'+i+'" value="'+d.salePrice+'"></label><label class="field"><span>حداقل موجودی</span><input type="number" data-vp-field="lowStock" data-vp-index="'+i+'" value="'+d.lowStock+'"></label></div><small>واحد: '+d.unit+'</small></div>').join("");
+        modal.querySelector("#voice-product-close")?.addEventListener("click",()=>modal.remove()); modal.querySelector("#vp-cancel")?.addEventListener("click",()=>modal.remove()); modal.querySelector("#vp-confirm")?.addEventListener("click",async()=>{
+          modal.querySelectorAll<HTMLInputElement>("[data-vp-field]").forEach(input=>{ const i=Number(input.dataset.vpIndex); const field=input.dataset.vpField as keyof VoiceProductDraft; if(field==="name"||field==="sku") (drafts[i] as any)[field]=input.value.trim(); else (drafts[i] as any)[field]=Number(input.value)||0; });
+          const invalid=drafts.find(d=>!d.name); if(invalid){ notify("نام یکی از کالاها خالی است"); return; }
+          modal.remove(); if(onConfirmMany) await onConfirmMany(drafts); else for(const d of drafts) await onConfirm(d);
+        });
         return;
       }
       modal.innerHTML='<section class="modal" role="dialog" aria-modal="true"><button class="modal-close" id="voice-product-close">×</button><span class="eyebrow">ثبت کالا با صدا</span><h2>بررسی اطلاعات کالا</h2><p class="muted">اطلاعات تشخیص‌داده‌شده را قبل از ثبت بررسی کنید.</p><div class="voice-transcript"><span>متن تشخیص‌داده‌شده</span><b id="vp-transcript"></b></div><div class="voice-draft-grid"><div><small>نام کالا</small><strong id="vp-name"></strong></div><div><small>کد کالا</small><strong id="vp-sku"></strong></div><div><small>واحد</small><strong id="vp-unit"></strong></div><div><small>موجودی اولیه</small><strong id="vp-stock"></strong></div><div><small>قیمت خرید</small><strong id="vp-buy"></strong></div><div><small>قیمت فروش</small><strong id="vp-sale"></strong></div><div><small>حداقل موجودی</small><strong id="vp-low"></strong></div></div><div class="form-actions"><button class="secondary-button" id="vp-cancel">لغو</button><button class="primary-button" id="vp-confirm">ثبت کالا</button></div></section>';
