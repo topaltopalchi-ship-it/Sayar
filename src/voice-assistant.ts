@@ -36,7 +36,7 @@ function moneyNumber(text: string): number {
   const direct = raw.match(/\d+(?:\.\d+)?/);
   if (direct) return Number(direct[0]);
 
-  const units: Record<string, number> = { هزار: 1_000, هزارتا: 1_000, میلیون: 1_000_000, میلیونی: 1_000_000 };
+  const units: Record<string, number> = { هزار: 1_000, هزارتا: 1_000, میلیون: 1_000_000, میلیونی: 1_000_000, میلیارد: 1_000_000_000, میلیاردی: 1_000_000_000 };
   const parts = raw.split(" ");
   let total = 0;
   let current = 0;
