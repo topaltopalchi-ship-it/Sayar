@@ -715,6 +715,35 @@ async function bindActions(): Promise<void> {
 function bindReportControls(): void {
   if (activeTab !== "reports") return;
 
+  const normalizeCombined = (input: HTMLInputElement) => {
+    const raw = input.value
+      .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+      .replace(/[^0-9]/g, "")
+      .slice(0, 8);
+    let formatted = raw;
+    if (raw.length > 4) formatted = `${raw.slice(0, 4)}/${raw.slice(4, 6)}`;
+    if (raw.length > 6) formatted = `${raw.slice(0, 4)}/${raw.slice(4, 6)}/${raw.slice(6, 8)}`;
+    input.value = formatted;
+  };
+
+  document.querySelectorAll<HTMLInputElement>("[data-jalali-input]").forEach(input => {
+    const normalize = () => normalizeCombined(input);
+    normalize();
+    window.requestAnimationFrame(normalize);
+    window.setTimeout(normalize, 0);
+    let attempts = 0;
+    const timer = window.setInterval(() => {
+      normalize();
+      attempts += 1;
+      if (attempts >= 20) window.clearInterval(timer);
+    }, 50);
+    input.addEventListener("input", normalize);
+    input.addEventListener("change", normalize);
+    input.addEventListener("blur", normalize);
+    input.addEventListener("focus", normalize);
+    input.addEventListener("click", normalize);
+  });
+
   document.querySelectorAll<HTMLInputElement>("[data-report-date-part]").forEach(input => {
     const normalize = () => {
       input.value = input.value
