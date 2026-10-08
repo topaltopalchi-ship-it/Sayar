@@ -17,7 +17,6 @@ import { formatMoney, getCurrencyUnit, setCurrencyUnit, getCurrencyLabel, parseM
 import { openPurchaseModal } from "./purchase-ui";
 import { accountModal, accountLedgerModal, accountsView, bindAccountLedger, bindAccountModal, bindTransferModal, transferModal } from "./accounts-ui";
 import { getAccountBalances, listAccounts } from "./db";
-import { bindOrderControls, ordersView } from "./orders-ui";
 import { checksView, checkModal, bindCheckModal, bindCheckStatuses, bindCheckActions } from "./checks-ui";
 import { jalaliToGregorianDate, todayJalaliInput, formatJalaliInput, toPersianDigits } from "./calendar";
 
@@ -1130,12 +1129,8 @@ async function render(): Promise<void> {
   layout(content, subscription);
   bindReportControls();
 
-  if (activeTab === "orders") {
-    void Promise.all([listProducts(), listParties()]).then(([orderProducts, orderParties]) => {
-      bindOrderControls(orderProducts, orderParties, rial, async () => { await render(); }, showToast);
-    });
-  }
-  if (activeTab === "orders") bindOrderActions();\n  document.querySelector("#new-sale")?.addEventListener("click", () => void openSaleModal());
+  if (activeTab === "orders") bindOrderActions();
+  document.querySelector("#new-sale")?.addEventListener("click", () => void openSaleModal());
   document.querySelectorAll<HTMLElement>("[data-sale-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.saleEdit); if(t) await openSaleModal(t); }));
   document.querySelectorAll<HTMLElement>("[data-sale-delete]").forEach(b => b.addEventListener("click", async () => { const id=b.dataset.saleDelete||""; if(!id||!confirm("این فاکتور فروش حذف شود؟")) return; try { await deleteTransaction(id); showToast("فاکتور حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف فاکتور ناموفق بود"); } }));
   document.querySelectorAll<HTMLElement>("[data-purchase-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.purchaseEdit); if(!t) return; products=await listProducts(); parties=await listParties(); openPurchaseModal(products, parties, rial, async m=>{showToast(m);await render();}, t); }));
