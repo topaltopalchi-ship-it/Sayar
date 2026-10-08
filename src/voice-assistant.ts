@@ -1,4 +1,16 @@
 import { SpeechRecognition } from "@capacitor-community/speech-recognition";
+import { Capacitor } from "@capacitor/core";
+import { TextToSpeech } from "@capacitor-community/text-to-speech";
+
+async function prepareSpeechRecognition(): Promise<void> {
+  try {
+    const listening = await SpeechRecognition.isListening();
+    if (listening.listening) {
+      await SpeechRecognition.stop().catch(() => undefined);
+      await new Promise(resolve => setTimeout(resolve, 180));
+    }
+  } catch { /* recognizer may already be idle */ }
+}
 
 export type VoiceSaleItem = { productHint: string; quantity: number; unitPrice: number };
 export type VoiceSaleDraft = {
@@ -203,13 +215,27 @@ export function bindVoiceProductAssistant(onConfirm: (draft: VoiceProductDraft) 
 }
 
 export function speakSaiSai(message: string): void {
-  if (!("speechSynthesis" in window) || !message.trim()) return;
-  const utterance = new SpeechSynthesisUtterance(message);
-  utterance.lang = "fa-IR";
-  utterance.rate = 0.92;
-  utterance.pitch = 1;
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(utterance);
+  if (!message.trim()) return;
+  void (async () => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const supported = await TextToSpeech.isLanguageSupported({ lang: "fa-IR" }).catch(() => ({ supported: false }));
+        const lang = supported.supported ? "fa-IR" : "fa";
+        await TextToSpeech.stop().catch(() => undefined);
+        await TextToSpeech.speak({ text: message, lang, rate: 0.92, pitch: 1, volume: 1, queueStrategy: 0 });
+        return;
+      } catch { /* fall back to WebView TTS below */ }
+    }
+    if (!("speechSynthesis" in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(message);
+      utterance.lang = "fa-IR";
+      utterance.rate = 0.92;
+      utterance.pitch = 1;
+      window.speechSynthesis.speak(utterance);
+    } catch { /* speech output is optional */ }
+  })();
 }
 
 function showVoiceModal(html: string): HTMLElement {
@@ -309,7 +335,7 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
         popup: false,
         prompt: "سؤال خود را از سای‌سای بپرسید"
       });
-      const question = result.matches?.[0]?.trim() || "";
+      await SpeechRecognition.stop().catch(() => undefined);\n      const question = result.matches?.[0]?.trim() || "";
       if (!question) throw new Error("سؤالی تشخیص داده نشد");
       const answer = await onAnswer(question);
       speakSaiSai(answer);
