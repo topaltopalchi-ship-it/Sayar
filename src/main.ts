@@ -176,7 +176,7 @@ function pageHead(eyebrow: string, title: string, text: string, action = ""): st
 
 async function dashboardView(subscription: Subscription): Promise<string> {
   const d = await getDashboard();
-  const lowStock = await getLowStockItems();
+  const lowStock = await getLowStockItems();\n  const lowStockHtml = lowStock.length ? '<section class="panel low-stock-alert-panel"><div class="section-head"><div><h3>⚠️ کالاهای نیازمند تأمین</h3><span class="muted">موجودی به حد هشدار رسیده است</span></div><strong>' + money.format(lowStock.length) + ' کالا</strong></div>' + lowStock.map(x => '<div class="person-row"><div class="person-avatar">!</div><div><strong>' + x.product.name + '</strong><small>حد هشدار: ' + money.format(x.product.lowStock) + ' ' + x.product.unit + '</small></div><b class="debt-amount">' + money.format(x.stock) + ' ' + x.product.unit + '</b><button type="button" class="secondary-button supply-item" data-supply-product="' + x.product.id + '">تأمین کالا</button></div>').join("") + '</section>' : "";
   const recent = d.recent.length ? d.recent.map(t => transactionRow(t)).join("") :
     `<div class="empty-inline"><span>◌</span><p>هنوز تراکنشی ثبت نشده است.</p></div>`;
 
@@ -1275,6 +1275,11 @@ async function render(): Promise<void> {
   document.querySelectorAll<HTMLElement>("[data-sale-delete]").forEach(b => b.addEventListener("click", async () => { const id=b.dataset.saleDelete||""; if(!id||!confirm("این فاکتور فروش حذف شود؟")) return; try { await deleteTransaction(id); showToast("فاکتور حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف فاکتور ناموفق بود"); } }));
   document.querySelectorAll<HTMLElement>("[data-purchase-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.purchaseEdit); if(!t) return; products=await listProducts(); parties=await listParties(); openPurchaseModal(products, parties, rial, async m=>{showToast(m);await render();}, t); }));
   document.querySelectorAll<HTMLElement>("[data-purchase-delete]").forEach(b => b.addEventListener("click", async () => { const id=b.dataset.purchaseDelete||""; if(!id||!confirm("این فاکتور خرید حذف شود؟")) return; try { await deleteTransaction(id); showToast("فاکتور خرید حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف فاکتور خرید ناموفق بود"); } }));
+  document.querySelectorAll<HTMLElement>("[data-supply-product]").forEach(b => b.addEventListener("click", async () => {
+    const productId = b.dataset.supplyProduct;
+    products = await listProducts(); parties = await listParties();
+    openPurchaseModal(products, parties, rial, async m => { showToast(m); await render(); }, undefined, productId);
+  }));
   document.querySelector("#new-purchase")?.addEventListener("click", async () => {
     products = await listProducts(); parties = await listParties();
     openPurchaseModal(products, parties, rial, async m => { showToast(m); await render(); });
