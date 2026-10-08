@@ -415,8 +415,8 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const cost = salesTx.reduce((s,t)=>s+(cogs.get(t.id) ?? t.costOfGoods ?? 0),0);
   const gross = sales-cost, net=gross-expenseTotal;
   const label = range==="today"?"امروز":range==="week"?"۷ روز اخیر":range==="all"?"همه":range==="custom"?"بازه انتخابی":"ماه جاری";
-  const defaultFrom = toPersianDigits(localStorage.getItem("sai-sai-report-from") || todayJalaliInput());
-  const defaultTo = toPersianDigits(localStorage.getItem("sai-sai-report-to") || todayJalaliInput());
+  const defaultFrom = formatJalaliInput(localStorage.getItem("sai-sai-report-from") || todayJalaliInput());
+  const defaultTo = formatJalaliInput(localStorage.getItem("sai-sai-report-to") || todayJalaliInput());
   const summary = `<section class="panel report-list"><div class="report-range" role="group" aria-label="بازه گزارش"><div class="report-range-item" role="button" tabindex="0" data-report-range="today">امروز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="week">۷ روز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="month">ماه جاری</div><div class="report-range-item" role="button" tabindex="0" data-report-range="all">همه</div></div><div class="report-custom-range">
   <label class="field"><span>از تاریخ شمسی</span><div class="report-date-input"><input id="report-from-date" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" placeholder="۱۴۰۵/۰۸/۰۷" value="${defaultFrom}" style="color:#111827!important;background:#ffffff!important;text-align:center!important;font-size:17px!important;font-weight:700!important;"><button type="button" class="report-slash" data-date-slash="report-from-date" style="color:#ffffff!important;background:#2b4266!important;">/</button></div></label>
   <label class="field"><span>تا تاریخ شمسی</span><div class="report-date-input"><input id="report-to-date" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" placeholder="۱۴۰۵/۰۸/۰۷" value="${defaultTo}" style="color:#111827!important;background:#ffffff!important;text-align:center!important;font-size:17px!important;font-weight:700!important;"><button type="button" class="report-slash" data-date-slash="report-to-date" style="color:#ffffff!important;background:#2b4266!important;">/</button></div></label>
@@ -580,16 +580,10 @@ function formatReportDateInput(input: HTMLInputElement): void {
     .slice(0, 8);
 
   let formatted = raw;
+  if (raw.length > 4) formatted = `${raw.slice(0, 4)}/${raw.slice(4, 6)}`;
+  if (raw.length > 6) formatted = `${raw.slice(0, 4)}/${raw.slice(4, 6)}/${raw.slice(6, 8)}`;
 
-  if (raw.length > 4) {
-    formatted = `${raw.slice(0, 4)}/${raw.slice(4, 6)}`;
-  }
-
-  if (raw.length > 6) {
-    formatted += `/${raw.slice(6, 8)}`;
-  }
-
-  input.value = formatted;
+  if (input.value !== formatted) input.value = formatted;
 }
 
 async function applyReportRange(): Promise<void> {
@@ -694,9 +688,10 @@ document.querySelectorAll<HTMLInputElement>("[data-jalali-input]").forEach(input
     formatReportDateInput(input);
   });
 
-  input.addEventListener("blur", () => {
-    formatReportDateInput(input);
-  });
+  input.addEventListener("blur", () => formatReportDateInput(input));
+  input.addEventListener("keyup", () => formatReportDateInput(input));
+  input.addEventListener("compositionend", () => formatReportDateInput(input));
+  input.addEventListener("paste", () => window.setTimeout(() => formatReportDateInput(input), 0));
 
   formatReportDateInput(input);
 });
