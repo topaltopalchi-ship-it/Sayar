@@ -287,14 +287,14 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
   if (existing) { if (existing.lines[0]) product.value = existing.lines[0].productId; modal.querySelector<HTMLSelectElement>("#sale-party")!.value = existing.partyId || ""; modal.querySelector<HTMLSelectElement>("#sale-account")!.value = existing.accountId || ""; }
   const update = () => {
     const p = products.find(x => x.id === product.value);
-    total.textContent = rial(Math.max(0, (Number(quantity.value) || 0) * (p?.salePrice ?? 0) - (Number(discount.value) || 0)));
+    total.textContent = rial(Math.max(0, numericValue(quantity.value) * (p?.salePrice ?? 0) - numericValue(discount.value)));
   };
   [product, quantity, discount].forEach(el => el.addEventListener("input", update));
   product.addEventListener("change", update);
   modal.querySelector("#sale-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#sale-submit")?.addEventListener("click", async () => {
     try {
-      const p = products.find(x => x.id === product.value); const qty = Number(quantity.value);
+      const p = products.find(x => x.id === product.value); const qty = numericValue(quantity.value);
       if (!p || qty <= 0) throw new Error("کالا و مقدار فروش را بررسی کنید");
       const disc = Math.max(0, numericValue(discount.value));
       const amount = Math.max(0, qty * p.salePrice - disc);
