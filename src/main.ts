@@ -1,5 +1,6 @@
 import "./style.css";
 import { Capacitor } from "@capacitor/core";
+import { App } from "@capacitor/app";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import { Printer } from "@gingersnapsoftware/capacitor-plugin-printer";
@@ -11,7 +12,7 @@ import {
 } from "./db";
 import { createMonthlyCheckout, getSubscription, type Subscription } from "./billing";
 import { lineTotal, type Party, type Product, type Transaction, type TransactionLine } from "./domain";
-import { formatMoney, getCurrencyUnit, setCurrencyUnit } from "./settings";
+import { formatMoney, getCurrencyUnit, setCurrencyUnit, getCurrencyLabel, parseMoneyInput, moneyInputValue } from "./settings";
 import { openPurchaseModal } from "./purchase-ui";
 import { accountModal, accountLedgerModal, accountsView, bindAccountLedger, bindAccountModal, bindTransferModal, transferModal } from "./accounts-ui";
 import { getAccountBalances, listAccounts } from "./db";
@@ -122,7 +123,7 @@ function layout(content: string, subscription: Subscription): void {
       </nav>
       <div id="toast" class="toast" role="status" aria-live="polite"></div>
     </main>`;
-  document.querySelector<HTMLButtonElement>("#settings")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", uiModeModal()); bindUiModeModal(); });
+  document.querySelector<HTMLButtonElement>("#settings")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", settingsModal()); bindSettingsModal(); });
   document.querySelectorAll<HTMLButtonElement>("[data-subscribe]").forEach(b => b.addEventListener("click", subscribe));
 }
 
