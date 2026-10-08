@@ -3,6 +3,7 @@ import { Capacitor } from "@capacitor/core";
 import { App } from "@capacitor/app";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
+import { LocalNotifications } from "@capacitor/local-notifications";
 import { Printer } from "@gingersnapsoftware/capacitor-plugin-printer";
 import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
@@ -11,7 +12,7 @@ import {
   listParties, updateParty, deleteParty, listProducts, listTransactions, listExpenses, listMovements, calculateHistoricalCOGS, repairDataIntegrity
 } from "./db";
 import { createMonthlyCheckout, getSubscription, type Subscription } from "./billing";
-import { lineTotal, type Party, type Product, type Transaction, type TransactionLine } from "./domain";
+import { lineTotal, type Order, type Party, type Product, type Transaction, type TransactionLine } from "./domain";
 import { formatMoney, getCurrencyUnit, setCurrencyUnit, getCurrencyLabel, parseMoneyInput, moneyInputValue } from "./settings";
 import { openPurchaseModal } from "./purchase-ui";
 import { accountModal, accountLedgerModal, accountsView, bindAccountLedger, bindAccountModal, bindTransferModal, transferModal } from "./accounts-ui";
@@ -19,12 +20,12 @@ import { getAccountBalances, listAccounts } from "./db";
 import { checksView, checkModal, bindCheckModal, bindCheckStatuses, bindCheckActions } from "./checks-ui";
 import { jalaliToGregorianDate, todayJalaliInput, formatJalaliInput, toPersianDigits } from "./calendar";
 
-type Tab = "dashboard" | "sales" | "purchases" | "inventory" | "people" | "reports" | "more" | "checks";
+type Tab = "dashboard" | "sales" | "purchases" | "orders" | "inventory" | "people" | "reports" | "more" | "checks";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 const navItems: Array<[Tab, string, string]> = [
   ["dashboard", "داشبورد", "⌂"], ["sales", "فروش", "↗"], ["purchases", "خرید", "↙"],
-  ["inventory", "موجودی", "▤"], ["people", "اشخاص", "♙"], ["reports", "گزارش‌ها", "◫"], ["more", "خزانه", "▣"], ["checks", "چک‌ها", "✓"],
+  ["orders", "سفارشات", "▣"], ["inventory", "موجودی", "▤"], ["people", "اشخاص", "♙"], ["reports", "گزارش‌ها", "◫"], ["more", "خزانه", "▣"], ["checks", "چک‌ها", "✓"],
 ];
 const money = new Intl.NumberFormat("fa-IR");
 
@@ -105,6 +106,47 @@ function showToast(message: string): void {
   toast.textContent = message;
   toast.classList.add("show");
   window.setTimeout(() => toast.classList.remove("show"), 2400);
+}
+
+let orderReminderSyncDone = false;
+function orderNotificationId(orderId: string): number {
+  let hash = 0;
+  for (let i = 0; i < orderId.length; i++) hash = ((hash << 5) - hash + orderId.charCodeAt(i)) | 0;
+  return Math.abs(hash || 1);
+}
+async function scheduleOrderReminder(order: Order): Promise<void> {
+  if (order.status !== "pending") return;
+  const reminderAt = new Date(order.deliveryDate);
+  reminderAt.setDate(reminderAt.getDate() - 1);
+  reminderAt.setHours(10, 0, 0, 0);
+  if (reminderAt.getTime() <= Date.now()) return;
+  try {
+    const permission = await LocalNotifications.checkPermissions();
+    if (permission.display !== "granted") {
+      const requested = await LocalNotifications.requestPermissions();
+      if (requested.display !== "granted") return;
+    }
+    const id = orderNotificationId(order.id);
+    await LocalNotifications.cancel({ notifications: [{ id }] });
+    await LocalNotifications.schedule({
+      notifications: [{
+        id,
+        title: "یادآوری سفارش سای‌سای",
+        body: "یادآوری سفارش فردای مشتری در سای‌سای",
+        schedule: { at: reminderAt },
+        extra: { orderId: order.id },
+      }],
+    });
+  } catch {}
+}
+async function cancelOrderReminder(orderId: string): Promise<void> {
+  try { await LocalNotifications.cancel({ notifications: [{ id: orderNotificationId(orderId) }] }); } catch {}
+}
+async function syncOrderReminders(): Promise<void> {
+  if (orderReminderSyncDone) return;
+  orderReminderSyncDone = true;
+  const orders = await (await import("./db")).listOrders();
+  for (const order of orders) if (order.status === "pending") await scheduleOrderReminder(order);
 }
 
 function layout(content: string, subscription: Subscription): void {
@@ -398,10 +440,7 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
         : await addSale({ date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
       modal.remove();
 
-      // First refresh the underlying screen, then mount the invoice.
-      // This keeps the invoice as the final overlay and prevents a render/layout
-      // cycle from racing with the invoice on Android WebView.
-      await render();
+      // Mount the invoice immediately after saving so the render cycle cannot hide it.
       try {
         await openInvoice(savedSale);
       } catch (error) {
@@ -411,6 +450,113 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت فروش ناموفق بود"); }
   });
   update();
+}
+
+
+function orderModal(existing?: Order): string {
+  const partyOptions = parties.filter(p => p.type === "customer" || p.type === "both").map(p => `<option value="${p.id}" ${existing?.partyId === p.id ? "selected" : ""}>${p.name}</option>`).join("");
+  const productOptions = products.map(p => `<option value="${p.id}" ${existing?.productId === p.id ? "selected" : ""}>${p.name} · ${rial(p.salePrice)}</option>`).join("");
+  const delivery = new Date(existing?.deliveryDate ?? Date.now() + 86400000);
+  const dateValue = `${delivery.getFullYear()}-${String(delivery.getMonth()+1).padStart(2,"0")}-${String(delivery.getDate()).padStart(2,"0")}`;
+  return \`
+    <div class="modal-backdrop" id="order-modal"><section class="modal">
+      <button class="modal-close" id="order-close">×</button>
+      <span class="eyebrow">مدیریت سفارش</span><h2>${existing ? "ویرایش سفارش" : "دریافت سفارش جدید"}</h2>
+      <label class="field"><span>مشتری</span><select id="order-party"><option value="">انتخاب مشتری</option>${partyOptions}</select></label>
+      <label class="field"><span>کالا</span><select id="order-product">${productOptions}</select></label>
+      <div class="form-grid"><label class="field"><span>تعداد</span><input id="order-quantity" type="text" inputmode="decimal" value="${existing?.quantity ?? 1}"></label>
+        <label class="field"><span>قیمت واحد</span><input id="order-price" type="number" min="0" value="${existing?.unitPrice ?? 0}"></label></div>
+      <label class="field"><span>تاریخ تحویل</span><input id="order-delivery" type="date" value="${dateValue}"></label>
+      <label class="field"><span>یادداشت</span><input id="order-note" placeholder="مثلاً تحویل درب مغازه" value="${existing?.note || ""}"></label>
+      <button class="primary-button wide" id="order-submit">${existing ? "ذخیره تغییرات" : "ثبت سفارش و یادآوری"}</button>
+    </section></div>\`;
+}
+
+async function ordersView(): Promise<string> {
+  const [orders, orderParties, orderProducts] = await Promise.all([(await import("./db")).listOrders(), listParties(), listProducts()]);
+  const partyMap = new Map(orderParties.map(p => [p.id, p]));
+  const productMap = new Map(orderProducts.map(p => [p.id, p]));
+  const statusLabel: Record<Order["status"], string> = { pending: "در انتظار", completed: "انجام شد", cancelled: "لغو شد" };
+  const rows = orders.map(o => {
+    const party = partyMap.get(o.partyId);
+    const product = productMap.get(o.productId);
+    return \`<article class="order-card ${o.status}">
+      <div class="order-card-head"><div><span class="eyebrow">سفارش</span><h3>${party?.name || "مشتری حذف‌شده"}</h3></div><span class="order-status">${statusLabel[o.status]}</span></div>
+      <div class="order-details"><span>کالا: <b>${product?.name || "کالای حذف‌شده"}</b></span><span>تعداد: <b>${money.format(o.quantity)}</b></span><span>تحویل: <b>${dateLabel(o.deliveryDate)}</b></span></div>
+      <p class="muted">${o.note || "بدون یادداشت"} · مبلغ تقریبی ${rial(o.quantity * o.unitPrice)}</p>
+      <div class="order-actions">
+        ${o.status === "pending" ? \`<button class="primary-button" data-order-complete="${o.id}">انجام شد</button>\` : ""}
+        <button class="secondary-button" data-order-edit="${o.id}">ویرایش</button>
+        <button class="secondary-button" data-order-delete="${o.id}">حذف</button>
+      </div>
+    </article>\`;
+  }).join("");
+  return pageHead("سفارشات", "دریافت و پیگیری سفارش‌ها", "نام مشتری، کالا، تاریخ تحویل و یادآوری یک‌روز قبل در یکجا.", \`<button class="primary-button" id="new-order">＋ سفارش جدید</button>\`) +
+    \`<section class="panel">${rows || '<div class="empty-inline"><span>▣</span><p>هنوز سفارشی ثبت نشده است.</p></div>'}</section>\`;
+}
+
+function bindOrderModal(existing?: Order): void {
+  const modal = document.querySelector<HTMLDivElement>("#order-modal")!;
+  const product = modal.querySelector<HTMLSelectElement>("#order-product")!;
+  const price = modal.querySelector<HTMLInputElement>("#order-price")!;
+  const close = () => modal.remove();
+  const syncPrice = () => {
+    if (existing) return;
+    const p = products.find(x => x.id === product.value);
+    if (p) price.value = String(p.salePrice);
+  };
+  product.addEventListener("change", syncPrice);
+  modal.querySelector("#order-close")?.addEventListener("click", close);
+  modal.querySelector("#order-submit")?.addEventListener("click", async () => {
+    try {
+      const partyId = modal.querySelector<HTMLSelectElement>("#order-party")!.value;
+      const productId = product.value;
+      const quantity = numericValue(modal.querySelector<HTMLInputElement>("#order-quantity")!.value);
+      const unitPrice = numericValue(price.value);
+      const dateText = modal.querySelector<HTMLInputElement>("#order-delivery")!.value;
+      const deliveryDate = dateText ? new Date(dateText + "T12:00:00").getTime() : 0;
+      if (!partyId) throw new Error("انتخاب مشتری الزامی است");
+      if (!productId || quantity <= 0) throw new Error("کالا و تعداد سفارش را بررسی کنید");
+      if (!deliveryDate || deliveryDate < Date.now() - 86400000) throw new Error("تاریخ تحویل را درست انتخاب کنید");
+      const db = await import("./db");
+      if (existing) {
+        const updated: Order = { ...existing, partyId, productId, quantity, unitPrice, deliveryDate, note: modal.querySelector<HTMLInputElement>("#order-note")!.value.trim() };
+        await db.updateOrder(updated);
+        await cancelOrderReminder(updated.id);
+        await scheduleOrderReminder(updated);
+      } else {
+        const saved = await db.addOrder({ partyId, productId, quantity, unitPrice, orderDate: Date.now(), deliveryDate, note: modal.querySelector<HTMLInputElement>("#order-note")!.value.trim(), status: "pending" });
+        await scheduleOrderReminder(saved);
+      }
+      close(); showToast(existing ? "سفارش ویرایش شد" : "سفارش ثبت شد؛ یادآوری یک‌روز قبل تنظیم شد"); await render();
+    } catch(e) { showToast(e instanceof Error ? e.message : "ثبت سفارش ناموفق بود"); }
+  });
+  syncPrice();
+}
+
+function bindOrderActions(): void {
+  document.querySelector("#new-order")?.addEventListener("click", async () => {
+    parties = await listParties(); products = await listProducts();
+    if (!parties.some(p => p.type === "customer" || p.type === "both")) { showToast("ابتدا یک مشتری ثبت کنید"); return; }
+    if (!products.length) { showToast("ابتدا یک کالا ثبت کنید"); return; }
+    document.body.insertAdjacentHTML("beforeend", orderModal()); bindOrderModal();
+  });
+  document.querySelectorAll<HTMLElement>("[data-order-edit]").forEach(b => b.addEventListener("click", async () => {
+    const id = b.dataset.orderEdit || "";
+    const db = await import("./db");
+    const order = (await db.listOrders()).find(x => x.id === id);
+    if (!order) return;
+    parties = await listParties(); products = await listProducts();
+    document.body.insertAdjacentHTML("beforeend", orderModal(order)); bindOrderModal(order);
+  }));
+  document.querySelectorAll<HTMLElement>("[data-order-delete]").forEach(b => b.addEventListener("click", async () => {
+    const id=b.dataset.orderDelete || ""; if(!id || !confirm("این سفارش حذف شود؟")) return;
+    try { const db=await import("./db"); await db.deleteOrder(id); await cancelOrderReminder(id); showToast("سفارش حذف شد"); await render(); } catch(e){showToast(e instanceof Error?e.message:"حذف سفارش ناموفق بود");}
+  }));
+  document.querySelectorAll<HTMLElement>("[data-order-complete]").forEach(b => b.addEventListener("click", async () => {
+    const id=b.dataset.orderComplete || ""; const db=await import("./db"); const order=(await db.listOrders()).find(x=>x.id===id); if(!order) return;
+    await db.updateOrder({...order,status:"completed"}); await cancelOrderReminder(order.id); showToast("سفارش انجام شد"); await render();
+  }));
 }
 
 async function inventoryView(): Promise<string> {
@@ -928,6 +1074,7 @@ async function render(): Promise<void> {
   const subscription = await getSubscription().catch(() => ({ status: "none", plan: "none", expiresAt: null } as Subscription));
   // Bind global navigation/actions before the subscription gate so buttons always have a click handler.
   await bindActions();
+  void syncOrderReminders();
   if (subscription.status !== "active") {
     layout(paywall(subscription), subscription);
     document.querySelectorAll<HTMLButtonElement>("[data-subscribe]").forEach(b => b.addEventListener("click", subscribe));
@@ -952,6 +1099,7 @@ async function render(): Promise<void> {
   layout(content, subscription);
   bindReportControls();
 
+  bindOrderActions();
   document.querySelector("#new-sale")?.addEventListener("click", () => void openSaleModal());
   document.querySelectorAll<HTMLElement>("[data-sale-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.saleEdit); if(t) await openSaleModal(t); }));
   document.querySelectorAll<HTMLElement>("[data-sale-delete]").forEach(b => b.addEventListener("click", async () => { const id=b.dataset.saleDelete||""; if(!id||!confirm("این فاکتور فروش حذف شود؟")) return; try { await deleteTransaction(id); showToast("فاکتور حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف فاکتور ناموفق بود"); } }));
