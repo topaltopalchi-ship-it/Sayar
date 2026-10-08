@@ -414,44 +414,28 @@ export async function getDashboard(): Promise<Dashboard> {
 }
 
 export async function getStock(productId: string, excludeTransactionId?: string): Promise<number> {
-  // Inventory is calculated from the stock ledger. Before reading it, repair
-  // any legacy/missing purchase/sale movements from the transaction ledger.
-  await repairDataIntegrity();
-
-  const movements = await listMovements();
-  const transactions = await listTransactions();
-  const excluded = excludeTransactionId ? transactions.find(t => t.id === excludeTransactionId) : undefined;
+  // Stock is derived from the source-of-truth ledger:
+  // opening/manual adjustments + purchases - sales.
+  // We intentionally do not depend on cached purchase/sale movement rows here,
+  // because older installations may have incomplete or stale movement records.
+  const [transactions, movements] = await Promise.all([listTransactions(), listMovements()]);
 
   let stock = movements
     .filter(m => m.productId === productId && m.type === "adjustment")
     .reduce((sum, m) => sum + Number(m.quantity || 0), 0);
 
-  // Some old installations may still have transactions without movements.
-  // Add those only when their reference movement is actually absent.
-  const movementRefs = new Set(
-    movements
-      .filter(m => m.productId === productId && (m.type === "purchase" || m.type === "sale"))
-      .map(m => m.referenceId)
-      .filter(Boolean)
-  );
-
   for (const t of transactions) {
-    if (t.id === excludeTransactionId || (t.type !== "purchase" && t.type !== "sale")) continue;
-    if (movementRefs.has(t.id)) continue;
-    stock += t.lines
+    if (t.id === excludeTransactionId) continue;
+    if (t.type !== "purchase" && t.type !== "sale") continue;
+
+    const quantity = t.lines
       .filter(line => line.productId === productId)
-      .reduce((sum, line) => sum + (t.type === "purchase" ? Number(line.quantity || 0) : -Number(line.quantity || 0)), 0);
+      .reduce((sum, line) => sum + Number(line.quantity || 0), 0);
+
+    stock += t.type === "purchase" ? quantity : -quantity;
   }
 
-  // If an excluded sale/purchase had a movement, subtract its effect from the
-  // ledger calculation so edit validation sees the pre-edit stock.
-  if (excluded && (excluded.type === "purchase" || excluded.type === "sale")) {
-    const effect = excluded.lines
-      .filter(line => line.productId === productId)
-      .reduce((sum, line) => sum + (excluded.type === "purchase" ? Number(line.quantity || 0) : -Number(line.quantity || 0)), 0);
-    stock -= effect;
-  }
-
+  // Inventory must never be displayed as a negative available balance.
   return Math.max(0, stock);
 }
 
