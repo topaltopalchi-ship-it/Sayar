@@ -239,7 +239,13 @@ async function openInvoice(t: Transaction): Promise<void> {
   if (!invoice) throw new Error("پنجره فاکتور ساخته نشد");
   invoice.style.zIndex = "1000";
   document.querySelector("#invoice-close")?.addEventListener("click", () => invoice.remove());
-  document.querySelector("#invoice-print")?.addEventListener("click", () => window.print());
+  document.querySelector("#invoice-print")?.addEventListener("click", async () => {
+    try {
+      await printHtml("فاکتور سای‌سای", invoice.querySelector(".invoice-modal")?.outerHTML || invoice.innerHTML);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "چاپ / PDF در دسترس نیست");
+    }
+  });
   document.querySelector("#invoice-share")?.addEventListener("click", async () => {
     const party = t.partyId ? partyList.find(p => p.id === t.partyId) : undefined;
     const title = t.type === "purchase" ? "فاکتور خرید" : "فاکتور فروش";
@@ -444,12 +450,12 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const cost = salesTx.reduce((s,t)=>s+(cogs.get(t.id) ?? t.costOfGoods ?? 0),0);
   const gross = sales-cost, net=gross-expenseTotal;
   const label = range==="today"?"امروز":range==="week"?"۷ روز اخیر":range==="all"?"همه":range==="custom"?"بازه انتخابی":"ماه جاری";
-  const defaultFrom = formatJalaliInput(localStorage.getItem("sai-sai-report-from") || todayJalaliInput());
-  const defaultTo = formatJalaliInput(localStorage.getItem("sai-sai-report-to") || todayJalaliInput());
+  const defaultFrom = compactJalaliInput(localStorage.getItem("sai-sai-report-from") || todayJalaliInput());
+  const defaultTo = compactJalaliInput(localStorage.getItem("sai-sai-report-to") || todayJalaliInput());
   const dateField = (prefix: "from" | "to", value: string) => `
     <label class="field report-date">
       <span>${prefix === "from" ? "از تاریخ شمسی" : "تا تاریخ شمسی"}</span>
-      <input id="report-${prefix}-date" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" value="${value}" placeholder="۱۴۰۵/۰۷/۱۶" aria-label="${prefix === "from" ? "تاریخ شروع" : "تاریخ پایان"}">
+      <input id="report-${prefix}-date" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="8" value="${value}" placeholder="۱۴۰۵۰۷۱۶" aria-label="${prefix === "from" ? "تاریخ شروع" : "تاریخ پایان"}">
     </label>`;
   const summary = `<section class="panel report-list"><div class="report-range" role="group" aria-label="بازه گزارش"><button type="button" class="report-range-item" data-report-range="today">امروز</button><button type="button" class="report-range-item" data-report-range="week">۷ روز</button><button type="button" class="report-range-item" data-report-range="month">ماه جاری</button><button type="button" class="report-range-item" data-report-range="all">همه</button></div><form id="report-range-form" class="report-custom-range">
   ${dateField("from", defaultFrom)}
@@ -481,16 +487,8 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const debtorSection = `<section class="panel"><div class="section-head"><h3>بدهکاران</h3><span class="muted">${money.format(debtorTotals.size)} نفر</span></div>${debtorRows || '<div class="empty-inline"><p>در حال حاضر فاکتور بدهکار و تسویه‌نشده‌ای وجود ندارد.</p></div>'}</section>`;
   return pageHead("تحلیل مالی", "گزارش سود و زیان", "گزارش بر اساس بازه انتخابی و بهای تمام‌شده FIFO.") + summary + stats + cash + debtorSection + expenseSection + settlementSection + reportExportButtons();
 }
-function reportExcelCsv(transactions: Transaction[]): void {
-  const rows = [["نوع","تاریخ","مبلغ","پرداخت","شرح"]];
-  for (const t of transactions) rows.push([t.type, dateLabel(t.date), String(t.amount), String(t.paid), t.description || ""]);
-  const csv = "\uFEFF" + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join(String.fromCharCode(10));
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href=url; a.download=`sai-sai-report-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url);
-}
-
 function reportExportButtons(): string {
-  return `<section class="panel"><div class="page-head-row"><div><strong>خروجی گزارش</strong><p class="muted">گزارش فعلی را برای چاپ یا ذخیره PDF آماده کنید.</p></div><button class="secondary-button" id="report-csv">Excel / CSV</button><button class="secondary-button" id="report-print">چاپ / PDF</button></div></section>`;
+  return `<section class="panel"><div class="page-head-row"><div><strong>خروجی گزارش</strong><p class="muted">خروجی واقعی Excel و چاپ/PDF روی گوشی.</p></div><button type="button" class="secondary-button" id="report-csv">خروجی Excel</button><button type="button" class="secondary-button" id="report-print">چاپ / PDF</button></div></section>`;
 }
 
 function expenseModal(existing?: import("./domain").Expense): string {
@@ -670,8 +668,7 @@ async function applyReportRange(): Promise<void> {
   const readDateValue = (prefix: "from" | "to"): string => {
     const input = document.querySelector<HTMLInputElement>(`#report-${prefix}-date`);
     if (!input) return "";
-    formatReportDateInput(input);
-    return input.value;
+    return compactJalaliInput(input.value);
   };
 
   const fromValue = readDateValue("from");
@@ -709,6 +706,13 @@ async function bindActions(): Promise<void> {
 
   root.addEventListener("click", async event => {
     const target = event.target as HTMLElement;
+    const rangeButton = target.closest<HTMLButtonElement>("[data-report-range]");
+    if (rangeButton) {
+      localStorage.setItem("sai-sai-report-range", rangeButton.dataset.reportRange || "month");
+      await render();
+      return;
+    }
+
     const invoiceButton = target.closest<HTMLElement>("[data-invoice-id]");
     if (invoiceButton) {
       const transactionList = await listTransactions();
@@ -746,32 +750,20 @@ async function bindActions(): Promise<void> {
       showToast(e instanceof Error ? e.message : "باز کردن این بخش ناموفق بود");
     }
   });
+
+  root.addEventListener("submit", async event => {
+    const form = event.target as HTMLFormElement;
+    if (form?.id !== "report-range-form") return;
+    event.preventDefault();
+    await applyReportRange();
+  });
 }
 
 function bindReportControls(): void {
   if (activeTab !== "reports") return;
-
-  document.querySelectorAll<HTMLInputElement>("[data-jalali-input]").forEach(input => {
-    const normalize = () => formatReportDateInput(input);
-    ["input", "change", "blur", "focus", "click"].forEach(eventName => input.addEventListener(eventName, normalize));
-    input.addEventListener("paste", () => window.setTimeout(normalize, 0));
-    normalize();
-    window.requestAnimationFrame(normalize);
-    window.setTimeout(normalize, 0);
-  });
-
+  const activeRange = localStorage.getItem("sai-sai-report-range") || "month";
   document.querySelectorAll<HTMLButtonElement>("[data-report-range]").forEach(button => {
-    const selected = (button.dataset.reportRange || "month") === (localStorage.getItem("sai-sai-report-range") || "month");
-    button.setAttribute("aria-pressed", selected ? "true" : "false");
-    button.addEventListener("click", async () => {
-      localStorage.setItem("sai-sai-report-range", button.dataset.reportRange || "month");
-      await render();
-    });
-  });
-
-  document.querySelector<HTMLFormElement>("#report-range-form")?.addEventListener("submit", async event => {
-    event.preventDefault();
-    await applyReportRange();
+    button.setAttribute("aria-pressed", (button.dataset.reportRange || "month") === activeRange ? "true" : "false");
   });
 }
 
@@ -878,7 +870,23 @@ async function render(): Promise<void> {
   }));
   document.querySelector("#more-refresh")?.addEventListener("click", () => render());
   window.addEventListener("sai-sai-refresh", () => { void render(); });
-  document.querySelector("#report-print")?.addEventListener("click", () => window.print());
+  document.querySelector("#report-print")?.addEventListener("click", async () => {
+    try {
+      await printHtml("گزارش سود و زیان سای‌سای", document.querySelector("#view")?.innerHTML || "", "portrait");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "چاپ / PDF در دسترس نیست");
+    }
+  });
+  document.querySelector("#report-csv")?.addEventListener("click", async () => {
+    try {
+      const [transactions, expenses] = await Promise.all([listTransactions(), listExpenses()]);
+      const workbook = buildReportWorkbook(transactions, expenses);
+      const base64 = XLSX.write(workbook, { bookType: "xlsx", type: "base64" });
+      await shareBase64File(`sai-sai-report-${new Date().toISOString().slice(0,10)}.xlsx`, base64, "گزارش Excel سای‌سای");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "خروجی Excel ناموفق بود");
+    }
+  });
   document.querySelectorAll<HTMLElement>("[data-settlement-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.settlementEdit); if(t && (t.type==="receipt"||t.type==="payment")) await openSettlement(t.type,t); }));
   document.querySelectorAll<HTMLElement>("[data-settlement-delete]").forEach(b => b.addEventListener("click", async () => { const id=b.dataset.settlementDelete||""; if(!id||!confirm("این دریافت/پرداخت حذف شود؟")) return; try { await deleteTransaction(id); showToast("ثبت حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف ناموفق بود"); } }));
   document.querySelector("#report-csv")?.addEventListener("click", async () => reportExcelCsv(await listTransactions()));
