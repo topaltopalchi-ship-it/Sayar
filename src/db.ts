@@ -414,23 +414,24 @@ export async function getDashboard(): Promise<Dashboard> {
 }
 
 export async function getStock(productId: string, excludeTransactionId?: string): Promise<number> {
+  // Inventory source of truth:
+  // 1) explicit stock adjustments (opening balance / manual corrections)
+  // 2) purchase and sale transaction lines
+  //
+  // Do not depend on sale/purchase movement rows here. Older app versions could
+  // have missing or stale movement rows, which made the UI show zero even when
+  // the actual purchase/sale transaction existed.
   const [movements, transactions] = await Promise.all([
     getAll<StockMovement>("movements"),
     listTransactions(),
   ]);
 
-  const productMovements = movements.filter(m => m.productId === productId);
-  const movementReferences = new Set(
-    productMovements.map(m => m.referenceId).filter(Boolean),
-  );
+  let stock = movements
+    .filter(m => m.productId === productId && m.type === "adjustment")
+    .reduce((sum, movement) => sum + movement.quantity, 0);
 
-  let stock = productMovements.reduce((sum, movement) => sum + movement.quantity, 0);
-
-  // Backward compatibility: some older/local records can contain a purchase
-  // or sale without a movement row. Rebuild those quantities from transactions.
   for (const transaction of transactions) {
     if (transaction.id === excludeTransactionId) continue;
-    if (movementReferences.has(transaction.id)) continue;
     if (transaction.type !== "purchase" && transaction.type !== "sale") continue;
 
     for (const line of transaction.lines) {
@@ -439,7 +440,7 @@ export async function getStock(productId: string, excludeTransactionId?: string)
     }
   }
 
-  return stock;
+  return Number.isFinite(stock) ? stock : 0;
 }
 
 export interface PartyBalance {
