@@ -127,6 +127,34 @@ export async function bindAccountLedger(modal: HTMLElement): Promise<void> {
       });
     }
   }));
+  modal.querySelectorAll<HTMLElement>("[data-transfer-edit]").forEach(button => button.addEventListener("click", async event => {
+    event.stopPropagation();
+    const transferId = button.dataset.transferEdit || "";
+    const entries = (await listAccountEntries()).filter(e => e.transferId === transferId);
+    const source = entries.find(e => e.amount < 0);
+    if (!source) { alert("انتقال پیدا نشد"); return; }
+    const amountText = prompt("مبلغ جدید", String(Math.abs(source.amount)));
+    if (amountText === null) return;
+    const amount = parseMoneyInput(amountText);
+    if (amount <= 0) { alert("مبلغ نامعتبر است"); return; }
+    const description = prompt("شرح انتقال", source.description || "انتقال بین حساب‌ها");
+    if (description === null) return;
+    try {
+      await (await import("./db")).updateTransfer(transferId, amount, description.trim() || "انتقال بین حساب‌ها");
+      modal.remove();
+      window.dispatchEvent(new Event("sai-sai-refresh"));
+    } catch (e) { alert(e instanceof Error ? e.message : "ویرایش انتقال ناموفق بود"); }
+  }));
+  modal.querySelectorAll<HTMLElement>("[data-transfer-delete]").forEach(button => button.addEventListener("click", async event => {
+    event.stopPropagation();
+    const transferId = button.dataset.transferDelete || "";
+    if (!transferId || !confirm("این انتقال از هر دو حساب حذف شود؟")) return;
+    try {
+      await (await import("./db")).deleteTransfer(transferId);
+      modal.remove();
+      window.dispatchEvent(new Event("sai-sai-refresh"));
+    } catch (e) { alert(e instanceof Error ? e.message : "حذف انتقال ناموفق بود"); }
+  }));
   modal.querySelectorAll<HTMLElement>("[data-account-entry-delete]").forEach(button => button.addEventListener("click", async event => {
     event.stopPropagation();
     const id = button.dataset.accountEntryDelete || "";
