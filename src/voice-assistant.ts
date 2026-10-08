@@ -112,6 +112,12 @@ export function parseVoiceProduct(transcript: string): VoiceProductDraft {
   return { transcript:text, name, sku, unit, purchasePrice, salePrice, initialStock, lowStock };
 }
 
+export function parseVoiceProducts(transcript: string): VoiceProductDraft[] {
+  const chunks = transcript.split(/(?:بعدی|و همچنین|همچنین|؛|\\n)/).map(x => x.trim()).filter(Boolean);
+  const drafts = chunks.map(parseVoiceProduct).filter(x => x.name || x.purchasePrice || x.salePrice || x.initialStock);
+  return drafts.length ? drafts : [parseVoiceProduct(transcript)];
+}
+
 export function bindVoiceProductAssistant(onConfirm: (draft: VoiceProductDraft) => Promise<void>, notify: (message: string) => void): void {
   const button = document.querySelector<HTMLButtonElement>("#voice-product");
   if (!button) return;
