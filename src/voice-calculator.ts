@@ -51,6 +51,8 @@ async function listenAndCalculate(modal: HTMLElement): Promise<void> {
   if(permission && permission.speechRecognition!=="granted"){ alert("اجازه میکروفون لازم است"); return; }
   button.disabled=true; button.textContent="🎙 در حال شنیدن…";
   try {
+    const listening=await SpeechRecognition.isListening().catch(()=>({listening:false}));
+    if(listening.listening) { await SpeechRecognition.stop().catch(()=>undefined); await new Promise(resolve=>setTimeout(resolve,180)); }
     const result=await SpeechRecognition.start({language:"fa-IR",maxResults:1,partialResults:false,popup:false,prompt:"عملیات را بگویید؛ مثلاً صد به علاوه بیست ضربدر دو"});
     const text=result.matches?.[0]?.trim()||"";
     if(!text) throw new Error("عملیات شنیده نشد");
@@ -59,6 +61,7 @@ async function listenAndCalculate(modal: HTMLElement): Promise<void> {
     modal.querySelector<HTMLElement>("#calc-expression")!.textContent=text;
     modal.querySelector<HTMLElement>("#calc-result")!.textContent=formatResult(value);
     speakSaiSai("نتیجه " + formatResult(value));
+    window.setTimeout(() => { if (document.body.contains(modal)) void listenAndCalculate(modal); }, 900);
   } catch(e) { alert(e instanceof Error?e.message:"محاسبه صوتی ناموفق بود"); }
   finally { button.disabled=false; button.textContent="🎙 محاسبه با صدا"; }
 }
