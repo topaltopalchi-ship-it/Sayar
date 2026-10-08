@@ -145,7 +145,7 @@ export function bindVoiceProductFieldAssistant(
         language: "fa-IR",
         maxResults: 3,
         partialResults: false,
-        popup: true,
+        popup: false,
         prompt: "موجودی، قیمت خرید، قیمت فروش و حداقل موجودی کالا را بگویید",
       });
       const transcript = result.matches?.[0]?.trim() || "";
@@ -173,7 +173,7 @@ export function bindVoiceProductAssistant(onConfirm: (draft: VoiceProductDraft) 
     if (permission && permission.speechRecognition !== "granted") { notify("اجازه دسترسی به میکروفون و تشخیص صدا لازم است"); return; }
     button.disabled=true; button.textContent="🎙 در حال شنیدن…";
     try {
-      const result=await SpeechRecognition.start({ language:"fa-IR", maxResults:3, partialResults:false, popup:true, prompt:"مشخصات کالا را به فارسی بگویید" });
+      const result=await SpeechRecognition.start({ language:"fa-IR", maxResults:3, partialResults:false, popup: false, prompt:"مشخصات کالا را به فارسی بگویید" });
       const transcript=result.matches?.[0]?.trim() || "";
       if (!transcript) throw new Error("مشخصات کالا تشخیص داده نشد");
       const drafts=parseVoiceProducts(transcript);
@@ -244,7 +244,7 @@ export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise
         language: "fa-IR",
         maxResults: 3,
         partialResults: false,
-        popup: true,
+        popup: false,
         prompt: "فروش را به فارسی بگویید",
       });
       const transcript = result.matches?.[0]?.trim() || "";
@@ -306,7 +306,7 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
         language: "fa-IR",
         maxResults: 1,
         partialResults: false,
-        popup: true,
+        popup: false,
         prompt: "سؤال خود را از سای‌سای بپرسید"
       });
       const question = result.matches?.[0]?.trim() || "";
