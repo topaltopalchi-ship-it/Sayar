@@ -148,3 +148,20 @@ export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise
     }
   });
 }
+
+export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promise<string>, notify: (message: string) => void): void {
+  const button = document.querySelector<HTMLButtonElement>("#voice-query");
+  if (!button) return;
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      const result = await SpeechRecognition.start({ language: "fa-IR", maxResults: 1, partialResults: false, popup: true, prompt: "سؤال خود را از سای‌سای بپرسید" });
+      const question = result.matches?.[0]?.trim() || "";
+      if (!question) throw new Error("سؤالی تشخیص داده نشد");
+      const answer = await onAnswer(question);
+      speakSaiSai(answer);
+      notify(answer);
+    } catch (error) { notify(error instanceof Error ? error.message : "پاسخ‌گویی ناموفق بود"); }
+    finally { button.disabled = false; }
+  });
+}
