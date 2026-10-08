@@ -5,76 +5,71 @@ export type ProductVisionResult = {
   confidence: number;
 };
 
-const KEY = "sai-sai-openai-api-key";
-const MODEL = "gpt-6-luna";
+type OCRResult = { data?: { text?: string } };
+type TesseractWorker = { recognize(file: File): Promise<OCRResult>; terminate(): Promise<void> };
+type TesseractGlobal = { createWorker(langs: string): Promise<TesseractWorker> };
+declare global { interface Window { Tesseract?: TesseractGlobal } }
 
-export function getVisionApiKey(): string {
-  return localStorage.getItem(KEY) || "";
+let tesseractLoader: Promise<TesseractGlobal> | null = null;
+function loadOCR(): Promise<TesseractGlobal> {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (!tesseractLoader) tesseractLoader = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+    script.async = true;
+    script.onload = () => window.Tesseract ? resolve(window.Tesseract) : reject(new Error("موتور خواندن نوشته بارگذاری نشد؛ اتصال اینترنت را بررسی کنید."));
+    script.onerror = () => { tesseractLoader = null; reject(new Error("بارگذاری خواندن نوشته ناموفق بود؛ اتصال اینترنت را بررسی کنید.")); };
+    document.head.appendChild(script);
+  });
+  return tesseractLoader;
 }
 
-export function setVisionApiKey(value: string): void {
-  const v = value.trim();
-  if (v) localStorage.setItem(KEY, v);
-  else localStorage.removeItem(KEY);
+// Kept for compatibility with older settings UI; no key is required or stored.
+export function getVisionApiKey(): string { return "local-ocr"; }
+export function setVisionApiKey(_value: string): void {}
+
+function extractSku(text: string): string {
+  const lines = text.split(/\r?\n/).map(s => s.trim());
+  const labeled = lines.find(s => /(?:sku|barcode|bar\s*code|کد\s*(?:کالا|محصول|بارکد)|بارکد)\s*[:：#-]?\s*[0-9۰-۹٠-٩-]{6,}/i.test(s));
+  const candidate = (labeled || text).match(/(?:\d[\d\s-]{6,}\d)/);
+  if (!candidate) return "";
+  const digits = candidate[0].replace(/\D/g, "").replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+  return digits.length >= 8 && digits.length <= 14 ? digits : "";
+}
+
+async function detectBarcode(file: File): Promise<string> {
+  const BarcodeDetectorCtor = (window as unknown as { BarcodeDetector?: new (opts?: { formats?: string[] }) => { detect(source: ImageBitmap): Promise<Array<{ rawValue?: string }>> } }).BarcodeDetector;
+  if (!BarcodeDetectorCtor || typeof createImageBitmap !== "function") return "";
+  try {
+    const bitmap = await createImageBitmap(file);
+    try {
+      const detector = new BarcodeDetectorCtor({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf", "qr_code"] });
+      return (await detector.detect(bitmap)).map(x => x.rawValue || "").find(Boolean) || "";
+    } finally { bitmap.close(); }
+  } catch { return ""; }
 }
 
 export async function analyzeProductPhoto(file: File): Promise<ProductVisionResult> {
-  const apiKey = getVisionApiKey();
-  if (!apiKey) throw new Error("ابتدا کلید OpenAI API را در تنظیمات سای‌سای وارد کنید.");
   if (!file.type.startsWith("image/")) throw new Error("لطفاً یک تصویر از کالا انتخاب کنید.");
+  const tesseract = await loadOCR();
+  const worker = await tesseract.createWorker("fas+eng");
+  let text = "";
+  try { text = String((await worker.recognize(file)).data?.text || "").trim(); }
+  finally { await worker.terminate(); }
 
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("خواندن تصویر ناموفق بود"));
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.readAsDataURL(file);
-  });
+  const barcode = await detectBarcode(file);
+  const sku = barcode || extractSku(text);
+  const lines = text.split(/\r?\n/)
+    .map(s => s.replace(/[|_~=*#]/g, " ").replace(/\s+/g, " ").trim())
+    .filter(s => s.length >= 3 && /[\p{L}]/u.test(s))
+    .filter(s => !/^(www\.|https?:|made in|best before|expiry|ingredients|nutrition|وزن خالص|تاریخ تولید|تاریخ انقضا|شماره پروانه)/i.test(s));
+  const name = lines.sort((a, b) => scoreLine(b) - scoreLine(a))[0] || "";
+  if (!name && !sku) throw new Error("نوشته یا بارکدی خوانا پیدا نشد. عکس واضح‌تر و نزدیک‌تری بگیرید.");
+  return { name: name.slice(0, 100), sku, unit: "عدد", confidence: name ? Math.min(0.85, 0.35 + name.length / 100) : 0.25 };
+}
 
-  const prompt = `این تصویر مربوط به یک کالای فروشگاهی است. نام کالا را برای ثبت در سیستم حسابداری به فارسی و کوتاه تشخیص بده.
-اگر روی کالا نوشته، برند، مدل، رنگ یا نوع کالا قابل تشخیص است، آن را در نام بیاور. اگر بارکد یا کد کالا واضح است، همان را به عنوان sku بده؛ در غیر این صورت sku را خالی بگذار.
-واحد را فقط یکی از این مقادیر انتخاب کن: عدد، کیلوگرم، گرم، لیتر، متر، بسته.
-فقط JSON معتبر و بدون markdown برگردان:
-{"name":"...","sku":"...","unit":"عدد","confidence":0.0}`;
-
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer " + apiKey },
-    body: JSON.stringify({
-      model: MODEL,
-      input: [{
-        role: "user",
-        content: [
-          { type: "input_text", text: prompt },
-          { type: "input_image", image_url: dataUrl, detail: "high" }
-        ]
-      }]
-    })
-  });
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(detail ? "تحلیل تصویر ناموفق بود: " + detail.slice(0, 180) : "تحلیل تصویر ناموفق بود");
-  }
-
-  const payload = await response.json() as { output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }> };
-  const raw = String(payload.output_text || payload.output?.flatMap(x => x.content || []).map(x => x.text || "").join("") || "").trim();
-  if (!raw) throw new Error("از تصویر نتیجه‌ای دریافت نشد");
-
-  let parsed: Partial<ProductVisionResult>;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    const match = raw.match(/\{[\\s\\S]*\}/);
-    if (!match) throw new Error("پاسخ هوش تصویری قابل پردازش نبود");
-    try { parsed = JSON.parse(match[0]); } catch { throw new Error("پاسخ هوش تصویری قابل پردازش نبود"); }
-  }
-
-  const units = new Set(["عدد","کیلوگرم","گرم","لیتر","متر","بسته"]);
-  const unit = units.has(String(parsed.unit)) ? parsed.unit as ProductVisionResult["unit"] : "عدد";
-  return {
-    name: String(parsed.name || "").trim(),
-    sku: String(parsed.sku || "").trim(),
-    unit,
-    confidence: Math.max(0, Math.min(1, Number(parsed.confidence) || 0))
-  };
+function scoreLine(line: string): number {
+  const letters = (line.match(/[\p{L}]/gu) || []).length;
+  const digits = (line.match(/[0-9۰-۹٠-٩]/g) || []).length;
+  return letters * 2 - digits + Math.min(line.length, 40) / 10;
 }
