@@ -20,6 +20,7 @@ import { getAccountBalances, listAccounts } from "./db";
 import { checksView, checkModal, bindCheckModal, bindCheckStatuses, bindCheckActions } from "./checks-ui";
 import { jalaliToGregorianDate, todayJalaliInput, formatJalaliInput, toPersianDigits } from "./calendar";
 import { bindVoiceAssistant, bindVoiceQuestionAssistant, type VoiceSaleDraft, type VoiceSaleItem } from "./voice-assistant";
+import { getCustomerTier, getMarketSettings, setMarketSettings, recommendPrice, tierLabel } from "./pricing";
 
 type Tab = "dashboard" | "sales" | "purchases" | "orders" | "inventory" | "people" | "reports" | "more" | "checks";
 
@@ -60,12 +61,13 @@ function setProfessionalMode(value: boolean): void { localStorage.setItem(UI_MOD
 function settingsModal(): string {
   const unit = getCurrencyUnit();
   const professional = isProfessionalMode();
-  return `<div class="modal-backdrop" id="settings-modal"><section class="modal ui-mode-modal"><button class="modal-close" id="settings-close">×</button><span class="eyebrow">تنظیمات سای‌سای</span><h2>تنظیمات پایه</h2><label class="field"><span>واحد نمایش مبلغ</span><select id="currency-unit"><option value="toman" ${unit === "toman" ? "selected" : ""}>تومان</option><option value="rial" ${unit === "rial" ? "selected" : ""}>ریال</option></select></label><label class="professional-toggle"><input id="professional-mode" type="checkbox" ${professional ? "checked" : ""}><span><b>نسخه حرفه‌ای</b><small>گزارش‌ها و ابزارهای مدیریتی پیشرفته نمایش داده شوند.</small></span></label><button class="secondary-button wide" id="subscription-settings">مدیریت اشتراک</button><button class="primary-button wide" id="settings-save">ذخیره و اعمال</button></section></div>`;
+  return `<div class="modal-backdrop" id="settings-modal"><section class="modal ui-mode-modal"><button class="modal-close" id="settings-close">×</button><span class="eyebrow">تنظیمات سای‌سای</span><h2>تنظیمات پایه</h2><label class="field"><span>واحد نمایش مبلغ</span><select id="currency-unit"><option value="toman" ${unit === "toman" ? "selected" : ""}>تومان</option><option value="rial" ${unit === "rial" ? "selected" : ""}>ریال</option></select></label><label class="professional-toggle"><input id="professional-mode" type="checkbox" ${professional ? "checked" : ""}><span><b>نسخه حرفه‌ای</b><small>گزارش‌ها و ابزارهای مدیریتی پیشرفته نمایش داده شوند.</small></span></label><button class="secondary-button wide" id="pricing-settings">🛡️ قیمت‌گذاری و حفظ سرمایه</button><button class="secondary-button wide" id="subscription-settings">مدیریت اشتراک</button><button class="primary-button wide" id="settings-save">ذخیره و اعمال</button></section></div>`;
 }
 function bindSettingsModal(): void {
   const modal = document.querySelector<HTMLDivElement>("#settings-modal");
   if (!modal) return;
   modal.querySelector("#settings-close")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#pricing-settings")?.addEventListener("click", async () => { modal.remove(); document.body.insertAdjacentHTML("beforeend", pricingSettingsModal()); bindPricingSettingsModal(); });
   modal.querySelector("#subscription-settings")?.addEventListener("click", async () => { modal.remove(); const subscription = await getSubscription().catch(() => ({ status: "none", plan: "none", expiresAt: null } as Subscription)); showSubscription(subscription); });
   modal.querySelector("#settings-save")?.addEventListener("click", async () => {
     const unit = modal.querySelector<HTMLSelectElement>("#currency-unit")?.value === "toman" ? "toman" : "rial";
@@ -76,6 +78,59 @@ function bindSettingsModal(): void {
     showToast("واحد مبلغ ذخیره شد");
   });
 }
+function pricingSettingsModal(): string {
+  const s = getMarketSettings();
+  return `<div class="modal-backdrop" id="pricing-settings-modal"><section class="modal"><button class="modal-close" id="pricing-close">×</button>
+    <span class="eyebrow">هوش مالی سای‌سای</span><h2>قیمت‌گذاری و حفظ سرمایه</h2>
+    <p class="muted">این اعداد مبنای پیشنهاد قیمت جایگزینی هستند. نرخ‌ها را از منبع بازار خود به‌روز کنید.</p>
+    <div class="form-grid"><label class="field"><span>دلار</span><input id="market-dollar" type="number" min="0" value="${s.dollarRate || ""}" placeholder="نرخ فعلی"></label>
+    <label class="field"><span>طلا</span><input id="market-gold" type="number" min="0" value="${s.goldRate || ""}" placeholder="نرخ فعلی"></label></div>
+    <label class="field"><span>تغییر شاخص بازار (%)</span><input id="market-index" type="number" step="0.1" value="${s.marketIndexPercent}"></label>
+    <div class="form-grid"><label class="field"><span>حاشیه جایگزینی (%)</span><input id="market-buffer" type="number" min="0" value="${s.replacementBufferPercent}"></label>
+    <label class="field"><span>سود هدف (%)</span><input id="market-margin" type="number" min="0" value="${s.defaultMarginPercent}"></label></div>
+    <div class="form-grid"><label class="field"><span>حداقل سود (%)</span><input id="market-min-margin" type="number" min="0" value="${s.minMarginPercent}"></label>
+    <label class="field"><span>فروش لازم برای نقره‌ای</span><input id="market-silver-threshold" type="number" min="0" value="${s.silverSalesThreshold}"></label></div>
+    <label class="field"><span>فروش لازم برای طلایی</span><input id="market-gold-threshold" type="number" min="0" value="${s.goldSalesThreshold}"></label>
+    <div class="form-grid"><label class="field"><span>تخفیف نقره‌ای (%)</span><input id="market-silver-discount" type="number" min="0" max="100" value="${s.silverDiscountPercent}"></label>
+    <label class="field"><span>تخفیف طلایی (%)</span><input id="market-gold-discount" type="number" min="0" max="100" value="${s.goldDiscountPercent}"></label></div>
+    <button class="primary-button wide" id="pricing-save">ذخیره تنظیمات</button></section></div>`;
+}
+function bindPricingSettingsModal(): void {
+  const m = document.querySelector<HTMLDivElement>("#pricing-settings-modal"); if (!m) return;
+  m.querySelector("#pricing-close")?.addEventListener("click", () => m.remove());
+  m.querySelector("#pricing-save")?.addEventListener("click", async () => {
+    const n=(id:string)=>numericValue(m.querySelector<HTMLInputElement>("#"+id)?.value);
+    setMarketSettings({ dollarRate:n("market-dollar"), goldRate:n("market-gold"), marketIndexPercent:Number(m.querySelector<HTMLInputElement>("#market-index")?.value||0),
+      replacementBufferPercent:n("market-buffer"), defaultMarginPercent:n("market-margin"), minMarginPercent:n("market-min-margin"),
+      silverSalesThreshold:n("market-silver-threshold"), goldSalesThreshold:n("market-gold-threshold"),
+      silverDiscountPercent:n("market-silver-discount"), goldDiscountPercent:n("market-gold-discount"), regularDiscountPercent:0 });
+    m.remove(); showToast("تنظیمات قیمت‌گذاری هوشمند ذخیره شد");
+  });
+}
+function priceRecommendationModal(product: Product): string {
+  const s=getMarketSettings();
+  const transactionsCache=(window as typeof window & { __saiPricingTransactions?: Transaction[] }).__saiPricingTransactions || [];
+  const customerOptions=parties.filter(p=>p.type==="customer"||p.type==="both").map(p=>{
+    const tier=p.tierLocked && p.customerTier ? p.customerTier : getCustomerTier(p.id, transactionsCache);
+    return `<option value="${p.id}">${p.name} · ${tierLabel(tier)}</option>`;
+  }).join("");
+  const tier=getCustomerTier(undefined, transactionsCache), rec=recommendPrice(product,tier,s);
+  return `<div class="modal-backdrop" id="price-recommendation-modal"><section class="modal"><button class="modal-close" id="price-recommendation-close">×</button>
+    <span class="eyebrow">ضد افت سرمایه</span><h2>پیشنهاد قیمت: ${product.name}</h2>
+    <p class="muted">${rec.reason}</p><div class="stats-grid">
+      ${stat("هزینه جایگزینی",rial(rec.replacementCost),"warning")}${stat("قیمت پیشنهادی",rial(rec.recommendedPrice),"primary")}${stat("کف امن فروش",rial(rec.floorPrice),"danger")}</div>
+    <label class="field"><span>مشتری</span><select id="price-party"><option value="">مشتری عادی</option>${customerOptions}</select></label>
+    <div class="panel" id="price-tier-result">مشتری عادی · تخفیف پیشنهادی ${rec.maxDiscountPercent}% · حداکثر ${rial(rec.maxDiscountAmount)}</div>
+    <button class="primary-button wide" id="price-recommendation-close-2">بستن</button></section></div>`;
+}
+async function bindPriceRecommendationModal(product: Product): Promise<void> {
+  const m=document.querySelector<HTMLDivElement>("#price-recommendation-modal"); if(!m) return;
+  const tx=await listTransactions(); (window as typeof window & { __saiPricingTransactions?: Transaction[] }).__saiPricingTransactions=tx;
+  const select=m.querySelector<HTMLSelectElement>("#price-party")!, out=m.querySelector<HTMLElement>("#price-tier-result")!;
+  const refresh=()=>{ const p=parties.find(x=>x.id===select.value); const tier=p?.tierLocked&&p.customerTier?p.customerTier:getCustomerTier(p?.id,tx); const r=recommendPrice(product,tier); out.textContent=`${p?.name||"مشتری عادی"} · سطح ${tierLabel(tier)} · تخفیف پیشنهادی ${r.maxDiscountPercent}% · حداکثر ${rial(r.maxDiscountAmount)}؛ کمتر از ${rial(r.floorPrice)} نفروش.`; };
+  select.addEventListener("change",refresh); m.querySelector("#price-recommendation-close")?.addEventListener("click",()=>m.remove()); m.querySelector("#price-recommendation-close-2")?.addEventListener("click",()=>m.remove()); refresh();
+}
+
 function uiModeModal(): string {
   const professional = isProfessionalMode();
   return `<div class="modal-backdrop" id="ui-mode-modal"><section class="modal ui-mode-modal"><button class="modal-close" id="ui-mode-close">×</button><span class="eyebrow">شخصی‌سازی سای‌سای</span><h2>حالت کاربری</h2><p class="muted">اگر حسابدار نیستید، حالت ساده منوها و گزینه‌های ضروری را خلوت نگه می‌دارد.</p><label class="professional-toggle"><input id="professional-mode" type="checkbox" ${professional ? "checked" : ""}><span><b>نسخه حرفه‌ای</b><small>گزارش‌های پیشرفته، تنظیمات بیشتر و ابزارهای مدیریتی نمایش داده شوند.</small></span></label><button class="secondary-button wide" id="subscription-settings">مدیریت اشتراک</button><div class="mode-hint">${professional ? "حالت حرفه‌ای فعال است." : "حالت ساده برای استفاده روزمره فعال است."}</div><button class="primary-button wide" id="ui-mode-save">ذخیره و اعمال</button></section></div>`;
@@ -676,7 +731,7 @@ async function inventoryView(): Promise<string> {
   products = await listProducts();
   const rows = await Promise.all(products.map(async p => {
     const stock = await getStock(p.id);
-    return `<div class="product-row" data-product-id="${p.id}"><div><strong>${p.name}</strong><small>${p.sku || "بدون کد"} · ${p.unit}</small></div><div class="stock-number ${stock <= p.lowStock ? "low" : ""}">${money.format(stock)}<small>موجودی</small></div><b>${rial(p.salePrice)}</b><span class="account-actions"><button type="button" class="secondary-button product-edit" data-product-edit="${p.id}">ویرایش</button><button type="button" class="secondary-button product-delete" data-product-delete="${p.id}">حذف</button></span></div>`;
+    return `<div class="product-row" data-product-id="${p.id}"><div><strong>${p.name}</strong><small>${p.sku || "بدون کد"} · ${p.unit}${p.marketBasis && p.marketBasis !== "none" ? " · قیمت‌گذاری " + (p.marketBasis === "dollar" ? "دلار" : p.marketBasis === "gold" ? "طلا" : "بازار") : ""}</small></div><div class="stock-number ${stock <= p.lowStock ? "low" : ""}">${money.format(stock)}<small>موجودی</small></div><b>${rial(p.salePrice)}</b><span class="account-actions"><button type="button" class="secondary-button price-recommend" data-price-product="${p.id}">💡 قیمت هوشمند</button><button type="button" class="secondary-button product-edit" data-product-edit="${p.id}">ویرایش</button><button type="button" class="secondary-button product-delete" data-product-delete="${p.id}">حذف</button></span></div>`;
   }));
   return pageHead("انبار", "موجودی کالا", "موجودی واقعی از روی گردش انبار محاسبه می‌شود؛ «حداقل موجودی» فقط آستانه هشدار است.", `<div class="head-actions"><button class="secondary-button" id="new-adjustment">＋ اصلاح موجودی</button><button class="primary-button" id="new-product">＋ کالای جدید</button></div>`) +
     `<section class="panel">${rows.length ? rows.join("") : `<div class="empty-inline"><span>▤</span><p>هنوز کالایی ثبت نشده است.</p></div>`}</section>`;
@@ -709,7 +764,7 @@ function productModal(product?: Product): string {
     <label class="field"><span>نام کالا</span><input id="p-name" placeholder="مثلاً برنج ایرانی" value="${product?.name || ""}"></label>
     <div class="form-grid"><label class="field"><span>کد کالا</span><input id="p-sku" placeholder="اختیاری" value="${product?.sku || ""}"></label><label class="field"><span>واحد</span><select id="p-unit">${["عدد","کیلوگرم","گرم","لیتر","متر","بسته"].map(u => `<option ${product?.unit === u ? "selected" : ""}>${u}</option>`).join("")}</select></label></div>
     <div class="form-grid"><label class="field"><span>قیمت خرید (${getCurrencyLabel()})</span><input id="p-buy" type="number" min="0" value="${moneyInputValue(product?.purchasePrice ?? 0)}"></label><label class="field"><span>قیمت فروش (${getCurrencyLabel()})</span><input id="p-sale" type="number" min="0" value="${moneyInputValue(product?.salePrice ?? 0)}"></label></div>
-    <label class="field"><span>حداقل موجودی (هشدار)</span><input id="p-low" type="number" min="0" step="0.001" value="${product?.lowStock ?? 5}"></label><label class="field"><span>تأمین‌کننده این کالا</span><select id="p-supplier"><option value="">بدون تأمین‌کننده</option>${parties.filter(p => p.type === "supplier" || p.type === "both").map(p => `<option value="${p.id}" ${product?.supplierId === p.id ? "selected" : ""}>${p.name}${p.phone ? " · " + p.phone : ""}</option>`).join("")}</select></label>
+    <div class="form-grid"><label class="field"><span>مبنای قیمت بازار</span><select id="p-market-basis"><option value="none" ${product?.marketBasis === "none" || !product?.marketBasis ? "selected" : ""}>بدون شاخص</option><option value="dollar" ${product?.marketBasis === "dollar" ? "selected" : ""}>دلار</option><option value="gold" ${product?.marketBasis === "gold" ? "selected" : ""}>طلا</option><option value="market" ${product?.marketBasis === "market" ? "selected" : ""}>شاخص بازار</option></select></label><label class="field"><span>نرخ مرجع هنگام خرید</span><input id="p-market-reference" type="number" min="0" value="${product?.marketReferenceRate ?? 0}"></label></div><div class="form-grid"><label class="field"><span>سود هدف (%)</span><input id="p-margin" type="number" min="0" value="${product?.targetMarginPercent ?? getMarketSettings().defaultMarginPercent}"></label><label class="field"><span>حداقل سود (%)</span><input id="p-min-margin" type="number" min="0" value="${product?.minMarginPercent ?? getMarketSettings().minMarginPercent}"></label></div><label class="field"><span>حداقل موجودی (هشدار)</span><input id="p-low" type="number" min="0" step="0.001" value="${product?.lowStock ?? 5}"></label><label class="field"><span>تأمین‌کننده این کالا</span><select id="p-supplier"><option value="">بدون تأمین‌کننده</option>${parties.filter(p => p.type === "supplier" || p.type === "both").map(p => `<option value="${p.id}" ${product?.supplierId === p.id ? "selected" : ""}>${p.name}${p.phone ? " · " + p.phone : ""}</option>`).join("")}</select></label>
     ${product ? "" : '<label class="field"><span>موجودی اولیه</span><input id="p-initial-stock" type="text" inputmode="decimal" autocomplete="off" value="0" placeholder="مثلاً 20"></label>'}
     <button class="primary-button wide" id="product-submit">${product ? "ذخیره تغییرات" : "ذخیره کالا"}</button></section></div>`;
 }
@@ -730,6 +785,7 @@ function bindProductModal(): void {
         salePrice: parseMoneyInput(modal.querySelector<HTMLInputElement>("#p-sale")!.value),
         lowStock: Math.max(0, Number(modal.querySelector<HTMLInputElement>("#p-low")!.value) || 0),
         supplierId: modal.querySelector<HTMLSelectElement>("#p-supplier")?.value || undefined,
+        marketBasis: modal.querySelector<HTMLSelectElement>("#p-market-basis")?.value as Product["marketBasis"], marketReferenceRate: numericValue(modal.querySelector<HTMLInputElement>("#p-market-reference")?.value), targetMarginPercent: numericValue(modal.querySelector<HTMLInputElement>("#p-margin")?.value), minMarginPercent: numericValue(modal.querySelector<HTMLInputElement>("#p-min-margin")?.value),
       };
       const editId = modal.dataset.editId;
       if (editId) {
@@ -928,7 +984,7 @@ function bindPartyModal(): void {
     try {
       const name = modal.querySelector<HTMLInputElement>("#party-name")!.value.trim();
       if (!name) throw new Error("نام شخص الزامی است");
-      const values = { name, phone: modal.querySelector<HTMLInputElement>("#party-phone")!.value.trim(), type: modal.querySelector<HTMLSelectElement>("#party-type")!.value as Party["type"] };
+      const tierValue = modal.querySelector<HTMLSelectElement>("#party-tier")!.value as "auto"|"regular"|"silver"|"gold"; const values = { name, phone: modal.querySelector<HTMLInputElement>("#party-phone")!.value.trim(), type: modal.querySelector<HTMLSelectElement>("#party-type")!.value as Party["type"], customerTier: tierValue === "auto" ? undefined : tierValue, tierLocked: tierValue !== "auto" };
       const editId = modal.dataset.editId;
       if (editId) {
         const existing = (await listParties()).find(p => p.id === editId);
@@ -1328,7 +1384,7 @@ return receiptCommand ? ("دریافت " + rial(commandAmount) + " از " + comm
       const stock = await getStock(product.id);
       return `موجودی ${product.name} الان ${stock.toLocaleString("fa-IR")} ${product.unit} است.`;
     }
-    if (product && /قیمت|چنده|چند است|فروشی/.test(q)) return `قیمت فروش ${product.name} ${rial(product.salePrice)} است.`;
+    if (product && /قیمت|چنده|چند است|فروشی|به نظرت|بفروشم|چقدر بزنم/.test(q)) { const tier = party ? getCustomerTier(party.id, transactions) : "regular"; const rec = recommendPrice(product, tier); return `${product.name}: قیمت پیشنهادی ${rial(rec.recommendedPrice)}؛ کف امن فروش ${rial(rec.floorPrice)}. برای مشتری ${party ? party.name + " سطح " + tierLabel(tier) : "عادی"} تا ${rial(rec.maxDiscountAmount)} تخفیف پیشنهاد می‌کنم.`; }
     if (/فروش|فروخت|فروشم|درآمد|گردش/.test(q) && /امروز|امروزم|الان|تا الان/.test(q)) return `امروز ${rial(dashboard.salesToday)} فروش داشتی.`;
     if (/فروش|فروخت|درآمد|گردش/.test(q) && /ماه|این ماه|ماه جاری/.test(q)) return `فروش این ماه تا امروز ${rial(monthSales)} بوده است.`;
     if (/اوضاع فروش|وضع فروش|چطور فروختم|خوب فروختم|فروش خوب/.test(q)) return `تا امروز فروش این ماه ${rial(monthSales)} بوده و امروز ${rial(dashboard.salesToday)} فروش داشتی.`;
@@ -1358,6 +1414,7 @@ return receiptCommand ? ("دریافت " + rial(commandAmount) + " از " + comm
   });
   document.querySelector("#new-adjustment")?.addEventListener("click", async () => { products = await listProducts(); if (!products.length) { showToast("ابتدا یک کالا ثبت کنید"); return; } document.body.insertAdjacentHTML("beforeend", adjustmentModal()); bindAdjustmentModal(); });
   document.querySelector("#new-product")?.addEventListener("click", async () => { parties = await listParties(); document.body.insertAdjacentHTML("beforeend", productModal()); bindProductModal(); });
+  document.querySelectorAll<HTMLElement>("[data-price-product]").forEach(button => button.addEventListener("click", async event => { event.stopPropagation(); const id=button.dataset.priceProduct; const product=id?(await listProducts()).find(p=>p.id===id):undefined; if(!product) return; parties=await listParties(); document.body.insertAdjacentHTML("beforeend",priceRecommendationModal(product)); await bindPriceRecommendationModal(product); }));
   document.querySelectorAll<HTMLElement>("[data-product-edit]").forEach(button => button.addEventListener("click", async event => {
     event.stopPropagation();
     const id = button.dataset.productEdit; const product = id ? (await listProducts()).find(p => p.id === id) : undefined;
