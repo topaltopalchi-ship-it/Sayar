@@ -312,16 +312,12 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
         ? await updateTransaction(existing.id, { date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue })
         : await addSale({ date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
       modal.remove();
-
-      // Open the invoice immediately from the exact saved transaction.
-      // Only then rerender the underlying page, so Android WebView cannot
-      // repaint the page between save and invoice mounting.
+      await render();
       try {
         await openInvoice(savedSale);
       } catch (error) {
         showToast(error instanceof Error ? `فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود: ${error.message}` : "فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود");
       }
-      await render();
       showToast(`${existing ? "فاکتور ویرایش شد" : "فروش ثبت شد"}؛ مانده ${rial(amount - paidValue)}`);
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت فروش ناموفق بود"); }
   });
@@ -392,11 +388,8 @@ function bindProductModal(): void {
         if (!existing) throw new Error("کالا پیدا نشد");
         await updateProduct({ ...existing, ...values });
       } else {
-        const created = await addProduct(values);
         const initialStock = Math.max(0, numericValue(modal.querySelector<HTMLInputElement>("#p-initial-stock")?.value));
-        if (initialStock > 0) {
-          await addStockAdjustment({ date: Date.now(), productId: created.id, quantity: initialStock, description: "موجودی اولیه کالا" });
-        }
+        await addProduct(values, initialStock);
       }
       modal.remove(); showToast(editId ? "تغییرات کالا ذخیره شد" : "کالا با موفقیت ثبت شد"); await render();
     } catch (e) { showToast(e instanceof Error ? e.message : "ذخیره کالا ناموفق بود"); }
@@ -452,9 +445,9 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const dateField = (prefix: "from" | "to", parts: { year: string; month: string; day: string }) => `
     <div class="report-date-parts" dir="ltr" aria-label="${prefix === "from" ? "تاریخ شروع" : "تاریخ پایان"}">
       <input id="report-${prefix}-year" data-report-date-part type="tel" inputmode="numeric" maxlength="4" value="${parts.year}" aria-label="سال">
-      <span aria-hidden="true">/</span>
+      <span class="report-date-separator" aria-hidden="true">/</span>
       <input id="report-${prefix}-month" data-report-date-part type="tel" inputmode="numeric" maxlength="2" value="${parts.month}" aria-label="ماه">
-      <span aria-hidden="true">/</span>
+      <span class="report-date-separator" aria-hidden="true">/</span>
       <input id="report-${prefix}-day" data-report-date-part type="tel" inputmode="numeric" maxlength="2" value="${parts.day}" aria-label="روز">
     </div>`;
   const summary = `<section class="panel report-list"><div class="report-range" role="group" aria-label="بازه گزارش"><div class="report-range-item" role="button" tabindex="0" data-report-range="today">امروز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="week">۷ روز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="month">ماه جاری</div><div class="report-range-item" role="button" tabindex="0" data-report-range="all">همه</div></div><form id="report-range-form" class="report-custom-range">
@@ -803,22 +796,12 @@ function bindReportControls(): void {
 
   document.querySelectorAll<HTMLElement>("[data-report-range]").forEach(button => {
     button.setAttribute("aria-pressed", (button.dataset.reportRange || "month") === (localStorage.getItem("sai-sai-report-range") || "month") ? "true" : "false");
-    button.addEventListener("click", async () => {
-      localStorage.setItem("sai-sai-report-range", button.dataset.reportRange || "month");
-      await render();
-    });
     button.addEventListener("keydown", async event => {
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       localStorage.setItem("sai-sai-report-range", button.dataset.reportRange || "month");
       await render();
     });
-  });
-
-  document.querySelector<HTMLButtonElement>("#report-apply-range")?.addEventListener("click", async event => {
-    event.preventDefault();
-    event.stopPropagation();
-    await applyReportRange();
   });
 }
 
@@ -850,17 +833,6 @@ async function render(): Promise<void> {
   layout(content, subscription);
   bindReportControls();
 
-  // Direct binding is intentional here: Android WebView can retain the #app
-  // node while replacing its innerHTML, so a fresh listener guarantees the
-  // range button remains actionable on every render.
-  document.querySelector<HTMLButtonElement>("#report-apply-range")?.addEventListener("click", () => {
-    void applyReportRange();
-  });
-
-  document.querySelectorAll<HTMLButtonElement>("[data-invoice-id]").forEach(b => b.addEventListener("click", async () => {
-    const tx = (await listTransactions()).find(t => t.id === b.dataset.invoiceId);
-    if (tx) await openInvoice(tx);
-  }));
   document.querySelector("#new-sale")?.addEventListener("click", () => void openSaleModal());
   document.querySelectorAll<HTMLElement>("[data-sale-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.saleEdit); if(t) await openSaleModal(t); }));
   document.querySelectorAll<HTMLElement>("[data-sale-delete]").forEach(b => b.addEventListener("click", async () => { const id=b.dataset.saleDelete||""; if(!id||!confirm("این فاکتور فروش حذف شود؟")) return; try { await deleteTransaction(id); showToast("فاکتور حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف فاکتور ناموفق بود"); } }));
