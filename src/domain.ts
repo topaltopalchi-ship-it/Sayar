@@ -47,6 +47,7 @@ export interface Transaction {
   type: TransactionType;
   date: number;
   partyId?: ID;
+  customerName?: string;
   accountId?: ID;
   description: string;
   lines: TransactionLine[];
@@ -124,7 +125,8 @@ export type OrderStatus = "pending" | "completed" | "cancelled";
 
 export interface Order {
   id: ID;
-  partyId: ID;
+  partyId?: ID;
+  customerName?: string;
   productId: ID;
   orderType?: string;
   quantity: number;
