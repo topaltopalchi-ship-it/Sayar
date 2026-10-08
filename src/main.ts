@@ -466,14 +466,24 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   // formatted and compact values, but the UI should always show separators.
   const defaultFrom = formatJalaliInput(localStorage.getItem("sai-sai-report-from") || todayJalaliInput());
   const defaultTo = formatJalaliInput(localStorage.getItem("sai-sai-report-to") || todayJalaliInput());
-  const dateField = (prefix: "from" | "to", value: string) => `
-    <label class="field report-date">
-      <span>${prefix === "from" ? "از تاریخ شمسی" : "تا تاریخ شمسی"}</span>
-      <input id="report-${prefix}-date" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" value="${formatJalaliInput(value)}" placeholder="۱۴۰۵/۰۷/۱۶" aria-label="${prefix === "from" ? "تاریخ شروع" : "تاریخ پایان"}">
-    </label>`;
+
+  const dateParts = (prefix: "from" | "to", value: string) => {
+    const digits = compactJalaliInput(value).padEnd(8, "0");
+    return `
+      <div class="field report-date">
+        <span>${prefix === "from" ? "از تاریخ شمسی" : "تا تاریخ شمسی"}</span>
+        <div class="report-date-parts" data-report-date="${prefix}">
+          <input id="report-${prefix}-year" data-date-part="year" type="text" inputmode="numeric" maxlength="4" value="${digits.slice(0,4)}" placeholder="۱۴۰۵" aria-label="سال">
+          <b class="report-date-separator" aria-hidden="true">/</b>
+          <input id="report-${prefix}-month" data-date-part="month" type="text" inputmode="numeric" maxlength="2" value="${digits.slice(4,6)}" placeholder="۰۷" aria-label="ماه">
+          <b class="report-date-separator" aria-hidden="true">/</b>
+          <input id="report-${prefix}-day" data-date-part="day" type="text" inputmode="numeric" maxlength="2" value="${digits.slice(6,8)}" placeholder="۱۶" aria-label="روز">
+        </div>
+      </div>`;
+  };
   const summary = `<section class="panel report-list"><div class="report-range" role="group" aria-label="بازه گزارش"><button type="button" class="report-range-item" data-report-range="today">امروز</button><button type="button" class="report-range-item" data-report-range="week">۷ روز</button><button type="button" class="report-range-item" data-report-range="month">ماه جاری</button><button type="button" class="report-range-item" data-report-range="all">همه</button></div><form id="report-range-form" class="report-custom-range">
-  ${dateField("from", defaultFrom)}
-  ${dateField("to", defaultTo)}
+  ${dateParts("from", defaultFrom)}
+  ${dateParts("to", defaultTo)}
   <button type="submit" class="primary-button wide" id="report-apply-range">اعمال بازه</button>
 </form><p class="muted">بازه فعال: ${label}</p></section>`;
   const stats = `<section class="stats-grid">${stat("فروش",rial(sales),"primary")}${stat("بهای تمام‌شده",rial(cost),"warning")}${stat("سود ناخالص",rial(gross),"success")}${stat("سود خالص",rial(net),"success")}</section>`;
@@ -778,24 +788,61 @@ function bindReportControls(): void {
   const activeRange = localStorage.getItem("sai-sai-report-range") || "month";
   document.querySelectorAll<HTMLButtonElement>("[data-report-range]").forEach(button => {
     button.setAttribute("aria-pressed", (button.dataset.reportRange || "month") === activeRange ? "true" : "false");
+    button.addEventListener("click", async () => {
+      localStorage.setItem("sai-sai-report-range", button.dataset.reportRange || "month");
+      await render();
+    });
   });
-
-  const form = document.querySelector<HTMLFormElement>("#report-range-form");
-  if (form) {
-    const normalize = (input: HTMLInputElement) => {
-      input.value = formatJalaliInput(input.value);
+  const normalizePart = (input: HTMLInputElement, max: number) => {
+    input.value = input.value
+      .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+      .replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+      .replace(/[^0-9]/g, "")
+      .slice(0, max);
+  };
+  document.querySelectorAll<HTMLElement>("[data-report-date]").forEach(group => {
+    const year = group.querySelector<HTMLInputElement>("[data-date-part='year']")!;
+    const month = group.querySelector<HTMLInputElement>("[data-date-part='month']")!;
+    const day = group.querySelector<HTMLInputElement>("[data-date-part='day']")!;
+    [year, month, day].forEach((input, index) => {
+      input.addEventListener("input", () => {
+        normalizePart(input, index === 0 ? 4 : 2);
+        if ((index === 0 && input.value.length === 4) || (index > 0 && input.value.length === 2)) {
+          const next = index === 0 ? month : day;
+          next.focus();
+          next.select();
+        }
+      });
+    });
+  });
+  document.querySelector("#report-range-form")?.addEventListener("submit", async event => {
+    event.preventDefault();
+    const readDate = (prefix: "from" | "to"): string => {
+      const group = document.querySelector<HTMLElement>(`[data-report-date="${prefix}"]`);
+      if (!group) return "";
+      const year = group.querySelector<HTMLInputElement>("[data-date-part='year']")?.value ?? "";
+      const month = group.querySelector<HTMLInputElement>("[data-date-part='month']")?.value ?? "";
+      const day = group.querySelector<HTMLInputElement>("[data-date-part='day']")?.value ?? "";
+      return `${year.padStart(4, "0")}${month.padStart(2, "0")}${day.padStart(2, "0")}`;
     };
-    form.querySelectorAll<HTMLInputElement>("[data-jalali-input]").forEach(input => {
-      normalize(input);
-      input.addEventListener("input", () => normalize(input));
-      input.addEventListener("change", () => normalize(input));
-      input.addEventListener("blur", () => normalize(input));
-    });
-    form.addEventListener("submit", event => {
-      event.preventDefault();
-      void applyReportRange();
-    });
-  }
+    const from = readDate("from");
+    const to = readDate("to");
+    const fromDate = jalaliToGregorianDate(from);
+    const toDate = jalaliToGregorianDate(to);
+    if (from.length !== 8 || to.length !== 8 || !fromDate || !toDate) {
+      showToast("تاریخ را کامل وارد کنید");
+      return;
+    }
+    if (fromDate.getTime() > toDate.getTime()) {
+      showToast("تاریخ شروع نباید بعد از تاریخ پایان باشد");
+      return;
+    }
+    localStorage.setItem("sai-sai-report-from", from);
+    localStorage.setItem("sai-sai-report-to", to);
+    localStorage.setItem("sai-sai-report-range", "custom");
+    await render();
+    showToast("بازه گزارش اعمال شد");
+  });
 }
 
 async function render(): Promise<void> {
