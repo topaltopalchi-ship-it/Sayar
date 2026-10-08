@@ -42,6 +42,17 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease
 
+      - name: Sign APK for direct testing
+        run: |
+          APK_DIR="android/app/build/outputs/apk/release"
+          UNSIGNED_APK="$APK_DIR/app-release-unsigned.apk"
+          KEYSTORE="$RUNNER_TEMP/sayar-test.keystore"
+          keytool -genkeypair -v -keystore "$KEYSTORE" -storepass android -keypass android -alias sayar-test -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Sayar Test, OU=Testing, O=Sayar, L=Baku, ST=Baku, C=AZ"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$APKSIGNER"
+          "$APKSIGNER" sign --ks "$KEYSTORE" --ks-pass pass:android --key-pass pass:android --out "$APK_DIR/app-release.apk" "$UNSIGNED_APK"
+          "$APKSIGNER" verify "$APK_DIR/app-release.apk"
+
       - name: Show generated APK
         run: find android/app/build/outputs/apk -type f -name "*.apk" -print
 
@@ -49,5 +60,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Sayar-release-apk
-          path: android/app/build/outputs/apk/release/*.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
