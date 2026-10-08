@@ -906,7 +906,22 @@ function placeholder(title: string, text: string): string {
   return pageHead("سای‌سای", title, text) + `<section class="panel locked-panel"><div>◈</div><h3>این بخش در حال تکمیل است</h3><p class="muted">زیرساخت اصلی آماده است و قابلیت‌های تکمیلی در نسخه‌های بعدی اضافه می‌شوند.</p></section>`;
 }
 
-if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => undefined));
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    const isCapacitorNative = location.hostname === "localhost";
+    if (isCapacitorNative) {
+      // Capacitor bundles hashed assets locally. A long-lived PWA cache can otherwise
+      // keep an older JS bundle and make bug fixes appear to have no effect.
+      void navigator.serviceWorker.getRegistrations()
+        .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
+        .then(() => "caches" in window ? caches.keys() : [])
+        .then(keys => Promise.all((keys as string[]).filter(key => key.startsWith("sai-sai-")).map(key => caches.delete(key))))
+        .catch(() => undefined);
+    } else {
+      void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    }
+  });
+}
 
 void (async () => {
   try {
