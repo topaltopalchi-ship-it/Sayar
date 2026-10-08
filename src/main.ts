@@ -194,6 +194,7 @@ function invoiceModal(t: Transaction, productMap: Map<string, Product>, partyMap
   return `<div class="modal-backdrop invoice-backdrop" id="invoice-modal"><section class="modal invoice-modal">
     <button class="modal-close no-print" id="invoice-close">×</button>
     <div class="invoice-head"><div><span class="eyebrow">سای‌سای</span><h2>${title}</h2><p>${t.invoiceNumber || "بدون شماره"} · ${dateLabel(t.date)}</p></div><div class="invoice-brand">س</div></div>
+    ${t.type === "sale" && t.amount > t.paid ? '<div class="invoice-unsettled">تسویه نشده</div>' : ''}
     <div class="invoice-party"><span>طرف حساب</span><strong>${party?.name || "ثبت نشده"}</strong><small>${party?.phone || "بدون شماره تماس"}</small></div>
     <div class="invoice-table-wrap"><table class="invoice-table"><thead><tr><th>#</th><th>کالا</th><th>مقدار</th><th>قیمت</th><th>تخفیف</th><th>جمع</th></tr></thead><tbody>${rows || '<tr><td colspan="6">بدون ردیف</td></tr>'}</tbody></table></div>
     <div class="invoice-summary"><div><span>جمع فاکتور</span><b>${rial(t.amount)}</b></div><div><span>پرداخت‌شده</span><b>${rial(t.paid)}</b></div><div class="invoice-balance"><span>مانده</span><b>${rial(Math.max(0, t.amount - t.paid))}</b></div></div>
@@ -381,6 +382,7 @@ function peopleView(): string {
 async function reportsView(transactions: Transaction[]): Promise<string> {
   const products = await listProducts();
   const expenses = await listExpenses();
+  const parties = await listParties();
   const range = localStorage.getItem("sai-sai-report-range") || "month";
   const now = new Date(); now.setHours(23,59,59,999);
   const start = new Date(now); start.setHours(0,0,0,0);
@@ -423,7 +425,22 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const expenseSection = `<section class="panel"><div class="section-head"><h3>هزینه‌ها</h3><span class="muted">${money.format(expenseTx.length)} مورد</span></div>${expenseRows}</section>`;
   const settlements = [...receiptTx,...paymentTx].sort((a,b)=>b.date-a.date).map(t => `<div class="transaction-row"><div class="transaction-icon">${t.type==="receipt"?"↓":"↑"}</div><div class="transaction-main"><strong>${t.type==="receipt"?"دریافت":"پرداخت"}</strong><small>${dateLabel(t.date)} · ${t.description || ""}</small></div><b>${rial(t.amount)}</b><button class="secondary-button" data-settlement-edit="${t.id}">ویرایش</button><button class="secondary-button" data-settlement-delete="${t.id}">حذف</button></div>`).join("");
   const settlementSection = `<section class="panel"><div class="section-head"><h3>دریافت و پرداخت‌ها</h3><span class="muted">قابل ویرایش</span></div>${settlements}</section>`;
-  return pageHead("تحلیل مالی", "گزارش سود و زیان", "گزارش بر اساس بازه انتخابی و بهای تمام‌شده FIFO.") + summary + stats + cash + expenseSection + settlementSection + reportExportButtons();
+  const partyNames = new Map(parties.map(p => [p.id, p.name]));
+  const debtorTotals = new Map<string, number>();
+  for (const t of transactions) {
+    if (t.type !== "sale" || !t.partyId) continue;
+    const balance = Math.max(0, t.amount - t.paid);
+    if (balance > 0) debtorTotals.set(t.partyId, (debtorTotals.get(t.partyId) || 0) + balance);
+  }
+  const debtorRows = [...debtorTotals.entries()]
+    .sort((a,b) => b[1] - a[1])
+    .map(([partyId, balance]) => {
+      const partySales = transactions.filter(t => t.type === "sale" && t.partyId === partyId && Math.max(0, t.amount - t.paid) > 0);
+      const invoiceButtons = partySales.map(t => `<button class="secondary-button debtor-invoice" data-invoice-id="${t.id}">${t.invoiceNumber || "فاکتور"}</button>`).join("");
+      return `<div class="transaction-row debtor-row"><div class="transaction-icon debtor-icon">!</div><div class="transaction-main"><strong>${partyNames.get(partyId) || "طرف حساب حذف‌شده"}</strong><small>${partySales.length} فاکتور تسویه‌نشده</small></div><b class="debtor-amount">${rial(balance)}</b><div class="debtor-invoices">${invoiceButtons}</div></div>`;
+    }).join("");
+  const debtorSection = `<section class="panel"><div class="section-head"><h3>بدهکاران</h3><span class="muted">${money.format(debtorTotals.size)} نفر</span></div>${debtorRows || '<div class="empty-inline"><p>در حال حاضر فاکتور بدهکار و تسویه‌نشده‌ای وجود ندارد.</p></div>'}</section>`;
+  return pageHead("تحلیل مالی", "گزارش سود و زیان", "گزارش بر اساس بازه انتخابی و بهای تمام‌شده FIFO.") + summary + stats + cash + debtorSection + expenseSection + settlementSection + reportExportButtons();
 }
 function reportExcelCsv(transactions: Transaction[]): void {
   const rows = [["نوع","تاریخ","مبلغ","پرداخت","شرح"]];
@@ -652,6 +669,13 @@ async function bindActions(): Promise<void> {
 
   root.addEventListener("click", async event => {
     const target = event.target as HTMLElement;
+    const invoiceButton = target.closest<HTMLElement>("[data-invoice-id]");
+    if (invoiceButton) {
+      const transaction = transactions.find(t => t.id === invoiceButton.dataset.invoiceId);
+      if (transaction) await openInvoice(transaction);
+      return;
+    }
+
     const nav = target.closest<HTMLElement>("[data-nav], [data-nav-shortcut]");
     if (nav) {
       const next = nav.dataset.nav || nav.dataset.navShortcut;
