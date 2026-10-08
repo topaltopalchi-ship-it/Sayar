@@ -677,7 +677,31 @@ async function bindActions(): Promise<void> {
 
 function bindReportControls(): void {
   if (activeTab !== "reports") return;
-  document.querySelectorAll<HTMLInputElement>("[data-jalali-input]").forEach(formatReportDateInput);
+  document.querySelectorAll<HTMLInputElement>("[data-jalali-input]").forEach(input => {
+    formatReportDateInput(input);
+    input.addEventListener("input", () => formatReportDateInput(input));
+    input.addEventListener("change", () => formatReportDateInput(input));
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-report-range]").forEach(button => {
+    button.addEventListener("click", async () => {
+      localStorage.setItem("sai-sai-report-range", button.dataset.reportRange || "month");
+      await render();
+    });
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-date-slash]").forEach(button => {
+    button.addEventListener("click", () => {
+      const input = document.querySelector<HTMLInputElement>("#" + button.dataset.dateSlash);
+      if (!input) return;
+      input.focus();
+      const start = input.selectionStart ?? input.value.length;
+      const before = input.value.slice(0, start);
+      const after = input.value.slice(start);
+      input.value = formatJalaliInput(before + "/" + after);
+      const next = Math.min(input.value.length, start + 1);
+      try { input.setSelectionRange(next, next); } catch {}
+    });
+  });
+  document.querySelector("#report-apply-range")?.addEventListener("click", () => void applyReportRange());
 }
 
 async function render(): Promise<void> {
