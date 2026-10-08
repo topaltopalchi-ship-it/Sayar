@@ -68,6 +68,16 @@ function parseVoiceSale(transcript: string): VoiceSaleDraft {
   return { transcript: text, customerName: customer, productHint: product, quantity: quantity || 1, unitPrice, paid, items };
 }
 
+export function speakSaiSai(message: string): void {
+  if (!("speechSynthesis" in window) || !message.trim()) return;
+  const utterance = new SpeechSynthesisUtterance(message);
+  utterance.lang = "fa-IR";
+  utterance.rate = 0.92;
+  utterance.pitch = 1;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
+}
+
 function showVoiceModal(html: string): HTMLElement {
   document.querySelector("#voice-sale-modal")?.remove();
   document.body.insertAdjacentHTML("beforeend", html);
@@ -105,7 +115,7 @@ export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise
       });
       const transcript = result.matches?.[0]?.trim() || "";
       if (!transcript) throw new Error("صدایی تشخیص داده نشد");
-      const draft = parseVoiceSale(transcript);
+      const draft = parseVoiceSale(transcript);\n      speakSaiSai("صدایتان را شنیدم. اطلاعات فروش آماده بررسی است.");
       const m = showVoiceModal(
         '<div class="modal-backdrop" id="voice-sale-modal"><section class="modal" role="dialog" aria-modal="true">' +
         '<button class="modal-close" id="voice-close">×</button><span class="eyebrow">ثبت فروش با صدا</span><h2>اطلاعات فروش</h2>' +
