@@ -1,5 +1,6 @@
 import { addPurchase, listAccounts, updateTransaction } from "./db";
 import type { Party, Product, Transaction } from "./domain";
+import { getCurrencyLabel, moneyInputValue, parseMoneyInput } from "./settings";
 
 type MoneyFormat = (value: number) => string;
 type Done = (message: string) => void;
@@ -22,11 +23,11 @@ export function openPurchaseModal(products: Product[], parties: Party[], rial: M
       <label class="field"><span>کالا</span><select id="purchase-product">${productOptions}</select></label>
       <div class="form-grid">
         <label class="field"><span>مقدار</span><input id="purchase-quantity" type="number" min="0.001" step="0.001" value="${existing?.lines[0]?.quantity ?? 1}"></label>
-        <label class="field"><span>قیمت خرید</span><input id="purchase-price" type="number" min="0" value="${existing?.lines[0]?.unitPrice ?? products[0].purchasePrice}"></label>
+        <label class="field"><span>قیمت خرید (${getCurrencyLabel()})</span><input id="purchase-price" type="number" min="0" value="${moneyInputValue(existing?.lines[0]?.unitPrice ?? products[0].purchasePrice)}"></label>
       </div>
       <div class="form-grid">
-        <label class="field"><span>تخفیف</span><input id="purchase-discount" type="number" min="0" value="${existing?.lines[0]?.discount ?? 0}"></label>
-        <label class="field"><span>مبلغ پرداختی</span><input id="purchase-paid" type="number" min="0" value="${existing?.paid ?? 0}"></label>
+        <label class="field"><span>تخفیف (${getCurrencyLabel()})</span><input id="purchase-discount" type="number" min="0" value="${moneyInputValue(existing?.lines[0]?.discount ?? 0)}"></label>
+        <label class="field"><span>مبلغ پرداختی (${getCurrencyLabel()})</span><input id="purchase-paid" type="number" min="0" value="${moneyInputValue(existing?.paid ?? 0)}"></label>
       </div>
       <label class="field"><span>تأمین‌کننده</span><select id="purchase-party"><option value="">بدون انتخاب</option>${partyOptions}</select></label>
       <label class="field"><span>پرداخت از</span><select id="purchase-account"><option value="">بدون انتخاب حساب</option></select></label>
@@ -45,7 +46,7 @@ export function openPurchaseModal(products: Product[], parties: Party[], rial: M
   const account = modal.querySelector<HTMLSelectElement>("#purchase-account")!;
 
   const updateTotal = () => {
-    const amount = Math.max(0, (Number(q.value) || 0) * (Number(price.value) || 0) - (Number(discount.value) || 0));
+    const amount = Math.max(0, (Number(q.value) || 0) * parseMoneyInput(price.value) - parseMoneyInput(discount.value));
     total.textContent = rial(amount);
     return amount;
   };
@@ -59,7 +60,7 @@ export function openPurchaseModal(products: Product[], parties: Party[], rial: M
 
   product.addEventListener("change", () => {
     const p = products.find(item => item.id === product.value);
-    if (p) price.value = String(p.purchasePrice);
+    if (p) price.value = moneyInputValue(p.purchasePrice);
     updateTotal();
   });
   [q, price, discount, paid].forEach(input => input.addEventListener("input", updateTotal));
@@ -69,11 +70,11 @@ export function openPurchaseModal(products: Product[], parties: Party[], rial: M
     try {
       const p = products.find(item => item.id === product.value);
       const quantity = Number(q.value);
-      const unitPrice = Math.max(0, Number(price.value) || 0);
-      const disc = Math.max(0, Number(discount.value) || 0);
+      const unitPrice = parseMoneyInput(price.value);
+      const disc = parseMoneyInput(discount.value);
       const amount = Math.max(0, quantity * unitPrice - disc);
       if (!p || quantity <= 0 || amount <= 0) throw new Error("کالا، مقدار و قیمت خرید را بررسی کنید");
-      const paidValue = Math.min(amount, Math.max(0, Number(paid.value) || 0));
+      const paidValue = Math.min(amount, parseMoneyInput(paid.value));
       const partyId = party.value || undefined;
       const accountId = account.value || undefined;
 
