@@ -696,7 +696,7 @@ async function bindActions(): Promise<void> {
 
   root.addEventListener("input", event => {
     const target = event.target as HTMLInputElement;
-    if (target.matches("[data-jalali-input]")) formatReportDateInput(target);
+    if (target.matches("[data-jalali-input]")) target.value = compactJalaliInput(target.value);
   });
 
   root.addEventListener("change", event => {
