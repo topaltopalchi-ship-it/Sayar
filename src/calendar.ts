@@ -29,9 +29,14 @@ function jalaliToGregorianParts(jy: number, jm: number, jd: number): [number, nu
 }
 
 export function jalaliToGregorianDate(value: string): Date | null {
+  const compact = value.trim()
+    .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+    .replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+    .replace(/[^0-9]/g, "");
   const normalized = value.trim().replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
-  const match = normalized.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
-  if (!match) return null;
+  const match = compact.length === 8
+    ? compact.match(/^(\d{4})(\d{2})(\d{2})$/)
+    : normalized.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);  if (!match) return null;
 
   const jy = Number(match[1]);
   const jm = Number(match[2]);
