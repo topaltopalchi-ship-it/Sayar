@@ -11,6 +11,7 @@ export interface Product {
   salePrice: Money;
   purchasePrice: Money;
   lowStock: number;
+  supplierId?: ID;
   createdAt: number;
   active: boolean;
 }
