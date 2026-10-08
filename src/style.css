@@ -86,3 +86,11 @@ body{background:radial-gradient(circle at 12% 0,#223657 0,#10182a 34%,#090e1b 78
 
 /* Sayar brand logo */
 .brand-block{display:flex;align-items:center;gap:10px;min-width:0}.brand-logo{width:52px;height:52px;flex:0 0 52px;border-radius:15px;display:block;object-fit:cover;box-shadow:0 8px 22px #02061755;border:1px solid #2f4f86}.brand-block h1{white-space:nowrap}
+
+.invoice-unsettled{display:inline-flex;align-items:center;justify-content:center;margin:10px 0 14px;padding:8px 16px;border:2px solid #ef4444;border-radius:10px;background:#450a0a;color:#fecaca!important;font-weight:900;font-size:16px;letter-spacing:.2px}
+.debtor-row{align-items:center;gap:12px}
+.debtor-icon{background:#450a0a!important;color:#f87171!important;font-weight:900}
+.debtor-amount{color:#f87171!important;white-space:nowrap}
+.debtor-invoices{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.debtor-invoices .secondary-button{font-size:11px;padding:7px 10px;border-color:#7f1d1d;color:#fecaca;background:#2a1015}
+@media(max-width:700px){.debtor-row{grid-template-columns:auto 1fr}.debtor-amount{grid-column:2;justify-self:start}.debtor-invoices{grid-column:1/-1;justify-content:flex-start}}
