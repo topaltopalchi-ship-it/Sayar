@@ -88,6 +88,7 @@ function orderModal(order: Order | undefined, products: Product[], parties: Part
     <span class="eyebrow">ثبت سفارش</span>
     <h2>${order ? "ویرایش سفارش" : "سفارش جدید"}</h2>
     <label class="field"><span>نام مشتری</span><input id="order-customer-name" value="${defaultCustomerName}" placeholder="نام مشتری"></label>
+    <label class="field"><span>نوع سفارش</span><input id="order-type" value="${order?.orderType || ""}" placeholder="مثلاً دوخت، آماده، سفارشی"></label>
     <label class="field"><span>کالا</span><select id="order-product">${products.map(p => `<option value="${p.id}" ${p.id === defaultProduct ? "selected" : ""}>${p.name} · ${rial(p.salePrice)} / ${p.unit}</option>`).join("")}</select></label>
     <div class="form-grid">
       <label class="field"><span>تعداد</span><input id="order-qty" type="text" inputmode="decimal" value="${order?.quantity ?? 1}"></label>
@@ -107,7 +108,7 @@ export async function ordersView(orders: Order[], products: Product[], parties: 
     const party = order.partyId ? partyMap.get(order.partyId) : undefined;
     const product = productMap.get(order.productId);
     return `<article class="order-card ${order.status}">
-      <div class="order-card-head"><div><strong>${order.customerName || party?.name || "مشتری ثبت نشده"}</strong><small>${product?.name || "کالای حذف‌شده"} · ${order.quantity} ${product?.unit || ""}</small></div><span class="order-status ${order.status}">${statusLabel(order.status)}</span></div>
+      <div class="order-card-head"><div><strong>${order.customerName || party?.name || "مشتری ثبت نشده"}</strong><small>${order.orderType ? order.orderType + " · " : ""}${product?.name || "کالای حذف‌شده"} · ${order.quantity} ${product?.unit || ""}</small></div><span class="order-status ${order.status}">${statusLabel(order.status)}</span></div>
       <div class="order-card-meta"><span>تحویل: <b>${jalaliLabel(order.deliveryDate)}</b></span><span>${rial(Math.round(order.quantity * order.unitPrice))}</span></div>
       ${order.note ? `<p class="order-note">${order.note}</p>` : ""}
       <div class="order-actions">
@@ -119,10 +120,11 @@ export async function ordersView(orders: Order[], products: Product[], parties: 
   }).join("");
   return `<section class="page-head"><span class="eyebrow">فروش و پیگیری</span><div class="page-head-row"><div><h2>سفارشات</h2><p class="muted">سفارش مشتری را ثبت کن؛ یک روز قبل از تحویل به تو یادآوری می‌شود.</p></div><button class="primary-button" id="new-order">＋ سفارش جدید</button></div></section>
     <section class="panel order-summary"><span>در انتظار تحویل</span><strong>${orders.filter(o => o.status === "pending").length}</strong></section>
-    <section class="orders-list">${rows || `<div class="panel empty-inline"><span>◷</span><p>هنوز سفارشی ثبت نشده است.</p></div>`}</section>`;
+    <section class="orders-list">${rows || `<div class="panel empty-inline order-empty-template"><div class="order-template-title">ثبت سفارش</div><div class="order-template-grid"><div><small>مشتری</small><span>نام مشتری را وارد کنید</span></div><div><small>نوع سفارش</small><span>نوع سفارش را وارد کنید</span></div><div><small>مقدار سفارش</small><span>مقدار را وارد کنید</span></div><div><small>تاریخ تحویل</small><span>تاریخ را انتخاب کنید</span></div></div><button class="primary-button" id="empty-new-order">＋ ثبت اولین سفارش</button></div>`}</section>`;
 }
 
 export function bindOrderControls(products: Product[], parties: Party[], rial: (n: number) => string, onChanged: () => Promise<void>, showToast: (message: string) => void): void {
+  document.querySelector("#empty-new-order")?.addEventListener("click", () => { if (!products.length) { showToast("ابتدا یک کالا ثبت کنید"); return; } document.body.insertAdjacentHTML("beforeend", orderModal(undefined, products, parties, rial)); bindOrderModal(products, parties, rial, onChanged, showToast); });
   document.querySelector("#new-order")?.addEventListener("click", () => {
     if (!products.length) { showToast("ابتدا یک کالا ثبت کنید"); return; }
     document.body.insertAdjacentHTML("beforeend", orderModal(undefined, products, parties, rial));
@@ -187,6 +189,7 @@ function bindOrderModal(products: Product[], parties: Party[], rial: (n: number)
   modal.querySelector("#order-submit")?.addEventListener("click", async () => {
     try {
       const customerName = modal.querySelector<HTMLInputElement>("#order-customer-name")!.value.trim();
+      const orderType = modal.querySelector<HTMLInputElement>("#order-type")!.value.trim();
       const productId = product.value;
       const quantity = Number(qty.value.replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[^0-9.]/g, ""));
       const unitPrice = Number(price.value.replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[^0-9.]/g, ""));
@@ -195,8 +198,8 @@ function bindOrderModal(products: Product[], parties: Party[], rial: (n: number)
       if (!customerName || !productId || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice < 0 || !deliveryDate) throw new Error("اطلاعات سفارش را کامل کنید");
       const note = modal.querySelector<HTMLInputElement>("#order-note")!.value.trim();
       const saved = existing
-        ? { ...existing, partyId: undefined, customerName, productId, quantity, unitPrice, deliveryDate, note }
-        : await addOrder({ partyId: undefined, customerName, productId, quantity, unitPrice, deliveryDate, note, orderDate: Date.now() });
+        ? { ...existing, partyId: undefined, customerName, orderType: orderType || undefined, productId, quantity, unitPrice, deliveryDate, note }
+        : await addOrder({ partyId: undefined, customerName, orderType: orderType || undefined, productId, quantity, unitPrice, deliveryDate, note, orderDate: Date.now() });
       if (existing) await updateOrder(saved);
       const party: Party = { id: "", name: customerName, phone: "", type: "customer", createdAt: Date.now() };
       const selectedProduct = products.find(p => p.id === productId)!;
