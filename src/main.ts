@@ -435,15 +435,25 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const label = range==="today"?"امروز":range==="week"?"۷ روز اخیر":range==="all"?"همه":range==="custom"?"بازه انتخابی":"ماه جاری";
   const defaultFrom = formatJalaliInput(localStorage.getItem("sai-sai-report-from") || todayJalaliInput());
   const defaultTo = formatJalaliInput(localStorage.getItem("sai-sai-report-to") || todayJalaliInput());
+  const splitJalali = (value: string) => {
+    const raw = value.replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[^0-9]/g, "").slice(0, 8).padEnd(8, "0");
+    return { year: raw.slice(0, 4), month: raw.slice(4, 6), day: raw.slice(6, 8) };
+  };
+  const fromParts = splitJalali(defaultFrom);
+  const toParts = splitJalali(defaultTo);
+  const dateField = (prefix: "from" | "to", parts: { year: string; month: string; day: string }) => `
+    <div class="report-date-parts" dir="ltr" aria-label="${prefix === "from" ? "تاریخ شروع" : "تاریخ پایان"}">
+      <input id="report-${prefix}-year" data-report-date-part type="tel" inputmode="numeric" maxlength="4" value="${parts.year}" aria-label="سال">
+      <span aria-hidden="true">/</span>
+      <input id="report-${prefix}-month" data-report-date-part type="tel" inputmode="numeric" maxlength="2" value="${parts.month}" aria-label="ماه">
+      <span aria-hidden="true">/</span>
+      <input id="report-${prefix}-day" data-report-date-part type="tel" inputmode="numeric" maxlength="2" value="${parts.day}" aria-label="روز">
+    </div>`;
   const summary = `<section class="panel report-list"><div class="report-range" role="group" aria-label="بازه گزارش"><div class="report-range-item" role="button" tabindex="0" data-report-range="today">امروز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="week">۷ روز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="month">ماه جاری</div><div class="report-range-item" role="button" tabindex="0" data-report-range="all">همه</div></div><form id="report-range-form" class="report-custom-range">
-  <label class="field"><span>از تاریخ شمسی</span>
-    <input id="report-from-date-v4" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="new-password" name="report-from-v4" maxlength="10" placeholder="۱۴۰۵/۰۷/۱۶" value="${defaultFrom}" aria-label="تاریخ شروع">
-  </label>
-  <label class="field"><span>تا تاریخ شمسی</span>
-    <input id="report-to-date-v4" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="new-password" name="report-to-v4" maxlength="10" placeholder="۱۴۰۵/۰۷/۱۶" value="${defaultTo}" aria-label="تاریخ پایان">
-  </label>
+  <label class="field"><span>از تاریخ شمسی</span>${dateField("from", fromParts)}</label>
+  <label class="field"><span>تا تاریخ شمسی</span>${dateField("to", toParts)}</label>
   <button type="button" class="primary-button wide" id="report-apply-range">اعمال بازه</button>
-</div><p class="muted">بازه فعال: ${label}</p></section>`;
+</form><p class="muted">بازه فعال: ${label}</p></section>`;
   const stats = `<section class="stats-grid">${stat("فروش",rial(sales),"primary")}${stat("بهای تمام‌شده",rial(cost),"warning")}${stat("سود ناخالص",rial(gross),"success")}${stat("سود خالص",rial(net),"success")}</section>`;
   const cash = `<section class="panel report-list"><div><span>خرید</span><b>${rial(purchases)}</b></div><div><span>هزینه</span><b>${rial(expenseTotal)}</b></div><div><span>دریافت</span><b>${rial(receipts)}</b></div><div><span>پرداخت</span><b>${rial(payments)}</b></div><div><span>خالص جریان نقدی</span><b>${rial(receipts-payments-expenseTotal)}</b></div><div><span>تعداد فروش</span><b>${money.format(salesTx.length)}</b></div></section>`;
   const expenseRows = expenseTx.length
@@ -622,17 +632,14 @@ function enforceReportDateFormat(input: HTMLInputElement): void {
 
 async function applyReportRange(): Promise<void> {
   const readDateValue = (prefix: "from" | "to"): string => {
-    const input = document.querySelector<HTMLInputElement>(`#report-${prefix}-date-v4`);
-    if (!input) return "";
-    const raw = input.value
-      .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
-      .replace(/[^0-9]/g, "")
-      .slice(0, 8);
-    if (raw.length !== 8) return "";
-    const formatted = `${raw.slice(0, 4)}/${raw.slice(4, 6)}/${raw.slice(6, 8)}`;
-    input.value = formatted;
-    return formatted;
+    const clean = (value: string) => value.replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[^0-9]/g, "");
+    const year = clean(document.querySelector<HTMLInputElement>(`#report-${prefix}-year`)?.value ?? "");
+    const month = clean(document.querySelector<HTMLInputElement>(`#report-${prefix}-month`)?.value ?? "");
+    const day = clean(document.querySelector<HTMLInputElement>(`#report-${prefix}-day`)?.value ?? "");
+    if (year.length !== 4 || month.length !== 2 || day.length !== 2) return "";
+    return `${year}/${month}/${day}`;
   };
+
   const fromValue = readDateValue("from");
   const toValue = readDateValue("to");
   const from = jalaliToGregorianDate(fromValue);
