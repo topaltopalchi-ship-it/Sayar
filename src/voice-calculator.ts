@@ -71,4 +71,7 @@ export function openVoiceCalculator(): void {
   modal.querySelector("#calc-close")?.addEventListener("click",()=>modal.remove());
   modal.querySelector("#calc-close-2")?.addEventListener("click",()=>modal.remove());
   modal.querySelector("#calc-voice")?.addEventListener("click",()=>void listenAndCalculate(modal));
+  window.setTimeout(() => {
+    if (document.body.contains(modal)) void listenAndCalculate(modal);
+  }, 1200);
 }
