@@ -210,8 +210,12 @@ function invoiceModal(t: Transaction, productMap: Map<string, Product>, partyMap
 
 async function openInvoice(t: Transaction): Promise<void> {
   const [productList, partyList] = await Promise.all([listProducts(), listParties()]);
+  // Always mount the invoice after the current app render and above all UI layers.
   document.body.insertAdjacentHTML("beforeend", invoiceModal(t, new Map(productList.map(p => [p.id, p])), new Map(partyList.map(p => [p.id, p]))));
-  document.querySelector("#invoice-close")?.addEventListener("click", () => document.querySelector("#invoice-modal")?.remove());
+  const invoice = document.querySelector<HTMLDivElement>("#invoice-modal");
+  if (!invoice) throw new Error("پنجره فاکتور ساخته نشد");
+  invoice.style.zIndex = "1000";
+  document.querySelector("#invoice-close")?.addEventListener("click", () => invoice.remove());
   document.querySelector("#invoice-print")?.addEventListener("click", () => window.print());
   document.querySelector("#invoice-share")?.addEventListener("click", async () => {
     const party = t.partyId ? partyList.find(p => p.id === t.partyId) : undefined;
@@ -290,13 +294,18 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
         ? await updateTransaction(existing.id, { date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue })
         : await addSale({ date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
       modal.remove();
+
+      // Render the sales list first, then mount the invoice on top of the fresh UI.
+      // This avoids Android WebView repaint/navigation timing issues that could
+      // make a just-created invoice disappear immediately after saving.
+      await render();
+
       try {
         await openInvoice(savedSale);
-      } catch {
-        showToast("فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود");
+      } catch (error) {
+        showToast(error instanceof Error ? `فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود: ${error.message}` : "فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود");
       }
       showToast(`${existing ? "فاکتور ویرایش شد" : "فروش ثبت شد"}؛ مانده ${rial(amount - paidValue)}`);
-      await render();
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت فروش ناموفق بود"); }
   });
   update();
