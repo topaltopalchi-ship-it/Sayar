@@ -333,8 +333,32 @@ export async function getDashboard(): Promise<Dashboard> {
 }
 
 export async function getStock(productId: string): Promise<number> {
-  const movements = await getAll<StockMovement>("movements");
-  return movements.filter(m => m.productId === productId).reduce((s,m)=>s+m.quantity,0);
+  const [movements, transactions] = await Promise.all([
+    getAll<StockMovement>("movements"),
+    listTransactions(),
+  ]);
+
+  // The stock ledger is authoritative. For older/local data where a purchase
+  // or sale exists without its movement row, include that transaction once
+  // so the UI does not incorrectly report zero stock.
+  const productMovements = movements.filter(m => m.productId === productId);
+  const movementReferences = new Set(
+    productMovements.map(m => m.referenceId).filter(Boolean),
+  );
+
+  let stock = productMovements.reduce((sum, movement) => sum + movement.quantity, 0);
+
+  for (const transaction of transactions) {
+    if (movementReferences.has(transaction.id)) continue;
+    if (transaction.type !== "purchase" && transaction.type !== "sale") continue;
+
+    for (const line of transaction.lines) {
+      if (line.productId !== productId) continue;
+      stock += transaction.type === "purchase" ? line.quantity : -line.quantity;
+    }
+  }
+
+  return stock;
 }
 
 export interface PartyBalance {
