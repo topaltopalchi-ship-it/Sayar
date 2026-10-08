@@ -287,10 +287,15 @@ export async function updateTransaction(id: string, input: {
   const products = await listProducts();
   const movements = await listMovements();
   if (current.type === "sale") {
+    const requested = new Map<string, number>();
     for (const line of input.lines) {
+      if (!line.productId) throw new Error("کالای فروش معتبر نیست");
       if (line.quantity <= 0) throw new Error("مقدار کالا باید بیشتر از صفر باشد");
-      const available = await getStock(line.productId, id);
-      if (available < line.quantity) throw new Error("موجودی کالا برای این فروش کافی نیست");
+      requested.set(line.productId, (requested.get(line.productId) ?? 0) + Number(line.quantity));
+    }
+    for (const [productId, quantity] of requested) {
+      const available = await getStock(productId, id);
+      if (available < quantity) throw new Error("موجودی کالا برای این فروش کافی نیست");
     }
   }
   const amount = current.type === "receipt" || current.type === "payment" ? Math.max(0, Math.round(input.paid)) : transactionTotal(input.lines);
@@ -349,8 +354,12 @@ export async function addTransaction(
       .format(new Date(transaction.date))
       .replace(/\D/g, "");
     const prefix = transaction.type === "sale" ? "SAI-F" : "SAI-K";
-    const count = (await listTransactions()).filter(t => t.type === transaction.type).length + 1;
-    transaction.invoiceNumber = `${prefix}-${year}-${String(count).padStart(4, "0")}`;
+    const existing = (await listTransactions()).filter(t => t.type === transaction.type);
+    const maxSequence = existing.reduce((max, t) => {
+      const match = t.invoiceNumber?.match(new RegExp("^" + prefix + "-\\d{4}-(\\d+)$"));
+      return Math.max(max, match ? Number(match[1]) : 0);
+    }, 0);
+    transaction.invoiceNumber = `${prefix}-${year}-${String(maxSequence + 1).padStart(4, "0")}`;
   }
 
   if (transaction.type === "sale") {
