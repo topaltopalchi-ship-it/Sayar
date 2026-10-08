@@ -372,7 +372,8 @@ function saleModal(existing?: Transaction): string {
       <button class="modal-close" id="sale-close">×</button><span class="eyebrow">فاکتور فروش</span><h2>${existing ? "ویرایش فروش" : "ثبت فروش"}</h2>
       <label class="field"><span>کالا</span><select id="sale-product">${productOptions}</select></label>
       <div class="form-grid"><label class="field"><span>مقدار</span><input id="sale-quantity" type="text" inputmode="decimal" autocomplete="off" value="${existing?.lines[0]?.quantity ?? 1}"></label>
-      <label class="field"><span>تخفیف (${getCurrencyLabel()})</span><input id="sale-discount" type="text" inputmode="numeric" autocomplete="off" value="${moneyInputValue(existing?.lines[0]?.discount ?? 0)}"></label></div>
+      <label class="field"><span>قیمت واحد (${getCurrencyLabel()})</span><input id="sale-unit-price" type="text" inputmode="numeric" autocomplete="off" value="${moneyInputValue(existing?.lines[0]?.unitPrice ?? products[0]?.salePrice ?? 0)}"></label></div>
+      <label class="field"><span>تخفیف (${getCurrencyLabel()})</span><input id="sale-discount" type="text" inputmode="numeric" autocomplete="off" value="${moneyInputValue(existing?.lines[0]?.discount ?? 0)}"></label>
       <label class="field"><span>نام مشتری</span><input id="sale-customer-name" type="text" autocomplete="name" placeholder="نام مشتری را وارد کنید" value="${existing?.customerName || ""}"></label>
       <label class="field"><span>مبلغ پرداختی (${getCurrencyLabel()})</span><input id="sale-paid" type="text" inputmode="numeric" autocomplete="off" value="${moneyInputValue(existing?.paid ?? 0)}"></label><label class="field"><span>دریافت به</span><select id="sale-account"><option value="">بدون انتخاب حساب</option>${accountOptions}</select></label>
       <div class="sale-summary"><span>مبلغ فاکتور</span><strong id="sale-total">۰ ریال</strong></div>
@@ -388,15 +389,17 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
   const modal = document.querySelector<HTMLDivElement>("#sale-modal")!;
   const product = modal.querySelector<HTMLSelectElement>("#sale-product")!;
   const quantity = modal.querySelector<HTMLInputElement>("#sale-quantity")!;
+  const unitPrice = modal.querySelector<HTMLInputElement>("#sale-unit-price")!;
   const discount = modal.querySelector<HTMLInputElement>("#sale-discount")!;
   const paid = modal.querySelector<HTMLInputElement>("#sale-paid")!;
   const total = modal.querySelector<HTMLElement>("#sale-total")!;
   if (existing) { if (existing.lines[0]) product.value = existing.lines[0].productId; modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value = existing.customerName || (existing.partyId ? (parties.find(p => p.id === existing.partyId)?.name || "") : ""); modal.querySelector<HTMLSelectElement>("#sale-account")!.value = existing.accountId || ""; }
   const update = () => {
     const p = products.find(x => x.id === product.value);
-    total.textContent = rial(Math.max(0, numericValue(quantity.value) * (p?.salePrice ?? 0) - numericValue(discount.value)));
+    const price = parseMoneyInput(unitPrice.value);
+    total.textContent = rial(Math.max(0, numericValue(quantity.value) * price - numericValue(discount.value)));
   };
-  [product, quantity, discount].forEach(el => el.addEventListener("input", update));
+  [product, quantity, unitPrice, discount].forEach(el => el.addEventListener("input", update));
   product.addEventListener("change", update);
   modal.querySelector("#sale-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#sale-submit")?.addEventListener("click", async () => {
@@ -404,10 +407,12 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
       const p = products.find(x => x.id === product.value); const qty = numericValue(quantity.value); const customerName = modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value.trim();
       if (!customerName) throw new Error("نام مشتری الزامی است");
       if (!p || qty <= 0) throw new Error("کالا و مقدار فروش را بررسی کنید");
+      const price = parseMoneyInput(unitPrice.value);
       const disc = parseMoneyInput(discount.value);
-      const amount = Math.max(0, qty * p.salePrice - disc);
+      if (price <= 0) throw new Error("قیمت واحد را وارد کنید");
+      const amount = Math.max(0, qty * price - disc);
       const paidValue = Math.min(amount, parseMoneyInput(paid.value));
-      const line: TransactionLine = { productId: p.id, quantity: qty, unitPrice: p.salePrice, discount: disc };
+      const line: TransactionLine = { productId: p.id, quantity: qty, unitPrice: price, discount: disc };
       const savedSale = existing
         ? await updateTransaction(existing.id, { date: Date.now(), partyId: undefined, customerName, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue })
         : await addSale({ date: Date.now(), partyId: undefined, customerName: modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value.trim() || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
@@ -1178,6 +1183,8 @@ async function render(): Promise<void> {
     if (matched && productSelect) productSelect.value = matched.id;
     if (customer && draft.customerName) customer.value = draft.customerName;
     if (quantity) quantity.value = String(draft.quantity || 1);
+    const unitPrice = modal.querySelector<HTMLInputElement>("#sale-unit-price");
+    if (unitPrice && draft.unitPrice > 0) unitPrice.value = String(draft.unitPrice);
     if (paid) paid.value = draft.paid ? String(draft.paid) : "";
     productSelect?.dispatchEvent(new Event("change", { bubbles: true }));
     quantity?.dispatchEvent(new Event("input", { bubbles: true }));
