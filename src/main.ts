@@ -460,7 +460,7 @@ async function scheduleOrderReminder(order: Order): Promise<void> {
       notifications: [{
         id,
         title: "یادآوری سفارش سای‌سای",
-        body: `فردا سفارش ${product?.name || "کالا"} برای ${party?.name || "مشتری"} تحویل دارد.`,
+        body: `فردا ${order.orderType || "سفارش کالا"} برای ${party?.name || "مشتری"}: ${product?.name || "کالا"}، تعداد ${money.format(order.quantity)}${order.deliveryTime ? `، ساعت ${order.deliveryTime}` : ""}.`,
         channelId: "saisai-orders",
         schedule: { at: reminderAt, allowWhileIdle: true },
         autoCancel: true,
@@ -485,10 +485,12 @@ function orderModal(existing?: Order): string {
   return `<div class="modal-backdrop" id="order-modal"><section class="modal" role="dialog" aria-modal="true">
     <button class="modal-close" id="order-close">×</button><span class="eyebrow">مدیریت سفارش</span><h2>${existing ? "ویرایش سفارش" : "دریافت سفارش جدید"}</h2>
     <label class="field"><span>مشتری</span><select id="order-party"><option value="">انتخاب مشتری</option>${customerOptions}</select></label>
+    <label class="field"><span>نوع سفارش</span><input id="order-type" placeholder="مثلاً سفارش عمده، رزرو، سفارش اختصاصی" value="${existing?.orderType || "سفارش کالا"}"></label>
     <label class="field"><span>کالا</span><select id="order-product">${productOptions}</select></label>
-    <div class="form-grid"><label class="field"><span>تعداد</span><input id="order-quantity" type="text" inputmode="decimal" value="${existing?.quantity ?? 1}"></label>
+    <div class="form-grid"><label class="field"><span>مقدار</span><input id="order-quantity" type="text" inputmode="decimal" value="${existing?.quantity ?? 1}"></label>
       <label class="field"><span>قیمت واحد</span><input id="order-price" type="text" inputmode="numeric" value="${existing?.unitPrice ?? products.find(p => p.id === (existing?.productId || products[0]?.id))?.salePrice ?? 0}"></label></div>
-    <label class="field"><span>تاریخ تحویل</span><input id="order-delivery" type="date" value="${dateValue}"></label>
+    <div class="form-grid"><label class="field"><span>تاریخ تحویل</span><input id="order-delivery" type="date" value="${dateValue}"></label>
+      <label class="field"><span>ساعت تحویل</span><input id="order-delivery-time" type="time" value="${existing?.deliveryTime || "12:00"}"></label></div>
     <label class="field"><span>یادداشت</span><input id="order-note" placeholder="مثلاً تحویل درب مغازه" value="${existing?.note || ""}"></label>
     <button class="primary-button wide" id="order-submit">${existing ? "ذخیره تغییرات" : "ثبت سفارش و یادآوری"}</button>
   </section></div>`;
@@ -504,7 +506,7 @@ async function ordersView(): Promise<string> {
     const status = o.status === "completed" ? "تحویل شد" : o.status === "cancelled" ? "لغو شد" : "در انتظار";
     return `<article class="order-card ${o.status}">
       <div class="order-card-head"><div><span class="eyebrow">سفارش</span><h3>${party?.name || "مشتری حذف‌شده"}</h3></div><span class="order-status">${status}</span></div>
-      <div class="order-details"><span>کالا: <b>${product?.name || "کالای حذف‌شده"}</b></span><span>تعداد: <b>${money.format(o.quantity)}</b></span><span>تحویل: <b>${dateLabel(o.deliveryDate)}</b></span></div>
+      <div class="order-details"><span>نوع: <b>${o.orderType || "سفارش کالا"}</b></span><span>کالا: <b>${product?.name || "کالای حذف‌شده"}</b></span><span>مقدار: <b>${money.format(o.quantity)} ${product?.unit || ""}</b></span><span>تحویل: <b>${dateLabel(o.deliveryDate)}${o.deliveryTime ? ` · ساعت ${o.deliveryTime}` : ""}</b></span></div>
       <p class="muted">${o.note || "بدون یادداشت"} · مبلغ تقریبی ${rial(Math.round(o.quantity * o.unitPrice))}</p>
       <div class="order-actions">
         ${o.status === "pending" ? `<button class="primary-button" data-order-complete="${o.id}">تحویل شد</button><button class="secondary-button" data-order-cancel="${o.id}">لغو</button>` : ""}
@@ -534,17 +536,19 @@ function bindOrderModal(existing?: Order): void {
       const productId = product.value;
       const quantity = numericValue(modal.querySelector<HTMLInputElement>("#order-quantity")!.value);
       const unitPrice = numericValue(price.value);
+      const orderType = modal.querySelector<HTMLInputElement>("#order-type")!.value.trim() || "سفارش کالا";
       const dateText = modal.querySelector<HTMLInputElement>("#order-delivery")!.value;
-      const deliveryDate = dateText ? new Date(dateText + "T12:00:00").getTime() : 0;
+      const deliveryTime = modal.querySelector<HTMLInputElement>("#order-delivery-time")!.value || "12:00";
+      const deliveryDate = dateText ? new Date(dateText + "T" + deliveryTime + ":00").getTime() : 0;
       if (!partyId) throw new Error("انتخاب مشتری الزامی است");
-      if (!productId || quantity <= 0 || unitPrice < 0) throw new Error("کالا، تعداد و قیمت سفارش را بررسی کنید");
+      if (!productId || quantity <= 0 || unitPrice < 0) throw new Error("کالا، مقدار و قیمت سفارش را بررسی کنید");
       if (!deliveryDate || deliveryDate < Date.now() - 86400000) throw new Error("تاریخ تحویل را درست انتخاب کنید");
       let saved: Order;
       if (existing) {
-        saved = { ...existing, partyId, productId, quantity, unitPrice, deliveryDate, note: modal.querySelector<HTMLInputElement>("#order-note")!.value.trim() };
+        saved = { ...existing, partyId, productId, orderType, quantity, unitPrice, deliveryDate, deliveryTime, note: modal.querySelector<HTMLInputElement>("#order-note")!.value.trim() };
         await dbUpdateOrder(saved);
       } else {
-        saved = await dbAddOrder({ partyId, productId, quantity, unitPrice, orderDate: Date.now(), deliveryDate, note: modal.querySelector<HTMLInputElement>("#order-note")!.value.trim(), status: "pending" });
+        saved = await dbAddOrder({ partyId, productId, orderType, quantity, unitPrice, orderDate: Date.now(), deliveryDate, deliveryTime, note: modal.querySelector<HTMLInputElement>("#order-note")!.value.trim(), status: "pending" });
       }
       if (existing) await cancelOrderReminder(saved.id);
       await scheduleOrderReminder(saved);
@@ -1257,8 +1261,8 @@ async function render(): Promise<void> {
     try { await deleteExpense(id); showToast("هزینه حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف هزینه ناموفق بود"); }
   }));
   document.querySelector("#more-backup")?.addEventListener("click", async () => {
-    const [products, parties, transactions, expenses, accounts, accountEntries, checks, movements] = await Promise.all([listProducts(), listParties(), listTransactions(), listExpenses(), listAccounts(), (await import("./db")).listAccountEntries(), (await import("./db")).listChecks(), listMovements()]);
-    const payload = { version: 2, exportedAt: Date.now(), products, parties, transactions, expenses, accounts, accountEntries, checks, movements };
+    const [products, parties, transactions, expenses, accounts, accountEntries, checks, movements, orders] = await Promise.all([listProducts(), listParties(), listTransactions(), listExpenses(), listAccounts(), (await import("./db")).listAccountEntries(), (await import("./db")).listChecks(), listMovements(), listOrders()]);
+    const payload = { version: 3, exportedAt: Date.now(), products, parties, transactions, expenses, accounts, accountEntries, checks, movements, orders };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `sai-sai-backup-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
     showToast("فایل پشتیبان آماده شد");
