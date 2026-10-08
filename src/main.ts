@@ -1,7 +1,7 @@
 import "./style.css";
 import {
   addParty, addProduct, updateProduct, deleteProduct, addSale, addSettlement, addExpense, addStockAdjustment, getDashboard, getStock, updateTransaction, deleteTransaction, updateExpense, deleteExpense,
-  listParties, updateParty, deleteParty, listProducts, listTransactions, listExpenses, listMovements, calculateHistoricalCOGS
+  listParties, updateParty, deleteParty, listProducts, listTransactions, listExpenses, listMovements, calculateHistoricalCOGS, repairDataIntegrity
 } from "./db";
 import { createMonthlyCheckout, getSubscription, type Subscription } from "./billing";
 import { lineTotal, type Party, type Product, type Transaction, type TransactionLine } from "./domain";
@@ -312,12 +312,16 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
         ? await updateTransaction(existing.id, { date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue })
         : await addSale({ date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
       modal.remove();
-      await render();
+
+      // Open the invoice immediately after the database transaction completes.
+      // Rendering the app first could race with Android WebView's overlay/paint cycle.
       try {
         await openInvoice(savedSale);
       } catch (error) {
         showToast(error instanceof Error ? `فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود: ${error.message}` : "فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود");
       }
+
+      await render();
       showToast(`${existing ? "فاکتور ویرایش شد" : "فروش ثبت شد"}؛ مانده ${rial(amount - paidValue)}`);
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت فروش ناموفق بود"); }
   });
@@ -938,4 +942,13 @@ function placeholder(title: string, text: string): string {
 }
 
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => undefined));
-render();
+
+void (async () => {
+  try {
+    // Repair legacy/missing sale-purchase stock movements before the first render.
+    await repairDataIntegrity();
+  } catch (error) {
+    console.error("Sayar data integrity repair failed", error);
+  }
+  await render();
+})();
