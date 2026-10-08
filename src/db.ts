@@ -1,10 +1,10 @@
-import type { Account, AccountEntry, Check, Dashboard, Expense, Party, Product, StockMovement, Transaction } from "./domain";
+import type { Account, AccountEntry, Check, Dashboard, Expense, Order, Party, Product, StockMovement, Transaction } from "./domain";
 import { lineTotal, newId, transactionTotal } from "./domain";
 
 const DB_NAME = "sayar-db";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
-const stores = ["products", "parties", "transactions", "movements", "expenses", "accounts", "accountEntries", "checks"] as const;
+const stores = ["products", "parties", "transactions", "movements", "expenses", "accounts", "accountEntries", "checks", "orders"] as const;
 type StoreName = typeof stores[number];
 
 let database: IDBDatabase | null = null;
@@ -126,6 +126,33 @@ export async function repairDataIntegrity(): Promise<void> {
   });
 
   integrityRepairDone = true;
+}
+
+export async function listOrders(): Promise<Order[]> {
+  const items = await getAll<Order>("orders");
+  return items.sort((a, b) => a.deliveryDate - b.deliveryDate || b.createdAt - a.createdAt);
+}
+
+export async function addOrder(input: Omit<Order, "id" | "createdAt">): Promise<Order> {
+  const order: Order = { ...input, id: newId(), createdAt: Date.now(), status: input.status || "pending" };
+  await put("orders", order);
+  return order;
+}
+
+export async function updateOrder(order: Order): Promise<void> {
+  await put("orders", order);
+}
+
+export async function deleteOrder(id: string): Promise<void> {
+  const orders = await listOrders();
+  if (!orders.some(o => o.id === id)) throw new Error("سفارش پیدا نشد");
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("orders", "readwrite");
+    tx.objectStore("orders").delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 export async function listProducts(): Promise<Product[]> { return getAll<Product>("products"); }
@@ -602,15 +629,15 @@ export async function addStockAdjustment(input: {
 
 export async function restoreBackup(data: {
   products: Product[]; parties: Party[]; transactions: Transaction[]; expenses?: Expense[];
-  accounts?: Account[]; accountEntries?: AccountEntry[]; checks?: Check[]; movements?: StockMovement[];
+  accounts?: Account[]; accountEntries?: AccountEntry[]; checks?: Check[]; movements?: StockMovement[]; orders?: Order[];
 }): Promise<void> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
-    const stores = ["products","parties","transactions","movements","expenses","accounts","accountEntries","checks"];
+    const stores = ["products","parties","transactions","movements","expenses","accounts","accountEntries","checks","orders"];
     const tx = db.transaction(stores, "readwrite");
     const maps: Record<string, unknown[]> = {
       products: data.products ?? [], parties: data.parties ?? [], transactions: data.transactions ?? [],
-      expenses: data.expenses ?? [], accounts: data.accounts ?? [], accountEntries: data.accountEntries ?? [], checks: data.checks ?? [], movements: data.movements ?? [],
+      expenses: data.expenses ?? [], accounts: data.accounts ?? [], accountEntries: data.accountEntries ?? [], checks: data.checks ?? [], movements: data.movements ?? [], orders: data.orders ?? [],
     };
     for (const store of stores) {
       tx.objectStore(store).clear();
