@@ -82,7 +82,7 @@ export async function repairDataIntegrity(): Promise<void> {
         id: newId(),
         productId: line.productId,
         date: t.date,
-        type: t.type,
+        type: t.type === "sale" ? "sale" : "purchase",
         quantity: t.type === "sale" ? -line.quantity : line.quantity,
         referenceId: t.id,
       });
