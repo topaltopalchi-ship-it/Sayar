@@ -1,5 +1,6 @@
 import { SpeechRecognition } from "@capacitor-community/speech-recognition";
 
+export type VoiceSaleItem = { productHint: string; quantity: number; unitPrice: number };
 export type VoiceSaleDraft = {
   transcript: string;
   customerName: string;
@@ -7,6 +8,7 @@ export type VoiceSaleDraft = {
   quantity: number;
   unitPrice: number;
   paid: number;
+  items: VoiceSaleItem[];
 };
 
 function digits(value: string): string {
@@ -55,7 +57,15 @@ function parseVoiceSale(transcript: string): VoiceSaleDraft {
   const unitPrice = priceMatch ? moneyNumber(priceMatch[1]) : 0;
   const paidMatch = text.match(/(?:پرداخت(?:\s*کرد)?|داد|داده|واریز(?:\s*کرد)?)\s*(?:مبلغ\s*)?([۰-۹٠-٩\d][۰-۹٠-٩\d٬,]*)/i);
   const paid = paidMatch ? moneyNumber(paidMatch[1]) : 0;
-  return { transcript: text, customerName: customer, productHint: product, quantity: quantity || 1, unitPrice, paid };
+  const items: VoiceSaleItem[] = [];
+  for (const chunk of text.split(/،|,/).map(x => x.trim()).filter(Boolean)) {
+    const q = chunk.match(/(?:^|\s)([۰-۹٠-٩\d]+|یک|دو|سه|چهار|پنج|شش|هفت|هشت|نه|ده)\s*(?:تا|عدد|عددِ)\s+(.+?)(?=\s+(?:هر|دونه‌ای|دانه‌ای|قیمت)|$)/i);
+    if (!q) continue;
+    const price = chunk.match(/(?:هر\s*(?:کدوم|کدام|دونه|دانه)?\s*|قیمت(?:ش)?\s*|دونه‌ای\s*|دانه‌ای\s*)([۰-۹٠-٩\d][۰-۹٠-٩\d٬,]*(?:\s*(?:هزار|میلیون|میلیونی))?)/i);
+    items.push({ productHint: q[2].trim(), quantity: firstNumber(q[1]) || 1, unitPrice: price ? moneyNumber(price[1]) : 0 });
+  }
+  if (!items.length && product) items.push({ productHint: product, quantity: quantity || 1, unitPrice });
+  return { transcript: text, customerName: customer, productHint: product, quantity: quantity || 1, unitPrice, paid, items };
 }
 
 function showVoiceModal(html: string): HTMLElement {
@@ -104,7 +114,7 @@ export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise
         '<div class="voice-draft-grid">' +
         '<div><small>مشتری</small><strong id="voice-customer"></strong></div><div><small>کالا</small><strong id="voice-product"></strong></div>' +
         '<div><small>تعداد</small><strong id="voice-quantity"></strong></div><div><small>قیمت واحد</small><strong id="voice-price"></strong></div>' +
-        '<div><small>پرداختی</small><strong id="voice-paid"></strong></div></div>' +
+        '<div><small>پرداختی</small><strong id="voice-paid"></strong></div><div><small>اقلام</small><strong id="voice-items"></strong></div></div>' +
         '<div class="form-actions"><button class="secondary-button" id="voice-cancel">لغو</button><button class="primary-button" id="voice-confirm">ادامه ثبت فروش</button></div>' +
         '</section></div>'
       );
@@ -114,6 +124,7 @@ export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise
       (m.querySelector("#voice-quantity") as HTMLElement).textContent = String(draft.quantity);
       (m.querySelector("#voice-price") as HTMLElement).textContent = draft.unitPrice ? draft.unitPrice.toLocaleString("fa-IR") : "تشخیص داده نشد";
       (m.querySelector("#voice-paid") as HTMLElement).textContent = draft.paid ? draft.paid.toLocaleString("fa-IR") : "۰";
+      (m.querySelector("#voice-items") as HTMLElement).textContent = draft.items.length ? draft.items.map(x => `${x.quantity} × ${x.productHint}`).join("، ") : "۱ قلم";
       m.querySelector("#voice-close")?.addEventListener("click", () => m.remove());
       m.querySelector("#voice-cancel")?.addEventListener("click", () => m.remove());
       m.querySelector("#voice-confirm")?.addEventListener("click", async () => { m.remove(); await onConfirm(draft); });
