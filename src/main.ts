@@ -220,8 +220,16 @@ function invoiceModal(t: Transaction, productMap: Map<string, Product>, partyMap
 
 async function openInvoice(t: Transaction): Promise<void> {
   const [productList, partyList] = await Promise.all([listProducts(), listParties()]);
-  // Always mount the invoice after the current app render and above all UI layers.
-  document.body.insertAdjacentHTML("beforeend", invoiceModal(t, new Map(productList.map(p => [p.id, p])), new Map(partyList.map(p => [p.id, p]))));
+
+  // Never leave a stale invoice overlay around. Mount a fresh invoice directly
+  // on body so it cannot be covered by the app/root navigation layer.
+  document.querySelector("#invoice-modal")?.remove();
+  document.body.insertAdjacentHTML("beforeend", invoiceModal(
+    t,
+    new Map(productList.map(p => [p.id, p])),
+    new Map(partyList.map(p => [p.id, p])),
+  ));
+
   const invoice = document.querySelector<HTMLDivElement>("#invoice-modal");
   if (!invoice) throw new Error("پنجره فاکتور ساخته نشد");
   invoice.style.zIndex = "1000";
@@ -264,10 +272,10 @@ function saleModal(existing?: Transaction): string {
     <div class="modal-backdrop" id="sale-modal"><section class="modal" role="dialog" aria-modal="true">
       <button class="modal-close" id="sale-close">×</button><span class="eyebrow">فاکتور فروش</span><h2>${existing ? "ویرایش فروش" : "ثبت فروش"}</h2>
       <label class="field"><span>کالا</span><select id="sale-product">${productOptions}</select></label>
-      <div class="form-grid"><label class="field"><span>مقدار</span><input id="sale-quantity" type="number" min="0.001" step="0.001" value="${existing?.lines[0]?.quantity ?? 1}"></label>
-      <label class="field"><span>تخفیف</span><input id="sale-discount" type="number" min="0" value="${existing?.lines[0]?.discount ?? 0}"></label></div>
+      <div class="form-grid"><label class="field"><span>مقدار</span><input id="sale-quantity" type="text" inputmode="decimal" autocomplete="off" value="${existing?.lines[0]?.quantity ?? 1}"></label>
+      <label class="field"><span>تخفیف</span><input id="sale-discount" type="text" inputmode="numeric" autocomplete="off" value="${existing?.lines[0]?.discount ?? 0}"></label></div>
       <label class="field"><span>مشتری</span><select id="sale-party"><option value="">بدون انتخاب</option>${partyOptions}</select></label>
-      <label class="field"><span>مبلغ پرداختی</span><input id="sale-paid" type="number" min="0" value="${existing?.paid ?? 0}"></label><label class="field"><span>دریافت به</span><select id="sale-account"><option value="">بدون انتخاب حساب</option>${accountOptions}</select></label>
+      <label class="field"><span>مبلغ پرداختی</span><input id="sale-paid" type="text" inputmode="numeric" autocomplete="off" value="${existing?.paid ?? 0}"></label><label class="field"><span>دریافت به</span><select id="sale-account"><option value="">بدون انتخاب حساب</option>${accountOptions}</select></label>
       <div class="sale-summary"><span>مبلغ فاکتور</span><strong id="sale-total">۰ ریال</strong></div>
       <button class="primary-button wide" id="sale-submit">${existing ? "ذخیره تغییرات فاکتور" : "ثبت فاکتور و کاهش موجودی"}</button>
     </section></div>`;
@@ -334,7 +342,7 @@ function adjustmentModal(): string {
   const options = products.map(p => `<option value="${p.id}">${p.name} · ${p.unit}</option>`).join("");
   return `<div class="modal-backdrop" id="adjust-modal"><section class="modal"><button class="modal-close" id="adjust-close">×</button><span class="eyebrow">کنترل انبار</span><h2>اصلاح موجودی</h2>
     <label class="field"><span>کالا</span><select id="adjust-product">${options}</select></label>
-    <label class="field"><span>مقدار تغییر</span><input id="adjust-qty" type="number" step="0.001" placeholder="مثبت برای افزایش، منفی برای کاهش"></label>
+    <label class="field"><span>مقدار تغییر</span><input id="adjust-qty" type="text" inputmode="decimal" autocomplete="off" placeholder="مثبت برای افزایش، منفی برای کاهش"></label>
     <label class="field"><span>شرح</span><input id="adjust-desc" placeholder="مثلاً شمارش دوره‌ای انبار"></label>
     <button class="primary-button wide" id="adjust-submit">ثبت اصلاح موجودی</button></section></div>`;
 }
@@ -358,7 +366,7 @@ function productModal(product?: Product): string {
     <div class="form-grid"><label class="field"><span>کد کالا</span><input id="p-sku" placeholder="اختیاری" value="${product?.sku || ""}"></label><label class="field"><span>واحد</span><select id="p-unit">${["عدد","کیلوگرم","گرم","لیتر","متر","بسته"].map(u => `<option ${product?.unit === u ? "selected" : ""}>${u}</option>`).join("")}</select></label></div>
     <div class="form-grid"><label class="field"><span>قیمت خرید</span><input id="p-buy" type="number" min="0" value="${product?.purchasePrice ?? 0}"></label><label class="field"><span>قیمت فروش</span><input id="p-sale" type="number" min="0" value="${product?.salePrice ?? 0}"></label></div>
     <label class="field"><span>حداقل موجودی (هشدار)</span><input id="p-low" type="number" min="0" step="0.001" value="${product?.lowStock ?? 5}"></label>
-    ${product ? "" : '<label class="field"><span>موجودی اولیه</span><input id="p-initial-stock" type="number" min="0" step="0.001" value="0" placeholder="مثلاً 20"></label>'}
+    ${product ? "" : '<label class="field"><span>موجودی اولیه</span><input id="p-initial-stock" type="text" inputmode="decimal" autocomplete="off" value="0" placeholder="مثلاً 20"></label>'}
     <button class="primary-button wide" id="product-submit">${product ? "ذخیره تغییرات" : "ذخیره کالا"}</button></section></div>`;
 }
 
@@ -632,12 +640,24 @@ function enforceReportDateFormat(input: HTMLInputElement): void {
 
 async function applyReportRange(): Promise<void> {
   const readDateValue = (prefix: "from" | "to"): string => {
-    const clean = (value: string) => value.replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[^0-9]/g, "");
+    const clean = (value: string) => value
+      .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+      .replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+      .replace(/[^0-9]/g, "");
+
+    // Current UI uses three native text fields (year/month/day) separated by
+    // visible slash characters. Also accept the older single-field format so
+    // existing local data and older rendered screens remain compatible.
     const year = clean(document.querySelector<HTMLInputElement>(`#report-${prefix}-year`)?.value ?? "");
     const month = clean(document.querySelector<HTMLInputElement>(`#report-${prefix}-month`)?.value ?? "");
     const day = clean(document.querySelector<HTMLInputElement>(`#report-${prefix}-day`)?.value ?? "");
-    if (year.length !== 4 || month.length !== 2 || day.length !== 2) return "";
-    return `${year}/${month}/${day}`;
+    if (year.length === 4 && month.length === 2 && day.length === 2) {
+      return `${year}/${month}/${day}`;
+    }
+
+    const legacy = clean(document.querySelector<HTMLInputElement>(`#report-${prefix}-date`)?.value ?? "");
+    if (legacy.length === 8) return `${legacy.slice(0, 4)}/${legacy.slice(4, 6)}/${legacy.slice(6, 8)}`;
+    return "";
   };
 
   const fromValue = readDateValue("from");
