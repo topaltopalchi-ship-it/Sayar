@@ -117,7 +117,7 @@ export async function addProduct(
         date: Date.now(),
         type: "adjustment",
         quantity: openingQuantity,
-        referenceId: product.id,
+        referenceId: newId(),
       } satisfies StockMovement);
     }
     tx.oncomplete = () => resolve(product);
