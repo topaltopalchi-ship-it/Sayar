@@ -1392,7 +1392,8 @@ return receiptCommand ? ("دریافت " + rial(commandAmount) + " از " + comm
       return `موجودی ${product.name} الان ${stock.toLocaleString("fa-IR")} ${product.unit} است.`;
     }
     if (product && /قیمت|چنده|چند است|فروشی|به نظرت|بفروشم|چقدر بزنم/.test(q)) { const tier = party ? getCustomerTier(party.id, transactions) : "regular"; const rec = recommendPrice(product, tier); return `${product.name}: قیمت پیشنهادی ${rial(rec.recommendedPrice)}؛ کف امن فروش ${rial(rec.floorPrice)}. برای مشتری ${party ? party.name + " سطح " + tierLabel(tier) : "عادی"} تا ${rial(rec.maxDiscountAmount)} تخفیف پیشنهاد می‌کنم.`; }
-    if (/امروز چی کار کنم|امروز چه کار کنم|کارهای امروز|گزارش امروز|مراقب کسب و کار/.test(q)) { const msg = dailyBrief(await buildBusinessInsights(products, parties, transactions, await listExpenses())); return msg; }\n    if (/فروش|فروخت|فروشم|درآمد|گردش/.test(q) && /امروز|امروزم|الان|تا الان/.test(q)) return `امروز ${rial(dashboard.salesToday)} فروش داشتی.`;
+    if (/امروز چی کار کنم|امروز چه کار کنم|کارهای امروز|گزارش امروز|مراقب کسب و کار/.test(q)) { const msg = dailyBrief(await buildBusinessInsights(products, parties, transactions, await listExpenses())); return msg; }
+    if (/فروش|فروخت|فروشم|درآمد|گردش/.test(q) && /امروز|امروزم|الان|تا الان/.test(q)) return `امروز ${rial(dashboard.salesToday)} فروش داشتی.`;
     if (/فروش|فروخت|درآمد|گردش/.test(q) && /ماه|این ماه|ماه جاری/.test(q)) return `فروش این ماه تا امروز ${rial(monthSales)} بوده است.`;
     if (/اوضاع فروش|وضع فروش|چطور فروختم|خوب فروختم|فروش خوب/.test(q)) return `تا امروز فروش این ماه ${rial(monthSales)} بوده و امروز ${rial(dashboard.salesToday)} فروش داشتی.`;
     if (/دریافت|وصول|پول گرفتم|گرفتم/.test(q) && /امروز|امروزم|الان|تا الان/.test(q)) return `امروز ${rial(dashboard.receiptsToday)} دریافت داشتی.`;
