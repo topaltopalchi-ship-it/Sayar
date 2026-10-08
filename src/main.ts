@@ -568,6 +568,27 @@ async function bindActions(): Promise<void> {
       input.setSelectionRange(caret, caret);
     }
   });
+  const normalizeReportDateInput = (input: HTMLInputElement): void => {
+    const formatted = formatJalaliInput(input.value);
+    if (input.value !== formatted) {
+      const pos = input.selectionStart ?? input.value.length;
+      const before = formatJalaliInput(input.value.slice(0, pos));
+      input.value = formatted;
+      const caret = Math.min(formatted.length, before.length);
+      try { input.setSelectionRange(caret, caret); } catch { /* Android WebView may reject selection updates */ }
+    }
+  };
+
+  document.addEventListener("change", event => {
+    const input = (event.target as HTMLElement).closest<HTMLInputElement>("[data-jalali-input]");
+    if (input) normalizeReportDateInput(input);
+  });
+
+  document.addEventListener("compositionend", event => {
+    const input = (event.target as HTMLElement).closest<HTMLInputElement>("[data-jalali-input]");
+    if (input) normalizeReportDateInput(input);
+  });
+
   document.addEventListener("keydown", event => {
     const target = event.target as HTMLElement;
     if (target.closest<HTMLInputElement>("[data-jalali-input]") && event.key === "Enter") {
@@ -576,17 +597,10 @@ async function bindActions(): Promise<void> {
     }
   });
 
-  root.addEventListener("click", async event => {
+  // Report controls live inside #app, which is replaced on every render.
+  // Keep their handler on document so it survives Android WebView re-renders.
+  document.addEventListener("click", async event => {
     const target = event.target as HTMLElement;
-    const nav = target.closest<HTMLElement>("[data-nav], [data-nav-shortcut]");
-    if (nav) {
-      const next = nav.dataset.nav || nav.dataset.navShortcut;
-      if (next) {
-        activeTab = next as Tab;
-        await render();
-      }
-      return;
-    }
 
     const reportRange = target.closest<HTMLElement>("[data-report-range]");
     if (reportRange) {
@@ -601,12 +615,12 @@ async function bindActions(): Promise<void> {
       const input = id ? document.querySelector<HTMLInputElement>("#" + id) : null;
       if (input) {
         const pos = input.selectionStart ?? input.value.length;
-        const before = input.value.slice(0, pos).replace(/\//g, "");
-        const after = input.value.slice(pos).replace(/\//g, "");
-        input.value = formatJalaliInput(before + "/" + after);
-        const caret = Math.min(input.value.length, before.length + 1);
+        const rawBefore = input.value.slice(0, pos).replace(/\\//g, "");
+        const rawAfter = input.value.slice(pos).replace(/\\//g, "");
+        input.value = formatJalaliInput(rawBefore + "/" + rawAfter);
+        const caret = Math.min(input.value.length, rawBefore.length + 1);
         input.focus();
-        input.setSelectionRange(caret, caret);
+        try { input.setSelectionRange(caret, caret); } catch { /* Android WebView */ }
       }
       return;
     }
@@ -616,8 +630,8 @@ async function bindActions(): Promise<void> {
       const fromInput = document.querySelector<HTMLInputElement>("#report-from-date");
       const toInput = document.querySelector<HTMLInputElement>("#report-to-date");
       if (!fromInput || !toInput) return;
-      fromInput.value = formatJalaliInput(fromInput.value);
-      toInput.value = formatJalaliInput(toInput.value);
+      normalizeReportDateInput(fromInput);
+      normalizeReportDateInput(toInput);
       const from = jalaliToGregorianDate(fromInput.value);
       const to = jalaliToGregorianDate(toInput.value);
       if (!from || !to) {
@@ -632,6 +646,19 @@ async function bindActions(): Promise<void> {
       localStorage.setItem("sai-sai-report-to", toInput.value);
       localStorage.setItem("sai-sai-report-range", "custom");
       await render();
+      return;
+    }
+  });
+
+  root.addEventListener("click", async event => {
+    const target = event.target as HTMLElement;
+    const nav = target.closest<HTMLElement>("[data-nav], [data-nav-shortcut]");
+    if (nav) {
+      const next = nav.dataset.nav || nav.dataset.navShortcut;
+      if (next) {
+        activeTab = next as Tab;
+        await render();
+      }
       return;
     }
 
