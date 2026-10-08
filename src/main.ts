@@ -235,7 +235,7 @@ function invoiceModal(t: Transaction, productMap: Map<string, Product>, partyMap
       </header>
       ${t.type === "sale" && t.amount > t.paid ? '<div class="invoice-unsettled">تسویه نشده</div>' : ""}
       <div class="invoice-party">
-        <div><span>طرف حساب</span><strong>${party?.name || "ثبت نشده"}</strong><small>${party?.phone ? "تماس: " + party.phone : "شماره تماس ثبت نشده"}</small></div>
+        <div><span>مشتری / طرف حساب</span><strong class="invoice-customer-name">${party?.name || "ثبت نشده"}</strong><small>${party?.phone ? "تماس: " + party.phone : "شماره تماس ثبت نشده"}</small></div>
       </div>
       <div class="invoice-section-title">اقلام فاکتور</div>
       <div class="invoice-table-wrap">
