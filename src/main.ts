@@ -364,18 +364,26 @@ async function openInvoice(t: Transaction): Promise<void> {
 }
 
 function saleModal(existing?: Transaction): string {
-  const productOptions = products.map(p => `<option value="${p.id}">${p.name} — ${rial(p.salePrice)} / ${p.unit}</option>`).join("");
-
   const accountOptions = (window as typeof window & { __saiAccounts?: {id:string;name:string;type:string}[] }).__saiAccounts?.map(a => `<option value="${a.id}">${a.name}</option>`).join("") || "";
+  const initialLines = existing?.lines?.length ? existing.lines : [{ productId: products[0]?.id || "", quantity: 1, unitPrice: products[0]?.salePrice || 0, discount: 0 }];
+  const lineHtml = (line: TransactionLine, index: number) => `
+    <div class="sale-line" data-sale-line>
+      <label class="field"><span>کالا</span><select class="sale-line-product" data-index="${index}">${products.map(p => `<option value="${p.id}" ${p.id === line.productId ? "selected" : ""}>${p.name} — ${rial(p.salePrice)} / ${p.unit}</option>`).join("")}</select></label>
+      <div class="form-grid">
+        <label class="field"><span>مقدار</span><input class="sale-line-quantity" type="text" inputmode="decimal" value="${line.quantity}"></label>
+        <label class="field"><span>قیمت واحد (${getCurrencyLabel()})</span><input class="sale-line-price" type="text" inputmode="numeric" value="${moneyInputValue(line.unitPrice)}"></label>
+      </div>
+      <label class="field"><span>تخفیف (${getCurrencyLabel()})</span><input class="sale-line-discount" type="text" inputmode="numeric" value="${moneyInputValue(line.discount || 0)}"></label>
+      ${index > 0 ? '<button type="button" class="secondary-button wide sale-remove-line">حذف این کالا</button>' : ""}
+    </div>`;
   return `
     <div class="modal-backdrop" id="sale-modal"><section class="modal" role="dialog" aria-modal="true">
       <button class="modal-close" id="sale-close">×</button><span class="eyebrow">فاکتور فروش</span><h2>${existing ? "ویرایش فروش" : "ثبت فروش"}</h2>
-      <label class="field"><span>کالا</span><select id="sale-product">${productOptions}</select></label>
-      <div class="form-grid"><label class="field"><span>مقدار</span><input id="sale-quantity" type="text" inputmode="decimal" autocomplete="off" value="${existing?.lines[0]?.quantity ?? 1}"></label>
-      <label class="field"><span>قیمت واحد (${getCurrencyLabel()})</span><input id="sale-unit-price" type="text" inputmode="numeric" autocomplete="off" value="${moneyInputValue(existing?.lines[0]?.unitPrice ?? products[0]?.salePrice ?? 0)}"></label></div>
-      <label class="field"><span>تخفیف (${getCurrencyLabel()})</span><input id="sale-discount" type="text" inputmode="numeric" autocomplete="off" value="${moneyInputValue(existing?.lines[0]?.discount ?? 0)}"></label>
+      <div id="sale-lines">${initialLines.map(lineHtml).join("")}</div>
+      <button type="button" class="secondary-button wide" id="sale-add-line">＋ افزودن کالا به فاکتور</button>
       <label class="field"><span>نام مشتری</span><input id="sale-customer-name" type="text" autocomplete="name" placeholder="نام مشتری را وارد کنید" value="${existing?.customerName || ""}"></label>
-      <label class="field"><span>مبلغ پرداختی (${getCurrencyLabel()})</span><input id="sale-paid" type="text" inputmode="numeric" autocomplete="off" value="${moneyInputValue(existing?.paid ?? 0)}"></label><label class="field"><span>دریافت به</span><select id="sale-account"><option value="">بدون انتخاب حساب</option>${accountOptions}</select></label>
+      <label class="field"><span>مبلغ پرداختی (${getCurrencyLabel()})</span><input id="sale-paid" type="text" inputmode="numeric" autocomplete="off" value="${moneyInputValue(existing?.paid ?? 0)}"></label>
+      <label class="field"><span>دریافت به</span><select id="sale-account"><option value="">بدون انتخاب حساب</option>${accountOptions}</select></label>
       <div class="sale-summary"><span>مبلغ فاکتور</span><strong id="sale-total">۰ ریال</strong></div>
       <button class="primary-button wide" id="sale-submit">${existing ? "ذخیره تغییرات فاکتور" : "ثبت فاکتور و کاهش موجودی"}</button>
     </section></div>`;
@@ -387,49 +395,54 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
   if (!products.length) { showToast("ابتدا یک کالا در موجودی ثبت کنید"); return; }
   document.body.insertAdjacentHTML("beforeend", saleModal(existing));
   const modal = document.querySelector<HTMLDivElement>("#sale-modal")!;
-  const product = modal.querySelector<HTMLSelectElement>("#sale-product")!;
-  const quantity = modal.querySelector<HTMLInputElement>("#sale-quantity")!;
-  const unitPrice = modal.querySelector<HTMLInputElement>("#sale-unit-price")!;
-  const discount = modal.querySelector<HTMLInputElement>("#sale-discount")!;
+  const lines = modal.querySelector<HTMLDivElement>("#sale-lines")!;
   const paid = modal.querySelector<HTMLInputElement>("#sale-paid")!;
   const total = modal.querySelector<HTMLElement>("#sale-total")!;
-  if (existing) { if (existing.lines[0]) product.value = existing.lines[0].productId; modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value = existing.customerName || (existing.partyId ? (parties.find(p => p.id === existing.partyId)?.name || "") : ""); modal.querySelector<HTMLSelectElement>("#sale-account")!.value = existing.accountId || ""; }
+  const lineData = () => Array.from(lines.querySelectorAll<HTMLElement>("[data-sale-line]")).map(row => {
+    const productId = row.querySelector<HTMLSelectElement>(".sale-line-product")!.value;
+    const p = products.find(x => x.id === productId);
+    const quantity = numericValue(row.querySelector<HTMLInputElement>(".sale-line-quantity")!.value);
+    const unitPrice = parseMoneyInput(row.querySelector<HTMLInputElement>(".sale-line-price")!.value);
+    const discount = parseMoneyInput(row.querySelector<HTMLInputElement>(".sale-line-discount")!.value);
+    return { productId, p, quantity, unitPrice, discount };
+  });
   const update = () => {
-    const p = products.find(x => x.id === product.value);
-    const price = parseMoneyInput(unitPrice.value);
-    total.textContent = rial(Math.max(0, numericValue(quantity.value) * price - numericValue(discount.value)));
+    const amount = lineData().reduce((sum, x) => sum + Math.max(0, x.quantity * x.unitPrice - x.discount), 0);
+    total.textContent = rial(amount);
   };
-  [product, quantity, unitPrice, discount].forEach(el => el.addEventListener("input", update));
-  product.addEventListener("change", update);
+  lines.addEventListener("input", update);
+  lines.addEventListener("change", update);
+  modal.querySelector("#sale-add-line")?.addEventListener("click", () => {
+    lines.insertAdjacentHTML("beforeend", lineHtml({ productId: products[0].id, quantity: 1, unitPrice: products[0].salePrice, discount: 0 }, lines.children.length));
+    update();
+  });
+  lines.addEventListener("click", event => {
+    const target = event.target as HTMLElement;
+    if (target.closest(".sale-remove-line")) {
+      target.closest<HTMLElement>("[data-sale-line]")?.remove();
+      update();
+    }
+  });
   modal.querySelector("#sale-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#sale-submit")?.addEventListener("click", async () => {
     try {
-      const p = products.find(x => x.id === product.value); const qty = numericValue(quantity.value); const customerName = modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value.trim();
+      const customerName = modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value.trim();
       if (!customerName) throw new Error("نام مشتری الزامی است");
-      if (!p || qty <= 0) throw new Error("کالا و مقدار فروش را بررسی کنید");
-      const price = parseMoneyInput(unitPrice.value);
-      const disc = parseMoneyInput(discount.value);
-      if (price <= 0) throw new Error("قیمت واحد را وارد کنید");
-      const amount = Math.max(0, qty * price - disc);
+      const data = lineData();
+      if (!data.length || data.some(x => !x.p || x.quantity <= 0 || x.unitPrice <= 0)) throw new Error("کالا، مقدار و قیمت همه اقلام را بررسی کنید");
+      const transactionLines: TransactionLine[] = data.map(x => ({ productId: x.productId, quantity: x.quantity, unitPrice: x.unitPrice, discount: x.discount }));
+      const amount = data.reduce((sum, x) => sum + Math.max(0, x.quantity * x.unitPrice - x.discount), 0);
       const paidValue = Math.min(amount, parseMoneyInput(paid.value));
-      const line: TransactionLine = { productId: p.id, quantity: qty, unitPrice: price, discount: disc };
       const savedSale = existing
-        ? await updateTransaction(existing.id, { date: Date.now(), partyId: undefined, customerName, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue })
-        : await addSale({ date: Date.now(), partyId: undefined, customerName: modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value.trim() || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
+        ? await updateTransaction(existing.id, { date: Date.now(), partyId: undefined, customerName, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${data.length} قلم کالا`, lines: transactionLines, paid: paidValue })
+        : await addSale({ date: Date.now(), partyId: undefined, customerName, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${data.length} قلم کالا`, lines: transactionLines, paid: paidValue });
       modal.remove();
-
-      // Mount the invoice immediately after saving so the render cycle cannot hide it.
-      try {
-        await openInvoice(savedSale);
-      } catch (error) {
-        showToast(error instanceof Error ? `فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود: ${error.message}` : "فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود");
-      }
+      try { await openInvoice(savedSale); } catch (error) { showToast(error instanceof Error ? `فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود: ${error.message}` : "فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود"); }
       showToast(`${existing ? "فاکتور ویرایش شد" : "فروش ثبت شد"}؛ مانده ${rial(amount - paidValue)}`);
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت فروش ناموفق بود"); }
   });
   update();
 }
-
 
 function orderNotificationId(orderId: string): number {
   let hash = 2166136261;
