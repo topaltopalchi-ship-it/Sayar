@@ -346,14 +346,15 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
         : await addSale({ date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
       modal.remove();
 
-      // The invoice is mounted on <body>, outside #app. Open it immediately
-      // so a render of the underlying screen cannot race with the invoice UI.
+      // First refresh the underlying screen, then mount the invoice.
+      // This keeps the invoice as the final overlay and prevents a render/layout
+      // cycle from racing with the invoice on Android WebView.
+      await render();
       try {
         await openInvoice(savedSale);
       } catch (error) {
         showToast(error instanceof Error ? `فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود: ${error.message}` : "فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود");
       }
-      await render();
       showToast(`${existing ? "فاکتور ویرایش شد" : "فروش ثبت شد"}؛ مانده ${rial(amount - paidValue)}`);
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت فروش ناموفق بود"); }
   });
