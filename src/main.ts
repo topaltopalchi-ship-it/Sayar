@@ -588,7 +588,7 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
   modal.querySelector("#sale-submit")?.addEventListener("click", async () => {
     try {
       const customerName = modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value.trim();
-      if (!customerName) throw new Error("نام مشتری الزامی است");
+      if (!resolvedCustomerName) throw new Error("نام مشتری الزامی است");
       const data = lineData();
       if (!data.length || data.some(x => !x.p || x.quantity <= 0 || x.unitPrice <= 0)) throw new Error("کالا، مقدار و قیمت همه اقلام را بررسی کنید");
       const transactionLines: TransactionLine[] = data.map(x => ({ productId: x.productId, quantity: x.quantity, unitPrice: x.unitPrice, discount: x.discount }));
@@ -666,6 +666,7 @@ function orderModal(existing?: Order): string {
   const dateValue = `${delivery.getFullYear()}-${String(delivery.getMonth()+1).padStart(2,"0")}-${String(delivery.getDate()).padStart(2,"0")}`;
   return `<div class="modal-backdrop" id="order-modal"><section class="modal" role="dialog" aria-modal="true">
     <button class="modal-close" id="order-close">×</button><span class="eyebrow">مدیریت سفارش</span><h2>${existing ? "ویرایش سفارش" : "دریافت سفارش جدید"}</h2>
+    <label class="field"><span>مشتری ثبت‌شده</span><select id="order-party"><option value="">بدون انتخاب از اشخاص</option>${parties.filter(p => p.type === "customer" || p.type === "both").map(p => `<option value="${p.id}" ${existing?.partyId === p.id ? "selected" : ""}>${p.name}${p.phone ? " · " + p.phone : ""}</option>`).join("")}</select></label>
     <label class="field"><span>نام مشتری</span><input id="order-customer-name" type="text" autocomplete="name" placeholder="نام مشتری را وارد کنید" value="${existing?.customerName || legacyCustomer}"></label>
     <label class="field"><span>نوع سفارش</span><input id="order-type" placeholder="مثلاً سفارش عمده، رزرو، سفارش اختصاصی" value="${existing?.orderType || "سفارش کالا"}"></label>
     <label class="field"><span>کالا</span><select id="order-product">${productOptions}</select></label>
@@ -725,7 +726,10 @@ function bindOrderModal(existing?: Order): void {
   modal.querySelector("#order-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#order-submit")?.addEventListener("click", async () => {
     try {
+      const partyId = modal.querySelector<HTMLSelectElement>("#order-party")?.value || undefined;
       const customerName = modal.querySelector<HTMLInputElement>("#order-customer-name")!.value.trim();
+      const selectedParty = partyId ? parties.find(p => p.id === partyId) : undefined;
+      const resolvedCustomerName = customerName || selectedParty?.name || "";
       const productId = product.value;
       const quantity = numericValue(modal.querySelector<HTMLInputElement>("#order-quantity")!.value);
       const unitPrice = numericValue(price.value);
@@ -738,10 +742,10 @@ function bindOrderModal(existing?: Order): void {
       if (!deliveryDate || deliveryDate < Date.now() - 86400000) throw new Error("تاریخ تحویل را درست انتخاب کنید");
       let saved: Order;
       if (existing) {
-        saved = { ...existing, partyId: undefined, customerName, productId, orderType, quantity, unitPrice, deliveryDate, deliveryTime, note: modal.querySelector<HTMLInputElement>("#order-note")!.value.trim() };
+        saved = { ...existing, partyId, customerName: resolvedCustomerName, productId, orderType, quantity, unitPrice, deliveryDate, deliveryTime, note: modal.querySelector<HTMLInputElement>("#order-note")!.value.trim() };
         await dbUpdateOrder(saved);
       } else {
-        saved = await dbAddOrder({ partyId: undefined, customerName, productId, orderType, quantity, unitPrice, orderDate: Date.now(), deliveryDate, deliveryTime, note: modal.querySelector<HTMLInputElement>("#order-note")!.value.trim(), status: "pending" });
+        saved = await dbAddOrder({ partyId, customerName: resolvedCustomerName, productId, orderType, quantity, unitPrice, orderDate: Date.now(), deliveryDate, deliveryTime, note: modal.querySelector<HTMLInputElement>("#order-note")!.value.trim(), status: "pending" });
       }
       if (existing) await cancelOrderReminder(saved.id);
       await scheduleOrderReminder(saved);
