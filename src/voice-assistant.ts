@@ -118,7 +118,7 @@ export function parseVoiceProducts(transcript: string): VoiceProductDraft[] {
   return drafts.length ? drafts : [parseVoiceProduct(transcript)];
 }
 
-export function bindVoiceProductAssistant(onConfirm: (draft: VoiceProductDraft) => Promise<void>, notify: (message: string) => void): void {
+export function bindVoiceProductAssistant(onConfirm: (draft: VoiceProductDraft) => Promise<void>, notify: (message: string) => void, onConfirmMany?: (drafts: VoiceProductDraft[]) => Promise<void>): void {
   const button = document.querySelector<HTMLButtonElement>("#voice-product");
   if (!button) return;
   button.addEventListener("click", async () => {
@@ -134,6 +134,14 @@ export function bindVoiceProductAssistant(onConfirm: (draft: VoiceProductDraft) 
       const draft=parseVoiceProduct(transcript);
       speakSaiSai("مشخصات کالا را شنیدم. قبل از ثبت بررسی کنید.");
       const modal=document.createElement("div"); modal.className="modal-backdrop"; modal.id="voice-product-modal";
+      if (drafts.length > 1) {
+        modal.innerHTML='<section class="modal" role="dialog" aria-modal="true"><button class="modal-close" id="voice-product-close">×</button><span class="eyebrow">ورود گروهی کالا</span><h2>بررسی کالاها</h2><p class="muted">همه کالاهای تشخیص‌داده‌شده را قبل از ثبت بررسی کنید.</p><div id="vp-many"></div><div class="form-actions"><button class="secondary-button" id="vp-cancel">لغو</button><button class="primary-button" id="vp-confirm">تأیید و ثبت همه</button></div></section>';
+        document.body.appendChild(modal);
+        const list=modal.querySelector("#vp-many")!;
+        list.innerHTML=drafts.map((d,i)=>'<div class="voice-product-item"><strong>'+String(i+1)+'. '+(d.name||"بدون نام")+'</strong><small>موجودی: '+d.initialStock+' · خرید: '+(d.purchasePrice?d.purchasePrice.toLocaleString("fa-IR"):"—")+' · فروش: '+(d.salePrice?d.salePrice.toLocaleString("fa-IR"):"—")+'</small></div>').join("");
+        modal.querySelector("#voice-product-close")?.addEventListener("click",()=>modal.remove()); modal.querySelector("#vp-cancel")?.addEventListener("click",()=>modal.remove()); modal.querySelector("#vp-confirm")?.addEventListener("click",async()=>{ modal.remove(); if(onConfirmMany) await onConfirmMany(drafts); else for(const d of drafts) await onConfirm(d); });
+        return;
+      }
       modal.innerHTML='<section class="modal" role="dialog" aria-modal="true"><button class="modal-close" id="voice-product-close">×</button><span class="eyebrow">ثبت کالا با صدا</span><h2>بررسی اطلاعات کالا</h2><p class="muted">اطلاعات تشخیص‌داده‌شده را قبل از ثبت بررسی کنید.</p><div class="voice-transcript"><span>متن تشخیص‌داده‌شده</span><b id="vp-transcript"></b></div><div class="voice-draft-grid"><div><small>نام کالا</small><strong id="vp-name"></strong></div><div><small>کد کالا</small><strong id="vp-sku"></strong></div><div><small>واحد</small><strong id="vp-unit"></strong></div><div><small>موجودی اولیه</small><strong id="vp-stock"></strong></div><div><small>قیمت خرید</small><strong id="vp-buy"></strong></div><div><small>قیمت فروش</small><strong id="vp-sale"></strong></div><div><small>حداقل موجودی</small><strong id="vp-low"></strong></div></div><div class="form-actions"><button class="secondary-button" id="vp-cancel">لغو</button><button class="primary-button" id="vp-confirm">ثبت کالا</button></div></section>';
       document.body.appendChild(modal);
       const set=(id:string,v:string)=>{ const el=modal.querySelector<HTMLElement>(id); if(el) el.textContent=v; };
