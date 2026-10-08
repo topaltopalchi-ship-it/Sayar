@@ -582,7 +582,7 @@ function bindOrderActions(): void {
     const id = b.dataset.orderComplete || b.dataset.orderCancel || "";
     const order = (await listOrders()).find(x => x.id === id);
     if (!order) return;
-    const nextStatus = b.dataset.orderComplete ? "completed" : "cancelled";
+    const nextStatus: Order["status"] = b.dataset.orderComplete ? "completed" : "cancelled";
     await dbUpdateOrder({ ...order, status: nextStatus });
     await cancelOrderReminder(order.id);
     showToast(nextStatus === "completed" ? "سفارش تحویل شد" : "سفارش لغو شد");
