@@ -417,7 +417,7 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const label = range==="today"?"امروز":range==="week"?"۷ روز اخیر":range==="all"?"همه":range==="custom"?"بازه انتخابی":"ماه جاری";
   const defaultFrom = toPersianDigits(localStorage.getItem("sai-sai-report-from") || todayJalaliInput());
   const defaultTo = toPersianDigits(localStorage.getItem("sai-sai-report-to") || todayJalaliInput());
-  const summary = `<section class="panel report-list"><div class="report-range"><button type="button" data-report-range="today" style="appearance:none;-webkit-appearance:none;color:#fff!important;-webkit-text-fill-color:#fff!important;background:#2b4266!important;border:1px solid #5575a3!important;"><span style="color:#fff!important;-webkit-text-fill-color:#fff!important;">امروز</span></button><button type="button" data-report-range="week" style="appearance:none;-webkit-appearance:none;color:#fff!important;-webkit-text-fill-color:#fff!important;background:#2b4266!important;border:1px solid #5575a3!important;"><span style="color:#fff!important;-webkit-text-fill-color:#fff!important;">۷ روز</span></button><button type="button" data-report-range="month" style="appearance:none;-webkit-appearance:none;color:#fff!important;-webkit-text-fill-color:#fff!important;background:#2b4266!important;border:1px solid #5575a3!important;"><span style="color:#fff!important;-webkit-text-fill-color:#fff!important;">ماه جاری</span></button><button type="button" data-report-range="all" style="appearance:none;-webkit-appearance:none;color:#fff!important;-webkit-text-fill-color:#fff!important;background:#2b4266!important;border:1px solid #5575a3!important;"><span style="color:#fff!important;-webkit-text-fill-color:#fff!important;">همه</span></button></div><div class="report-custom-range">
+  const summary = `<section class="panel report-list"><div class="report-range" role="group" aria-label="بازه گزارش"><div class="report-range-item" role="button" tabindex="0" data-report-range="today">امروز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="week">۷ روز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="month">ماه جاری</div><div class="report-range-item" role="button" tabindex="0" data-report-range="all">همه</div></div><div class="report-custom-range">
   <label class="field"><span>از تاریخ شمسی</span><div class="report-date-input"><input id="report-from-date" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" placeholder="۱۴۰۵/۰۸/۰۷" value="${defaultFrom}" style="color:#111827!important;background:#ffffff!important;text-align:center!important;font-size:17px!important;font-weight:700!important;"><button type="button" class="report-slash" data-date-slash="report-from-date" style="color:#ffffff!important;background:#2b4266!important;">/</button></div></label>
   <label class="field"><span>تا تاریخ شمسی</span><div class="report-date-input"><input id="report-to-date" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" placeholder="۱۴۰۵/۰۸/۰۷" value="${defaultTo}" style="color:#111827!important;background:#ffffff!important;text-align:center!important;font-size:17px!important;font-weight:700!important;"><button type="button" class="report-slash" data-date-slash="report-to-date" style="color:#ffffff!important;background:#2b4266!important;">/</button></div></label>
   <button class="primary-button wide" id="report-apply-range">اعمال بازه</button>
@@ -641,7 +641,7 @@ async function bindActions(): Promise<void> {
       return;
     }
 
-    const reportRange = target.closest<HTMLButtonElement>("[data-report-range]");
+    const reportRange = target.closest<HTMLElement>("[data-report-range]");
     if (reportRange) {
       localStorage.setItem("sai-sai-report-range", reportRange.dataset.reportRange || "month");
       await render();
@@ -682,7 +682,7 @@ function bindReportControls(): void {
     input.addEventListener("input", () => formatReportDateInput(input));
     input.addEventListener("change", () => formatReportDateInput(input));
   });
-  document.querySelectorAll<HTMLButtonElement>("[data-report-range]").forEach(button => {
+  document.querySelectorAll<HTMLElement>("[data-report-range]").forEach(button => {
     button.addEventListener("click", async () => {
       localStorage.setItem("sai-sai-report-range", button.dataset.reportRange || "month");
       await render();
