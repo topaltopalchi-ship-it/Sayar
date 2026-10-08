@@ -339,7 +339,8 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
         popup: false,
         prompt: "سؤال خود را از سای‌سای بپرسید"
       });
-      await SpeechRecognition.stop().catch(() => undefined);\n      const question = result.matches?.[0]?.trim() || "";
+      await SpeechRecognition.stop().catch(() => undefined);
+      const question = result.matches?.[0]?.trim() || "";
       if (!question) throw new Error("سؤالی تشخیص داده نشد");
       const answer = await onAnswer(question);
       speakSaiSai(answer);
