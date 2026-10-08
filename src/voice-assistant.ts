@@ -68,6 +68,76 @@ function parseVoiceSale(transcript: string): VoiceSaleDraft {
   return { transcript: text, customerName: customer, productHint: product, quantity: quantity || 1, unitPrice, paid, items };
 }
 
+export type VoiceProductDraft = {
+  transcript: string;
+  name: string;
+  sku: string;
+  unit: "عدد" | "کیلوگرم" | "گرم" | "لیتر" | "متر" | "بسته";
+  purchasePrice: number;
+  salePrice: number;
+  initialStock: number;
+  lowStock: number;
+};
+
+function spokenMoney(text: string): number {
+  const direct = moneyNumber(text);
+  if (direct) return direct;
+  const small: Record<string, number> = { صفر:0, یک:1, یکی:1, دو:2, سه:3, چهار:4, پنج:5, شش:6, هفت:7, هشت:8, نه:9, ده:10, یازده:11, دوازده:12, سیزده:13, چهارده:14, پانزده:15, شانزده:16, هفده:17, هجده:18, نوزده:19, بیست:20, سی:30, چهل:40, پنجاه:50, شصت:60, هفتاد:70, هشتاد:80, نود:90, صد:100, دویست:200, سیصد:300, چهارصد:400, پانصد:500, ششصد:600, هفتصد:700, هشتصد:800, نهصد:900 };
+  const words = text.replace(/،/g, " ").split(/\\s+/).filter(Boolean);
+  let total=0, current=0;
+  for (const w of words) {
+    if (small[w] !== undefined) current += small[w];
+    else if (w === "هزار" || w === "هزارتا") { total += (current || 1) * 1000; current=0; }
+    else if (w === "میلیون" || w === "میلیونی") { total += (current || 1) * 1_000_000; current=0; }
+    else if (w === "میلیارد" || w === "میلیاردی") { total += (current || 1) * 1_000_000_000; current=0; }
+  }
+  return total + current;
+}
+
+export function parseVoiceProduct(transcript: string): VoiceProductDraft {
+  const text = transcript.trim();
+  const nameMatch = text.match(/(?:کالا(?:ی)?|جنس)\\s+(.+?)(?=\\s+(?:کد|شماره|موجودی|تعداد|قیمت|خرید|فروش|واحد|حداقل)|[،,.]|$)/i);
+  const name = (nameMatch?.[1] || text.split(/[،,.]/)[0] || "").replace(/^(یک|یه)\\s+/i, "").trim();
+  const sku = text.match(/(?:کد|شماره(?:\\s+کالا)?)\\s*([A-Za-z0-9۰-۹_-]+)/i)?.[1] || "";
+  const stockText = text.match(/(?:موجودی|تعداد)\\s*(?:اولیه)?\\s*(?:[=:]\\s*)?([^،,.]+?)(?=\\s+(?:عدد|تا|قیمت|کد|واحد|حداقل)|[،,.]|$)/i)?.[1] || "";
+  const initialStock = firstNumber(stockText) || 0;
+  const buyText = text.match(/(?:قیمت\\s*خرید|خرید)\\s*(?:[=:]\\s*)?([^،,.]+?)(?=\\s+(?:قیمت\\s*فروش|فروش|موجودی|کد|واحد|حداقل)|[،,.]|$)/i)?.[1] || "";
+  const saleText = text.match(/(?:قیمت\\s*فروش|فروش)\\s*(?:[=:]\\s*)?([^،,.]+?)(?=\\s+(?:قیمت\\s*خرید|خرید|موجودی|کد|واحد|حداقل)|[،,.]|$)/i)?.[1] || "";
+  const purchasePrice = spokenMoney(buyText);
+  const salePrice = spokenMoney(saleText);
+  const unitText = text.match(/(?:واحد)\\s*(?:[=:]\\s*)?(عدد|کیلو(?:گرم)?|گرم|لیتر|متر|بسته)/i)?.[1] || "عدد";
+  const unit = unitText === "کیلو" || unitText === "کیلوگرم" ? "کیلوگرم" : unitText as VoiceProductDraft["unit"];
+  const lowText = text.match(/(?:حداقل\\s+موجودی|هشدار\\s+موجودی)\\s*(?:[=:]\\s*)?([^،,.]+?)(?=\\s+(?:عدد|تا)|[،,.]|$)/i)?.[1] || "";
+  const lowStock = firstNumber(lowText) || 0;
+  return { transcript:text, name, sku, unit, purchasePrice, salePrice, initialStock, lowStock };
+}
+
+export function bindVoiceProductAssistant(onConfirm: (draft: VoiceProductDraft) => Promise<void>, notify: (message: string) => void): void {
+  const button = document.querySelector<HTMLButtonElement>("#voice-product");
+  if (!button) return;
+  button.addEventListener("click", async () => {
+    const available = await SpeechRecognition.available().catch(() => ({ available:false }));
+    if (!available.available) { notify("تشخیص صدا در این دستگاه در دسترس نیست"); return; }
+    const permission = await SpeechRecognition.requestPermissions().catch(() => null);
+    if (permission && permission.speechRecognition !== "granted") { notify("اجازه دسترسی به میکروفون و تشخیص صدا لازم است"); return; }
+    button.disabled=true; button.textContent="🎙 در حال شنیدن…";
+    try {
+      const result=await SpeechRecognition.start({ language:"fa-IR", maxResults:3, partialResults:false, popup:true, prompt:"مشخصات کالا را به فارسی بگویید" });
+      const transcript=result.matches?.[0]?.trim() || "";
+      if (!transcript) throw new Error("مشخصات کالا تشخیص داده نشد");
+      const draft=parseVoiceProduct(transcript);
+      speakSaiSai("مشخصات کالا را شنیدم. قبل از ثبت بررسی کنید.");
+      const modal=document.createElement("div"); modal.className="modal-backdrop"; modal.id="voice-product-modal";
+      modal.innerHTML='<section class="modal" role="dialog" aria-modal="true"><button class="modal-close" id="voice-product-close">×</button><span class="eyebrow">ثبت کالا با صدا</span><h2>بررسی اطلاعات کالا</h2><p class="muted">اطلاعات تشخیص‌داده‌شده را قبل از ثبت بررسی کنید.</p><div class="voice-transcript"><span>متن تشخیص‌داده‌شده</span><b id="vp-transcript"></b></div><div class="voice-draft-grid"><div><small>نام کالا</small><strong id="vp-name"></strong></div><div><small>کد کالا</small><strong id="vp-sku"></strong></div><div><small>واحد</small><strong id="vp-unit"></strong></div><div><small>موجودی اولیه</small><strong id="vp-stock"></strong></div><div><small>قیمت خرید</small><strong id="vp-buy"></strong></div><div><small>قیمت فروش</small><strong id="vp-sale"></strong></div><div><small>حداقل موجودی</small><strong id="vp-low"></strong></div></div><div class="form-actions"><button class="secondary-button" id="vp-cancel">لغو</button><button class="primary-button" id="vp-confirm">ثبت کالا</button></div></section>';
+      document.body.appendChild(modal);
+      const set=(id:string,v:string)=>{ const el=modal.querySelector<HTMLElement>(id); if(el) el.textContent=v; };
+      set("#vp-transcript",draft.transcript); set("#vp-name",draft.name||"تشخیص داده نشد"); set("#vp-sku",draft.sku||"—"); set("#vp-unit",draft.unit); set("#vp-stock",String(draft.initialStock)); set("#vp-buy",draft.purchasePrice?draft.purchasePrice.toLocaleString("fa-IR"):"—"); set("#vp-sale",draft.salePrice?draft.salePrice.toLocaleString("fa-IR"):"—"); set("#vp-low",String(draft.lowStock));
+      modal.querySelector("#voice-product-close")?.addEventListener("click",()=>modal.remove()); modal.querySelector("#vp-cancel")?.addEventListener("click",()=>modal.remove()); modal.querySelector("#vp-confirm")?.addEventListener("click",async()=>{ modal.remove(); await onConfirm(draft); });
+    } catch(error) { if(!/cancel|abort/i.test(error instanceof Error?error.name+error.message:String(error))) notify(error instanceof Error?error.message:"تشخیص صدا ناموفق بود"); }
+    finally { button.disabled=false; button.textContent="🎙 ثبت کالای جدید با صدا"; }
+  });
+}
+
 export function speakSaiSai(message: string): void {
   if (!("speechSynthesis" in window) || !message.trim()) return;
   const utterance = new SpeechSynthesisUtterance(message);
