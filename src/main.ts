@@ -215,6 +215,7 @@ function bindInvoiceBrandingModal(): void {
 }
 function invoiceModal(t: Transaction, productMap: Map<string, Product>, partyMap: Map<string, Party>): string {
   const party = t.partyId ? partyMap.get(t.partyId) : undefined;
+  const customerName = t.customerName?.trim() || party?.name || "ثبت نشده";
   const rows = t.lines.map((line, i) => {
     const p = productMap.get(line.productId);
     return `<tr><td>${money.format(i + 1)}</td><td><strong>${p?.name || "کالای حذف‌شده"}</strong></td><td>${money.format(line.quantity)} ${p?.unit || ""}</td><td>${rial(line.unitPrice)}</td><td>${rial(line.discount)}</td><td><strong>${rial(lineTotal(line))}</strong></td></tr>`;
@@ -234,7 +235,7 @@ function invoiceModal(t: Transaction, productMap: Map<string, Product>, partyMap
       </header>
       ${t.type === "sale" && t.amount > t.paid ? '<div class="invoice-unsettled">تسویه نشده</div>' : ""}
       <div class="invoice-party">
-        <div><span>مشتری / طرف حساب</span><strong class="invoice-customer-name">${party?.name || "ثبت نشده"}</strong><small>${party?.phone ? "تماس: " + party.phone : "شماره تماس ثبت نشده"}</small></div>
+        <div><span>مشتری / طرف حساب</span><strong class="invoice-customer-name">${customerName}</strong><small>${party?.phone ? "تماس: " + party.phone : "شماره تماس ثبت نشده"}</small></div>
       </div>
       <div class="invoice-section-title">اقلام فاکتور</div>
       <div class="invoice-table-wrap">
@@ -363,7 +364,7 @@ async function openInvoice(t: Transaction): Promise<void> {
 
 function saleModal(existing?: Transaction): string {
   const productOptions = products.map(p => `<option value="${p.id}">${p.name} — ${rial(p.salePrice)} / ${p.unit}</option>`).join("");
-  const partyOptions = parties.filter(p => p.type === "customer" || p.type === "both").map(p => `<option value="${p.id}">${p.name}</option>`).join("");
+
   const accountOptions = (window as typeof window & { __saiAccounts?: {id:string;name:string;type:string}[] }).__saiAccounts?.map(a => `<option value="${a.id}">${a.name}</option>`).join("") || "";
   return `
     <div class="modal-backdrop" id="sale-modal"><section class="modal" role="dialog" aria-modal="true">
@@ -371,7 +372,7 @@ function saleModal(existing?: Transaction): string {
       <label class="field"><span>کالا</span><select id="sale-product">${productOptions}</select></label>
       <div class="form-grid"><label class="field"><span>مقدار</span><input id="sale-quantity" type="text" inputmode="decimal" autocomplete="off" value="${existing?.lines[0]?.quantity ?? 1}"></label>
       <label class="field"><span>تخفیف (${getCurrencyLabel()})</span><input id="sale-discount" type="text" inputmode="numeric" autocomplete="off" value="${moneyInputValue(existing?.lines[0]?.discount ?? 0)}"></label></div>
-      <label class="field"><span>مشتری</span><select id="sale-party"><option value="">بدون انتخاب</option>${partyOptions}</select></label>
+      <label class="field"><span>نام مشتری</span><input id="sale-customer-name" type="text" autocomplete="name" placeholder="نام مشتری را وارد کنید" value="${existing?.customerName || ""}"></label>
       <label class="field"><span>مبلغ پرداختی (${getCurrencyLabel()})</span><input id="sale-paid" type="text" inputmode="numeric" autocomplete="off" value="${moneyInputValue(existing?.paid ?? 0)}"></label><label class="field"><span>دریافت به</span><select id="sale-account"><option value="">بدون انتخاب حساب</option>${accountOptions}</select></label>
       <div class="sale-summary"><span>مبلغ فاکتور</span><strong id="sale-total">۰ ریال</strong></div>
       <button class="primary-button wide" id="sale-submit">${existing ? "ذخیره تغییرات فاکتور" : "ثبت فاکتور و کاهش موجودی"}</button>
@@ -389,7 +390,7 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
   const discount = modal.querySelector<HTMLInputElement>("#sale-discount")!;
   const paid = modal.querySelector<HTMLInputElement>("#sale-paid")!;
   const total = modal.querySelector<HTMLElement>("#sale-total")!;
-  if (existing) { if (existing.lines[0]) product.value = existing.lines[0].productId; modal.querySelector<HTMLSelectElement>("#sale-party")!.value = existing.partyId || ""; modal.querySelector<HTMLSelectElement>("#sale-account")!.value = existing.accountId || ""; }
+  if (existing) { if (existing.lines[0]) product.value = existing.lines[0].productId; modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value = existing.customerName || (existing.partyId ? (parties.find(p => p.id === existing.partyId)?.name || "") : ""); modal.querySelector<HTMLSelectElement>("#sale-account")!.value = existing.accountId || ""; }
   const update = () => {
     const p = products.find(x => x.id === product.value);
     total.textContent = rial(Math.max(0, numericValue(quantity.value) * (p?.salePrice ?? 0) - numericValue(discount.value)));
@@ -406,7 +407,7 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
       const paidValue = Math.min(amount, parseMoneyInput(paid.value));
       const line: TransactionLine = { productId: p.id, quantity: qty, unitPrice: p.salePrice, discount: disc };
       const savedSale = existing
-        ? await updateTransaction(existing.id, { date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue })
+        ? await updateTransaction(existing.id, { date: Date.now(), partyId: undefined, customerName: modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value.trim() || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue })
         : await addSale({ date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
       modal.remove();
 
@@ -454,13 +455,14 @@ async function scheduleOrderReminder(order: Order): Promise<void> {
     const id = orderNotificationId(order.id);
     await LocalNotifications.cancel({ notifications: [{ id }] });
     const [orderParties, orderProducts] = await Promise.all([listParties(), listProducts()]);
-    const party = orderParties.find(p => p.id === order.partyId);
+    const party = order.partyId ? orderParties.find(p => p.id === order.partyId) : undefined;
+    const customerName = order.customerName?.trim() || party?.name || "مشتری";
     const product = orderProducts.find(p => p.id === order.productId);
     await LocalNotifications.schedule({
       notifications: [{
         id,
         title: "یادآوری سفارش سای‌سای",
-        body: `فردا ${order.orderType || "سفارش کالا"} برای ${party?.name || "مشتری"}: ${product?.name || "کالا"}، تعداد ${money.format(order.quantity)}${order.deliveryTime ? `، ساعت ${order.deliveryTime}` : ""}.`,
+        body: `فردا ${order.orderType || "سفارش کالا"} برای ${customerName}: ${product?.name || "کالا"}، تعداد ${money.format(order.quantity)}${order.deliveryTime ? `، ساعت ${order.deliveryTime}` : ""}.`,
         channelId: "saisai-orders",
         schedule: { at: reminderAt, allowWhileIdle: true },
         autoCancel: true,
@@ -477,14 +479,13 @@ async function cancelOrderReminder(orderId: string): Promise<void> {
 }
 
 function orderModal(existing?: Order): string {
-  const customerOptions = parties.filter(p => p.type === "customer" || p.type === "both")
-    .map(p => `<option value="${p.id}" ${existing?.partyId === p.id ? "selected" : ""}>${p.name}</option>`).join("");
+  const legacyCustomer = existing?.partyId ? parties.find(p => p.id === existing.partyId)?.name || "" : "";
   const productOptions = products.map(p => `<option value="${p.id}" ${existing?.productId === p.id ? "selected" : ""}>${p.name} · ${rial(p.salePrice)}</option>`).join("");
   const delivery = new Date(existing?.deliveryDate ?? Date.now() + 86400000);
   const dateValue = `${delivery.getFullYear()}-${String(delivery.getMonth()+1).padStart(2,"0")}-${String(delivery.getDate()).padStart(2,"0")}`;
   return `<div class="modal-backdrop" id="order-modal"><section class="modal" role="dialog" aria-modal="true">
     <button class="modal-close" id="order-close">×</button><span class="eyebrow">مدیریت سفارش</span><h2>${existing ? "ویرایش سفارش" : "دریافت سفارش جدید"}</h2>
-    <label class="field"><span>مشتری</span><select id="order-party"><option value="">انتخاب مشتری</option>${customerOptions}</select></label>
+    <label class="field"><span>نام مشتری</span><input id="order-customer-name" type="text" autocomplete="name" placeholder="نام مشتری را وارد کنید" value="${existing?.customerName || legacyCustomer}"></label>
     <label class="field"><span>نوع سفارش</span><input id="order-type" placeholder="مثلاً سفارش عمده، رزرو، سفارش اختصاصی" value="${existing?.orderType || "سفارش کالا"}"></label>
     <label class="field"><span>کالا</span><select id="order-product">${productOptions}</select></label>
     <div class="form-grid"><label class="field"><span>مقدار</span><input id="order-quantity" type="text" inputmode="decimal" value="${existing?.quantity ?? 1}"></label>
@@ -532,7 +533,7 @@ function bindOrderModal(existing?: Order): void {
   modal.querySelector("#order-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#order-submit")?.addEventListener("click", async () => {
     try {
-      const partyId = modal.querySelector<HTMLSelectElement>("#order-party")!.value;
+      const customerName = modal.querySelector<HTMLInputElement>("#order-customer-name")!.value.trim();
       const productId = product.value;
       const quantity = numericValue(modal.querySelector<HTMLInputElement>("#order-quantity")!.value);
       const unitPrice = numericValue(price.value);
