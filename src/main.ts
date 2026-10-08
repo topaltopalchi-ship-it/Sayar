@@ -702,7 +702,7 @@ async function ordersView(): Promise<string> {
       </div>
       <p class="muted">${o.note || "بدون یادداشت"} · مبلغ تقریبی ${rial(Math.round(o.quantity * o.unitPrice))}</p>
       <div class="order-actions">
-        ${o.status === "pending" ? `<button class="primary-button" data-order-complete="${o.id}">تحویل شد</button><button class="secondary-button" data-order-cancel="${o.id}">لغو</button>` : ""}
+        ${o.status === "pending" ? `<button class="primary-button" data-order-complete="${o.id}">تحویل و ثبت فروش</button><button class="secondary-button" data-order-cancel="${o.id}">لغو</button>` : o.saleTransactionId ? `<span class="muted">فاکتور فروش ثبت شد</span>` : ""}
         <button class="secondary-button" data-order-edit="${o.id}">ویرایش</button><button class="secondary-button" data-order-delete="${o.id}">حذف</button>
       </div>
     </article>`;
@@ -789,10 +789,33 @@ function bindOrderActions(): void {
     const id = b.dataset.orderComplete || b.dataset.orderCancel || "";
     const order = (await listOrders()).find(x => x.id === id);
     if (!order) return;
-    const nextStatus: Order["status"] = b.dataset.orderComplete ? "completed" : "cancelled";
-    await dbUpdateOrder({ ...order, status: nextStatus });
-    await cancelOrderReminder(order.id);
-    showToast(nextStatus === "completed" ? "سفارش تحویل شد" : "سفارش لغو شد");
+    const completing = Boolean(b.dataset.orderComplete);
+    if (completing) {
+      if (order.status !== "pending") { showToast("این سفارش دیگر در انتظار تحویل نیست"); return; }
+      if (order.saleTransactionId) { showToast("فاکتور این سفارش قبلاً ثبت شده است"); return; }
+      if (!confirm("این سفارش به فاکتور فروش تبدیل شود؟ مبلغ به‌صورت نسیه ثبت می‌شود و بعداً می‌توانید دریافت وجه را ثبت کنید.")) return;
+      try {
+        const total = Math.round(order.quantity * order.unitPrice);
+        if (total <= 0) throw new Error("مبلغ سفارش معتبر نیست");
+        const sale = await addSale({
+          date: Date.now(),
+          partyId: order.partyId,
+          customerName: order.customerName,
+          description: "فروش بابت سفارش " + order.id.slice(0, 8),
+          lines: [{ productId: order.productId, quantity: order.quantity, unitPrice: order.unitPrice, discount: 0 }],
+          paid: 0,
+        });
+        await dbUpdateOrder({ ...order, status: "completed", saleTransactionId: sale.id });
+        await cancelOrderReminder(order.id);
+        showToast("سفارش تحویل شد؛ فاکتور فروش ثبت شد");
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "ثبت فاکتور سفارش ناموفق بود");
+      }
+    } else {
+      await dbUpdateOrder({ ...order, status: "cancelled" });
+      await cancelOrderReminder(order.id);
+      showToast("سفارش لغو شد");
+    }
     await render();
   }));
 }
