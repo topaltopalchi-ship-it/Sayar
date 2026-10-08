@@ -633,10 +633,20 @@ async function ordersView(): Promise<string> {
     const party = o.partyId ? partyMap.get(o.partyId) : undefined;
     const customerName = o.customerName?.trim() || party?.name || "مشتری حذف‌شده";
     const product = productMap.get(o.productId);
+    const orderDate = o.orderDate || o.createdAt;
     const status = o.status === "completed" ? "تحویل شد" : o.status === "cancelled" ? "لغو شد" : "در انتظار";
+    const deliveryDate = new Intl.DateTimeFormat("fa-IR-u-ca-persian", { year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(o.deliveryDate));
+    const orderDateText = new Intl.DateTimeFormat("fa-IR-u-ca-persian", { year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(orderDate));
     return `<article class="order-card ${o.status}">
       <div class="order-card-head"><div><span class="eyebrow">سفارش</span><h3>${customerName}</h3></div><span class="order-status">${status}</span></div>
-      <div class="order-details"><span>نوع: <b>${o.orderType || "سفارش کالا"}</b></span><span>کالا: <b>${product?.name || "کالای حذف‌شده"}</b></span><span>مقدار: <b>${money.format(o.quantity)} ${product?.unit || ""}</b></span><span>تحویل: <b>${dateLabel(o.deliveryDate)}${o.deliveryTime ? ` · ساعت ${o.deliveryTime}` : ""}</b></span></div>
+      <div class="order-details">
+        <span>سفارش‌دهنده: <b>${customerName}</b></span>
+        <span>مقدار: <b>${money.format(o.quantity)} ${product?.unit || ""}</b></span>
+        <span>کالا: <b>${product?.name || "کالای حذف‌شده"}</b></span>
+        <span>تاریخ سفارش: <b>${orderDateText}</b></span>
+        <span>تاریخ تحویل: <b>${deliveryDate}</b></span>
+        <span>زمان تحویل: <b>${o.deliveryTime || "ثبت نشده"}</b></span>
+      </div>
       <p class="muted">${o.note || "بدون یادداشت"} · مبلغ تقریبی ${rial(Math.round(o.quantity * o.unitPrice))}</p>
       <div class="order-actions">
         ${o.status === "pending" ? `<button class="primary-button" data-order-complete="${o.id}">تحویل شد</button><button class="secondary-button" data-order-cancel="${o.id}">لغو</button>` : ""}
