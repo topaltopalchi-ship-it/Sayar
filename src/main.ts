@@ -19,7 +19,7 @@ import { accountModal, accountLedgerModal, accountsView, bindAccountLedger, bind
 import { getAccountBalances, listAccounts } from "./db";
 import { checksView, checkModal, bindCheckModal, bindCheckStatuses, bindCheckActions } from "./checks-ui";
 import { jalaliToGregorianDate, todayJalaliInput, formatJalaliInput, toPersianDigits } from "./calendar";
-import { bindVoiceAssistant, bindVoiceQuestionAssistant, bindVoiceProductAssistant, type VoiceSaleDraft, type VoiceSaleItem, type VoiceProductDraft } from "./voice-assistant";
+import { bindVoiceAssistant, bindVoiceQuestionAssistant, bindVoiceProductAssistant, bindVoiceProductFieldAssistant, type VoiceSaleDraft, type VoiceSaleItem, type VoiceProductDraft } from "./voice-assistant";
 import { getCustomerTier, getMarketSettings, setMarketSettings, recommendPrice, tierLabel } from "./pricing";
 import { buildBusinessInsights, dailyBrief, customerScore, type BusinessInsight } from "./intelligence";
 import { analyzeProductPhoto, getVisionApiKey, setVisionApiKey } from "./product-vision";
@@ -773,7 +773,7 @@ function productModal(product?: Product): string {
     <div class="form-grid"><label class="field"><span>قیمت خرید (${getCurrencyLabel()})</span><input id="p-buy" type="number" min="0" value="${moneyInputValue(product?.purchasePrice ?? 0)}"></label><label class="field"><span>قیمت فروش (${getCurrencyLabel()})</span><input id="p-sale" type="number" min="0" value="${moneyInputValue(product?.salePrice ?? 0)}"></label></div>
     <div class="form-grid"><label class="field"><span>مبنای قیمت بازار</span><select id="p-market-basis"><option value="none" ${product?.marketBasis === "none" || !product?.marketBasis ? "selected" : ""}>بدون شاخص</option><option value="dollar" ${product?.marketBasis === "dollar" ? "selected" : ""}>دلار</option><option value="gold" ${product?.marketBasis === "gold" ? "selected" : ""}>طلا</option><option value="market" ${product?.marketBasis === "market" ? "selected" : ""}>شاخص بازار</option></select></label><label class="field"><span>نرخ مرجع هنگام خرید</span><input id="p-market-reference" type="number" min="0" value="${product?.marketReferenceRate ?? 0}"></label></div><div class="form-grid"><label class="field"><span>سود هدف (%)</span><input id="p-margin" type="number" min="0" value="${product?.targetMarginPercent ?? getMarketSettings().defaultMarginPercent}"></label><label class="field"><span>حداقل سود (%)</span><input id="p-min-margin" type="number" min="0" value="${product?.minMarginPercent ?? getMarketSettings().minMarginPercent}"></label></div><label class="field"><span>حداقل موجودی (هشدار)</span><input id="p-low" type="number" min="0" step="0.001" value="${product?.lowStock ?? 5}"></label><label class="field"><span>تأمین‌کننده این کالا</span><select id="p-supplier"><option value="">بدون تأمین‌کننده</option>${parties.filter(p => p.type === "supplier" || p.type === "both").map(p => `<option value="${p.id}" ${product?.supplierId === p.id ? "selected" : ""}>${p.name}${p.phone ? " · " + p.phone : ""}</option>`).join("")}</select></label>
     ${product ? "" : '<label class="field"><span>موجودی اولیه</span><input id="p-initial-stock" type="text" inputmode="decimal" autocomplete="off" value="0" placeholder="مثلاً 20"></label>'}
-    ${product ? "" : `<button class="secondary-button wide" id="voice-product">🎙 ثبت کالای جدید با صدا</button><button class="secondary-button wide" id="photo-product">📷 شناسایی کالا از روی عکس</button>`}<button class="primary-button wide" id="product-submit">${product ? "ذخیره تغییرات" : "ذخیره کالا"}</button></section></div>`;
+    ${product ? "" : `<button class="secondary-button wide" id="voice-product">🎙 ثبت کالای جدید با صدا</button><button class="secondary-button wide" id="photo-product">📷 شناسایی کالا از روی عکس</button><button class="secondary-button wide" id="photo-voice-product">📷🎙 عکس + تکمیل با صدا</button>`}<button class="primary-button wide" id="product-submit">${product ? "ذخیره تغییرات" : "ذخیره کالا"}</button></section></div>`;
 }
 
 async function saveVoiceProduct(draft: VoiceProductDraft): Promise<void> {
@@ -781,7 +781,61 @@ async function saveVoiceProduct(draft: VoiceProductDraft): Promise<void> {
   try {\n    await addProduct({ name:draft.name, sku:draft.sku, unit:draft.unit, purchasePrice:draft.purchasePrice, salePrice:draft.salePrice, lowStock:draft.lowStock }, draft.initialStock);\n    showToast("کالا با صدا با موفقیت ثبت شد");\n    await render();\n  } catch (e) { showToast(e instanceof Error ? e.message : "ثبت کالای صوتی ناموفق بود"); }\n}\n\nfunction bindProductModal(): void {
   const modal = document.querySelector<HTMLDivElement>("#product-modal")!;
   modal.querySelector("#product-close")?.addEventListener("click", () => modal.remove());
-  modal.querySelector("#photo-product")?.addEventListener("click", () => { if(!getVisionApiKey()){document.body.insertAdjacentHTML("beforeend",visionSettingsModal());bindVisionSettingsModal();showToast("ابتدا کلید هوش تصویری را وارد کنید");return;} const input=document.createElement("input");input.type="file";input.accept="image/*";input.capture="environment";input.onchange=async()=>{const file=input.files?.[0];if(!file)return;const b=modal.querySelector<HTMLButtonElement>("#photo-product");if(b){b.disabled=true;b.textContent="📷 در حال تحلیل تصویر…";}try{const r=await analyzeProductPhoto(file);if(!r.name)throw new Error("نام کالا از تصویر تشخیص داده نشد");const n=modal.querySelector<HTMLInputElement>("#p-name");if(n)n.value=r.name;const s=modal.querySelector<HTMLInputElement>("#p-sku");if(s&&r.sku)s.value=r.sku;const u=modal.querySelector<HTMLSelectElement>("#p-unit");if(u)u.value=r.unit;showToast("نام کالا از روی عکس تشخیص داده شد؛ لطفاً بررسی کنید");}catch(e){showToast(e instanceof Error?e.message:"تشخیص تصویر ناموفق بود");}finally{if(b){b.disabled=false;b.textContent="📷 شناسایی کالا از روی عکس";}}};input.click(); });\n  if (!modal.dataset.editId) bindVoiceProductAssistant(async draft => { modal.remove(); await saveVoiceProduct(draft); }, showToast, async drafts => { modal.remove(); for (const draft of drafts) await saveVoiceProduct(draft); showToast(`${drafts.length} کالا ثبت شد`); });
+  modal.querySelector("#photo-product")?.addEventListener("click", () => { if(!getVisionApiKey()){document.body.insertAdjacentHTML("beforeend",visionSettingsModal());bindVisionSettingsModal();showToast("ابتدا کلید هوش تصویری را وارد کنید");return;} const input=document.createElement("input");input.type="file";input.accept="image/*";input.capture="environment";input.onchange=async()=>{const file=input.files?.[0];if(!file)return;const b=modal.querySelector<HTMLButtonElement>("#photo-product");if(b){b.disabled=true;b.textContent="📷 در حال تحلیل تصویر…";}try{const r=await analyzeProductPhoto(file);if(!r.name)throw new Error("نام کالا از تصویر تشخیص داده نشد");const n=modal.querySelector<HTMLInputElement>("#p-name");if(n)n.value=r.name;const s=modal.querySelector<HTMLInputElement>("#p-sku");if(s&&r.sku)s.value=r.sku;const u=modal.querySelector<HTMLSelectElement>("#p-unit");if(u)u.value=r.unit;showToast("نام کالا از روی عکس تشخیص داده شد؛ لطفاً بررسی کنید");}catch(e){showToast(e instanceof Error?e.message:"تشخیص تصویر ناموفق بود");}finally{if(b){b.disabled=false;b.textContent="📷 شناسایی کالا از روی عکس";}}};input.click(); });\n  
+  const combinedVoiceButton = modal.querySelector<HTMLButtonElement>("#photo-voice-product");
+  if (combinedVoiceButton && !modal.dataset.editId) {
+    bindVoiceProductFieldAssistant(
+      combinedVoiceButton,
+      showToast,
+      async draft => {
+        const stock = modal.querySelector<HTMLInputElement>("#p-initial-stock");
+        const buy = modal.querySelector<HTMLInputElement>("#p-buy");
+        const sale = modal.querySelector<HTMLInputElement>("#p-sale");
+        const low = modal.querySelector<HTMLInputElement>("#p-low");
+        if (draft.initialStock > 0 && stock) stock.value = String(draft.initialStock);
+        if (draft.purchasePrice > 0 && buy) buy.value = String(draft.purchasePrice);
+        if (draft.salePrice > 0 && sale) sale.value = String(draft.salePrice);
+        if (draft.lowStock > 0 && low) low.value = String(draft.lowStock);
+        showToast("عکس و اطلاعات صوتی با هم ترکیب شدند؛ حالا ثبت کالا را بزنید");
+      },
+      async () => {
+        if (!getVisionApiKey()) {
+          document.body.insertAdjacentHTML("beforeend", visionSettingsModal());
+          bindVisionSettingsModal();
+          showToast("ابتدا کلید هوش تصویری را وارد کنید");
+          return false;
+        }
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "image/*";
+        input.capture = "environment";
+        return await new Promise<boolean>(resolve => {
+          input.onchange = async () => {
+            const file = input.files?.[0];
+            if (!file) { resolve(false); return; }
+            combinedVoiceButton.textContent = "📷 در حال تحلیل تصویر…";
+            try {
+              const r = await analyzeProductPhoto(file);
+              if (!r.name) throw new Error("نام کالا از تصویر تشخیص داده نشد");
+              const n = modal.querySelector<HTMLInputElement>("#p-name");
+              const s = modal.querySelector<HTMLInputElement>("#p-sku");
+              const u = modal.querySelector<HTMLSelectElement>("#p-unit");
+              if (n) n.value = r.name;
+              if (s && r.sku) s.value = r.sku;
+              if (u) u.value = r.unit;
+              showToast("نام کالا از عکس تشخیص داده شد؛ حالا اطلاعات عددی را با صدا بگویید");
+              resolve(true);
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : "تشخیص تصویر ناموفق بود");
+              resolve(false);
+            }
+          };
+          input.click();
+        });
+      }
+    );
+  }
+if (!modal.dataset.editId) bindVoiceProductAssistant(async draft => { modal.remove(); await saveVoiceProduct(draft); }, showToast, async drafts => { modal.remove(); for (const draft of drafts) await saveVoiceProduct(draft); showToast(`${drafts.length} کالا ثبت شد`); });
   modal.querySelector("#product-submit")?.addEventListener("click", async () => {
     try {
       const name = (modal.querySelector<HTMLInputElement>("#p-name")!.value).trim();
