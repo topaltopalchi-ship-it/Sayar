@@ -126,7 +126,7 @@ export interface Order {
   id: ID;
   partyId: ID;
   productId: ID;
-  orderType: string;
+  orderType?: string;
   quantity: number;
   unitPrice: Money;
   orderDate: number;
