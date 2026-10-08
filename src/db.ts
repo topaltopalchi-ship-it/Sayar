@@ -69,55 +69,35 @@ export async function deleteAccount(accountId: string): Promise<void> {
 let integrityRepairDone = false;
 
 export async function repairDataIntegrity(): Promise<void> {
-  if (integrityRepairDone) return;
   const db = await openDb();
   const [transactions, movements] = await Promise.all([listTransactions(), listMovements()]);
   const inventoryTransactions = transactions.filter(t => t.type === "sale" || t.type === "purchase");
-  const expectedByReference = new Map<string, StockMovement[]>();
 
-  for (const t of inventoryTransactions) {
-    const rows: StockMovement[] = [];
-    for (const line of t.lines) {
-      rows.push({
-        id: newId(),
-        productId: line.productId,
-        date: t.date,
-        type: t.type === "sale" ? "sale" : "purchase",
-        quantity: t.type === "sale" ? -line.quantity : line.quantity,
-        referenceId: t.id,
-      });
-    }
-    expectedByReference.set(t.id, rows);
-  }
-
-  const needsRepair = inventoryTransactions.some(t => {
-    const existing = movements.filter(m => m.referenceId === t.id && (m.type === "sale" || m.type === "purchase"));
-    const expected = expectedByReference.get(t.id) ?? [];
-    if (existing.length !== expected.length) return true;
-    return expected.some(e => !existing.some(m =>
-      m.productId === e.productId &&
-      m.quantity === e.quantity &&
-      m.type === e.type
-    ));
-  });
-
-  if (!needsRepair) {
-    integrityRepairDone = true;
-    return;
-  }
+  // Rebuild every sale/purchase movement deterministically. This prevents
+  // legacy builds from leaving the inventory ledger half-empty or duplicated.
+  const transactionIds = new Set(inventoryTransactions.map(t => t.id));
 
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(["transactions", "movements"], "readwrite");
     const store = tx.objectStore("movements");
 
     for (const m of movements) {
-      if (m.referenceId && expectedByReference.has(m.referenceId) && (m.type === "sale" || m.type === "purchase")) {
+      if (m.referenceId && transactionIds.has(m.referenceId) && (m.type === "sale" || m.type === "purchase")) {
         store.delete(m.id);
       }
     }
 
-    for (const rows of expectedByReference.values()) {
-      for (const row of rows) store.put(row);
+    for (const t of inventoryTransactions) {
+      for (const line of t.lines) {
+        store.put({
+          id: newId(),
+          productId: line.productId,
+          date: t.date,
+          type: t.type === "sale" ? "sale" : "purchase",
+          quantity: t.type === "sale" ? -Number(line.quantity || 0) : Number(line.quantity || 0),
+          referenceId: t.id,
+        } satisfies StockMovement);
+      }
     }
 
     tx.oncomplete = () => resolve();
@@ -127,7 +107,6 @@ export async function repairDataIntegrity(): Promise<void> {
 
   integrityRepairDone = true;
 }
-
 export async function listOrders(): Promise<Order[]> {
   const items = await getAll<Order>("orders");
   return items.sort((a, b) => a.deliveryDate - b.deliveryDate || b.createdAt - a.createdAt);
@@ -447,28 +426,14 @@ export async function getDashboard(): Promise<Dashboard> {
 }
 
 export async function getStock(productId: string, excludeTransactionId?: string): Promise<number> {
-  // Stock is derived from the source-of-truth ledger:
-  // opening/manual adjustments + purchases - sales.
-  // We intentionally do not depend on cached purchase/sale movement rows here,
-  // because older installations may have incomplete or stale movement records.
-  const [transactions, movements] = await Promise.all([listTransactions(), listMovements()]);
-
-  let stock = movements
-    .filter(m => m.productId === productId && m.type === "adjustment")
+  // The inventory ledger is the single source of truth. Startup repair rebuilds
+  // purchase/sale movements from transactions, while manual adjustments remain
+  // independent opening/physical-count movements.
+  const movements = await listMovements();
+  const stock = movements
+    .filter(m => m.productId === productId && m.referenceId !== excludeTransactionId)
     .reduce((sum, m) => sum + Number(m.quantity || 0), 0);
 
-  for (const t of transactions) {
-    if (t.id === excludeTransactionId) continue;
-    if (t.type !== "purchase" && t.type !== "sale") continue;
-
-    const quantity = t.lines
-      .filter(line => line.productId === productId)
-      .reduce((sum, line) => sum + Number(line.quantity || 0), 0);
-
-    stock += t.type === "purchase" ? quantity : -quantity;
-  }
-
-  // Inventory must never be displayed as a negative available balance.
   return Math.max(0, stock);
 }
 
