@@ -1216,7 +1216,8 @@ async function render(): Promise<void> {
       setLine(rows()[0], draft.items[0]);
       for (let i = 1; i < draft.items.length; i++) {
         addLine?.click();
-        const current = rows().at(-1);
+        const currentRows = rows();
+        const current = currentRows[currentRows.length - 1];
         if (current) setLine(current, draft.items[i]);
       }
       rows().forEach(row => row.dispatchEvent(new Event("input", { bubbles: true })));
