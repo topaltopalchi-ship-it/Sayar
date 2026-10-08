@@ -120,6 +120,21 @@ export interface AccountEntry {
 }
 
 
+export type OrderStatus = "pending" | "completed" | "cancelled";
+
+export interface Order {
+  id: ID;
+  partyId: ID;
+  productId: ID;
+  quantity: number;
+  unitPrice: Money;
+  orderDate: number;
+  deliveryDate: number;
+  note: string;
+  status: OrderStatus;
+  createdAt: number;
+}
+
 export type CheckDirection = "received" | "issued";
 export type CheckStatus = "pending" | "cleared" | "bounced" | "spent" | "cancelled";
 
