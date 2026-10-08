@@ -123,9 +123,14 @@ export function parseVoiceProducts(transcript: string): VoiceProductDraft[] {
 export function bindVoiceProductFieldAssistant(
   button: HTMLButtonElement,
   notify: (message: string) => void,
-  onDraft: (draft: VoiceProductDraft) => Promise<void> | void
+  onDraft: (draft: VoiceProductDraft) => Promise<void> | void,
+  beforeListen?: () => Promise<boolean> | boolean
 ): void {
   button.addEventListener("click", async () => {
+    if (beforeListen) {
+      const shouldContinue = await beforeListen();
+      if (!shouldContinue) return;
+    }
     const available = await SpeechRecognition.available().catch(() => ({ available: false }));
     if (!available.available) { notify("تشخیص صدا در این دستگاه در دسترس نیست"); return; }
     const permission = await SpeechRecognition.requestPermissions().catch(() => null);
