@@ -696,7 +696,8 @@ async function render(): Promise<void> {
   else if (activeTab === "reports") content = await reportsView(await listTransactions());
   else if (activeTab === "more") content = await accountsView();
   else if (activeTab === "checks") content = await checksView();
-  layout(content, subscription);\n  bindReportControls();
+  layout(content, subscription);
+  bindReportControls();
 
   document.querySelectorAll<HTMLButtonElement>("[data-invoice-id]").forEach(b => b.addEventListener("click", async () => {
     const tx = (await listTransactions()).find(t => t.id === b.dataset.invoiceId);
