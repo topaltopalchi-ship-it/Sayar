@@ -5,7 +5,7 @@ import { getCurrencyLabel, moneyInputValue, parseMoneyInput } from "./settings";
 type MoneyFormat = (value: number) => string;
 type Done = (message: string) => void;
 
-export function openPurchaseModal(products: Product[], parties: Party[], rial: MoneyFormat, done: Done, existing?: Transaction): void {
+export function openPurchaseModal(products: Product[], parties: Party[], rial: MoneyFormat, done: Done, existing?: Transaction, preselectedProductId?: string): void {
   if (!products.length) { done("ابتدا حداقل یک کالا ثبت کنید"); return; }
 
   const productOptions = products.map(p => '<option value="' + p.id + '">' + p.name + ' — ' + rial(p.purchasePrice) + ' / ' + p.unit + '</option>').join("");
@@ -56,6 +56,11 @@ export function openPurchaseModal(products: Product[], parties: Party[], rial: M
     if (existing?.accountId) account.value = existing.accountId;
   });
   if (existing?.lines[0]) product.value = existing.lines[0].productId;
+  else if (preselectedProductId && products.some(p => p.id === preselectedProductId)) {
+    product.value = preselectedProductId;
+    const selected = products.find(p => p.id === preselectedProductId);
+    if (selected) price.value = moneyInputValue(selected.purchasePrice);
+  }
   if (existing?.partyId) party.value = existing.partyId;
 
   product.addEventListener("change", () => {
