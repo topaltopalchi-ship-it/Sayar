@@ -417,7 +417,7 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const label = range==="today"?"امروز":range==="week"?"۷ روز اخیر":range==="all"?"همه":range==="custom"?"بازه انتخابی":"ماه جاری";
   const defaultFrom = formatJalaliInput(localStorage.getItem("sai-sai-report-from") || todayJalaliInput());
   const defaultTo = formatJalaliInput(localStorage.getItem("sai-sai-report-to") || todayJalaliInput());
-  const summary = `<section class="panel report-list"><div class="report-range" role="group" aria-label="بازه گزارش"><div class="report-range-item" role="button" tabindex="0" data-report-range="today">امروز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="week">۷ روز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="month">ماه جاری</div><div class="report-range-item" role="button" tabindex="0" data-report-range="all">همه</div></div><div class="report-custom-range">
+  const summary = `<section class="panel report-list"><div class="report-range" role="group" aria-label="بازه گزارش"><div class="report-range-item" role="button" tabindex="0" data-report-range="today">امروز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="week">۷ روز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="month">ماه جاری</div><div class="report-range-item" role="button" tabindex="0" data-report-range="all">همه</div></div><form id="report-range-form" class="report-custom-range">
   <label class="field"><span>از تاریخ شمسی</span><div class="report-date-input report-date-parts" dir="ltr">
     <input id="report-from-year" data-report-date-part="from-year" type="text" inputmode="numeric" autocomplete="off" maxlength="4" value="${defaultFrom.slice(0,4)}" aria-label="سال شروع">
     <span class="report-date-separator">/</span>
@@ -602,17 +602,12 @@ function enforceReportDateFormat(input: HTMLInputElement): void {
   const normalize = () => formatReportDateInput(input);
 
   normalize();
+  // Android WebView/IME may restore the raw value after the page is rendered.
+  // Re-apply the display format at several points during the first few seconds.
+  [0, 50, 150, 300, 600, 1000, 2000, 4000].forEach(delay => {
+    window.setTimeout(normalize, delay);
+  });
   window.requestAnimationFrame(normalize);
-  window.setTimeout(normalize, 0);
-
-  // Android WebView can restore an input's saved value after the page renders.
-  // Keep normalizing briefly so an 8-digit restored value becomes yyyy/mm/dd.
-  let attempts = 0;
-  const timer = window.setInterval(() => {
-    normalize();
-    attempts += 1;
-    if (attempts >= 20) window.clearInterval(timer);
-  }, 50);
 }
 
 async function applyReportRange(): Promise<void> {
