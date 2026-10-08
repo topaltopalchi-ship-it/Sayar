@@ -120,6 +120,44 @@ export function parseVoiceProducts(transcript: string): VoiceProductDraft[] {
   return drafts.length ? drafts : [parseVoiceProduct(transcript)];
 }
 
+export function bindVoiceProductFieldAssistant(
+  button: HTMLButtonElement,
+  notify: (message: string) => void,
+  onDraft: (draft: VoiceProductDraft) => Promise<void> | void
+): void {
+  button.addEventListener("click", async () => {
+    const available = await SpeechRecognition.available().catch(() => ({ available: false }));
+    if (!available.available) { notify("تشخیص صدا در این دستگاه در دسترس نیست"); return; }
+    const permission = await SpeechRecognition.requestPermissions().catch(() => null);
+    if (permission && permission.speechRecognition !== "granted") {
+      notify("اجازه دسترسی به میکروفون و تشخیص صدا لازم است");
+      return;
+    }
+    button.disabled = true;
+    button.textContent = "🎙 در حال شنیدن…";
+    try {
+      const result = await SpeechRecognition.start({
+        language: "fa-IR",
+        maxResults: 3,
+        partialResults: false,
+        popup: true,
+        prompt: "موجودی، قیمت خرید، قیمت فروش و حداقل موجودی کالا را بگویید",
+      });
+      const transcript = result.matches?.[0]?.trim() || "";
+      if (!transcript) throw new Error("اطلاعات صوتی کالا تشخیص داده نشد");
+      await onDraft(parseVoiceProduct(transcript));
+      speakSaiSai("اطلاعات صوتی کالا اضافه شد. قبل از ثبت بررسی کنید.");
+    } catch (error) {
+      if (!/cancel|abort/i.test(error instanceof Error ? error.name + error.message : String(error))) {
+        notify(error instanceof Error ? error.message : "تشخیص صدا ناموفق بود");
+      }
+    } finally {
+      button.disabled = false;
+      button.textContent = "🎙 تکمیل با صدا";
+    }
+  });
+}
+
 export function bindVoiceProductAssistant(onConfirm: (draft: VoiceProductDraft) => Promise<void>, notify: (message: string) => void, onConfirmMany?: (drafts: VoiceProductDraft[]) => Promise<void>): void {
   const button = document.querySelector<HTMLButtonElement>("#voice-product");
   if (!button) return;
