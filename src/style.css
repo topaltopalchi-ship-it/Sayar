@@ -75,14 +75,40 @@ body{background:radial-gradient(circle at 12% 0,#223657 0,#10182a 34%,#090e1b 78
 .report-list .muted{color:#aab8cc}
 
 /* Final report controls */
-.report-range button{color:#ffffff !important;-webkit-text-fill-color:#ffffff !important;background:#2b4266 !important;border:1px solid #5575a3 !important;border-color:#5575a3 !important;text-shadow:none !important;opacity:1 !important}
-.report-range button:hover,.report-range button:focus,.report-range button:active{color:#ffffff !important;-webkit-text-fill-color:#ffffff !important;background:#365784 !important;opacity:1 !important}
-.report-range button::first-line{color:#ffffff !important}
-.report-date-input{display:flex;direction:ltr;align-items:stretch;width:100%;gap:6px}
-.report-date-input input{flex:1;min-width:0;text-align:center;direction:ltr;color:#111827 !important;-webkit-text-fill-color:#111827 !important;background:#fff !important;border-color:#cbd5e1 !important;font-size:17px;font-weight:700;letter-spacing:.5px}
-.report-slash{flex:0 0 44px;border:1px solid #385277;border-radius:13px;background:#162238;color:#fff !important;font-size:20px;font-weight:800;line-height:1}
-.report-slash:active,.report-slash:focus{background:#2563eb;color:#fff !important;outline:none}
-.report-custom-range .field span{color:#d5deed}
+.report-range button{
+  appearance:none;
+  -webkit-appearance:none;
+  background:#2b4266 !important;
+  border:2px solid #6b8fbd !important;
+  color:#ffffff !important;
+  -webkit-text-fill-color:#ffffff !important;
+  text-shadow:none !important;
+  opacity:1 !important;
+  font-family:Tahoma,Arial,sans-serif;
+  font-weight:800;
+  text-align:center;
+  min-height:52px;
+  border-radius:14px;
+}
+
+.report-range button span{
+  color:#ffffff !important;
+  -webkit-text-fill-color:#ffffff !important;
+}
+
+.report-range button:hover,
+.report-range button:focus,
+.report-range button:active{
+  background:#3b5f8f !important;
+  border-color:#8eb1df !important;
+  color:#ffffff !important;
+  -webkit-text-fill-color:#ffffff !important;
+  outline:none;
+}
+
+
+
+
 
 /* Sayar brand logo */
 .brand-block{display:flex;align-items:center;gap:10px;min-width:0}.brand-logo{width:52px;height:52px;flex:0 0 52px;border-radius:15px;display:block;object-fit:cover;box-shadow:0 8px 22px #02061755;border:1px solid #2f4f86}.brand-block h1{white-space:nowrap}
