@@ -136,6 +136,59 @@ async function bindPriceRecommendationModal(product: Product): Promise<void> {
   select.addEventListener("change",refresh); m.querySelector("#price-recommendation-close")?.addEventListener("click",()=>m.remove()); m.querySelector("#price-recommendation-close-2")?.addEventListener("click",()=>m.remove()); refresh();
 }
 
+
+function sellerHelperModal(productsForHelp: Product[], partiesForHelp: Party[], transactionsForHelp: Transaction[], insightsForHelp: BusinessInsight[]): string {
+  const settings = getMarketSettings();
+  const activeProducts = productsForHelp.filter(p => p.active !== false);
+  const productOptions = activeProducts.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
+  const customerOptions = partiesForHelp.filter(p => p.type === "customer" || p.type === "both").map(p => {
+    const tier = p.tierLocked && p.customerTier ? p.customerTier : getCustomerTier(p.id, transactionsForHelp);
+    return `<option value="${p.id}">${p.name} · ${tierLabel(tier)}</option>`;
+  }).join("");
+  const firstProduct = activeProducts[0];
+  const firstCustomer = partiesForHelp.find(p => p.type === "customer" || p.type === "both");
+  const insightHtml = insightsForHelp.slice(0, 4).map(x =>
+    `<div class="transaction-row"><div class="transaction-icon">${x.tone === "danger" ? "!" : x.tone === "warning" ? "⚠" : x.tone === "success" ? "↑" : "💡"}</div><div class="transaction-main"><strong>${x.title}</strong><small>${x.text}</small></div></div>`
+  ).join("");
+  const rec = firstProduct ? recommendPrice(firstProduct, firstCustomer ? getCustomerTier(firstCustomer.id, transactionsForHelp) : "regular", settings) : null;
+  return `<div class="modal-backdrop" id="seller-helper-modal"><section class="modal" role="dialog" aria-modal="true">
+    <button class="modal-close" id="seller-helper-close">×</button>
+    <span class="eyebrow">دستیار فروشنده</span><h2>قبل از قیمت دادن، اینجا را ببین</h2>
+    <p class="muted">سای‌سای بر اساس قیمت جایگزینی، سود هدف، سطح مشتری و کف امن فروش به شما کمک می‌کند تخفیف بیش از حد ندهید.</p>
+    <label class="field"><span>کالا</span><select id="seller-help-product">${productOptions || '<option value="">هنوز کالایی ثبت نشده</option>'}</select></label>
+    <label class="field"><span>مشتری</span><select id="seller-help-party"><option value="">مشتری عادی</option>${customerOptions}</select></label>
+    <div class="stats-grid" id="seller-help-stats">
+      ${rec ? stat("قیمت پیشنهادی", rial(rec.recommendedPrice), "primary") + stat("کف امن فروش", rial(rec.floorPrice), "danger") + stat("حداکثر تخفیف", rial(rec.maxDiscountAmount), "warning") : '<div class="empty-inline"><p>برای دریافت پیشنهاد، ابتدا کالا ثبت کنید.</p></div>'}
+    </div>
+    <div class="panel" id="seller-help-message">${rec && firstProduct ? `برای «${firstProduct.name}» فعلاً تا ${rec.maxDiscountPercent}% تخفیف قابل پیشنهاد است؛ کمتر از ${rial(rec.floorPrice)} نفروش.` : "بعد از ثبت کالا، پیشنهاد قیمت و سقف تخفیف نمایش داده می‌شود."}</div>
+    <div class="panel"><div class="section-head"><h3>نکته‌های امروز</h3><span class="muted">تصمیم‌های مهم</span></div>${insightHtml || '<div class="empty-inline"><p>فعلاً نکته مهمی پیدا نشده است.</p></div>'}</div>
+    <button class="primary-button wide" id="seller-helper-close-2">بستن</button>
+  </section></div>`;
+}
+
+function bindSellerHelperModal(productsForHelp: Product[], partiesForHelp: Party[], transactionsForHelp: Transaction[]): void {
+  const modal = document.querySelector<HTMLDivElement>("#seller-helper-modal");
+  if (!modal) return;
+  const productSelect = modal.querySelector<HTMLSelectElement>("#seller-help-product");
+  const partySelect = modal.querySelector<HTMLSelectElement>("#seller-help-party");
+  const stats = modal.querySelector<HTMLElement>("#seller-help-stats");
+  const message = modal.querySelector<HTMLElement>("#seller-help-message");
+  const refresh = () => {
+    const product = productsForHelp.find(p => p.id === productSelect?.value);
+    const party = partiesForHelp.find(p => p.id === partySelect?.value);
+    if (!product || !stats || !message) return;
+    const tier = party ? getCustomerTier(party.id, transactionsForHelp) : "regular";
+    const rec = recommendPrice(product, tier);
+    stats.innerHTML = stat("قیمت پیشنهادی", rial(rec.recommendedPrice), "primary") + stat("کف امن فروش", rial(rec.floorPrice), "danger") + stat("حداکثر تخفیف", rial(rec.maxDiscountAmount), "warning");
+    message.textContent = `${party?.name || "مشتری عادی"} · سطح ${tierLabel(tier)} · تا ${rec.maxDiscountPercent}% تخفیف پیشنهاد کن؛ کمتر از ${rial(rec.floorPrice)} نفروش.`;
+  };
+  productSelect?.addEventListener("change", refresh);
+  partySelect?.addEventListener("change", refresh);
+  modal.querySelector("#seller-helper-close")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#seller-helper-close-2")?.addEventListener("click", () => modal.remove());
+  refresh();
+}
+
 function uiModeModal(): string {
   const professional = isProfessionalMode();
   return `<div class="modal-backdrop" id="ui-mode-modal"><section class="modal ui-mode-modal"><button class="modal-close" id="ui-mode-close">×</button><span class="eyebrow">شخصی‌سازی سای‌سای</span><h2>حالت کاربری</h2><p class="muted">اگر حسابدار نیستید، حالت ساده منوها و گزینه‌های ضروری را خلوت نگه می‌دارد.</p><label class="professional-toggle"><input id="professional-mode" type="checkbox" ${professional ? "checked" : ""}><span><b>نسخه حرفه‌ای</b><small>گزارش‌های پیشرفته، تنظیمات بیشتر و ابزارهای مدیریتی نمایش داده شوند.</small></span></label><button class="secondary-button wide" id="subscription-settings">مدیریت اشتراک</button><div class="mode-hint">${professional ? "حالت حرفه‌ای فعال است." : "حالت ساده برای استفاده روزمره فعال است."}</div><button class="primary-button wide" id="ui-mode-save">ذخیره و اعمال</button></section></div>`;
@@ -1570,6 +1623,14 @@ return receiptCommand ? ("دریافت " + rial(commandAmount) + " از " + comm
   bindReportControls();
 
   if (activeTab === "orders") bindOrderActions();
+  document.querySelector("#seller-helper")?.addEventListener("click", async () => {
+    try {
+      const [helperProducts, helperParties, helperTransactions, helperExpenses] = await Promise.all([listProducts(), listParties(), listTransactions(), listExpenses()]);
+      const helperInsights = await buildBusinessInsights(helperProducts, helperParties, helperTransactions, helperExpenses);
+      document.body.insertAdjacentHTML("beforeend", sellerHelperModal(helperProducts, helperParties, helperTransactions, helperInsights));
+      bindSellerHelperModal(helperProducts, helperParties, helperTransactions);
+    } catch (e) { showToast(e instanceof Error ? e.message : "دستیار فروشنده در دسترس نیست"); }
+  });
   document.querySelector("#new-sale")?.addEventListener("click", () => void openSaleModal());
   document.querySelectorAll<HTMLElement>("[data-sale-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.saleEdit); if(t) await openSaleModal(t); }));
   document.querySelectorAll<HTMLElement>("[data-sale-delete]").forEach(b => b.addEventListener("click", async () => { const id=b.dataset.saleDelete||""; if(!id||!confirm("این فاکتور فروش حذف شود؟")) return; try { await deleteTransaction(id); showToast("فاکتور حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف فاکتور ناموفق بود"); } }));
