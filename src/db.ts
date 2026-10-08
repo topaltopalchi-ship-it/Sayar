@@ -414,29 +414,45 @@ export async function getDashboard(): Promise<Dashboard> {
 }
 
 export async function getStock(productId: string, excludeTransactionId?: string): Promise<number> {
-  // Purchase/sale quantities come from the transaction ledger, which is the
-  // source of truth. Only manual opening/adjustment movements are read from
-  // the movements store. This prevents a missing or stale movement row from
-  // making inventory appear as zero.
-  const [movements, transactions] = await Promise.all([
-    getAll<StockMovement>("movements"),
-    listTransactions(),
-  ]);
+  // Inventory is calculated from the stock ledger. Before reading it, repair
+  // any legacy/missing purchase/sale movements from the transaction ledger.
+  await repairDataIntegrity();
 
-  const adjustmentStock = movements
+  const movements = await listMovements();
+  const transactions = await listTransactions();
+  const excluded = excludeTransactionId ? transactions.find(t => t.id === excludeTransactionId) : undefined;
+
+  let stock = movements
     .filter(m => m.productId === productId && m.type === "adjustment")
-    .reduce((sum, movement) => sum + Number(movement.quantity || 0), 0);
+    .reduce((sum, m) => sum + Number(m.quantity || 0), 0);
 
-  const transactionStock = transactions
-    .filter(t => t.id !== excludeTransactionId && (t.type === "purchase" || t.type === "sale"))
-    .reduce((sum, transaction) => {
-      const quantity = transaction.lines
-        .filter(line => line.productId === productId)
-        .reduce((lineSum, line) => lineSum + Number(line.quantity || 0), 0);
-      return sum + (transaction.type === "purchase" ? quantity : -quantity);
-    }, 0);
+  // Some old installations may still have transactions without movements.
+  // Add those only when their reference movement is actually absent.
+  const movementRefs = new Set(
+    movements
+      .filter(m => m.productId === productId && (m.type === "purchase" || m.type === "sale"))
+      .map(m => m.referenceId)
+      .filter(Boolean)
+  );
 
-  return adjustmentStock + transactionStock;
+  for (const t of transactions) {
+    if (t.id === excludeTransactionId || (t.type !== "purchase" && t.type !== "sale")) continue;
+    if (movementRefs.has(t.id)) continue;
+    stock += t.lines
+      .filter(line => line.productId === productId)
+      .reduce((sum, line) => sum + (t.type === "purchase" ? Number(line.quantity || 0) : -Number(line.quantity || 0)), 0);
+  }
+
+  // If an excluded sale/purchase had a movement, subtract its effect from the
+  // ledger calculation so edit validation sees the pre-edit stock.
+  if (excluded && (excluded.type === "purchase" || excluded.type === "sale")) {
+    const effect = excluded.lines
+      .filter(line => line.productId === productId)
+      .reduce((sum, line) => sum + (excluded.type === "purchase" ? Number(line.quantity || 0) : -Number(line.quantity || 0)), 0);
+    stock -= effect;
+  }
+
+  return Math.max(0, stock);
 }
 
 export interface PartyBalance {
