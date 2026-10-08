@@ -108,6 +108,43 @@ function showToast(message: string): void {
   toast.classList.add("show");
   window.setTimeout(() => toast.classList.remove("show"), 2400);
 }
+const LOW_STOCK_ALERT_KEY = "sayar-low-stock-alerted";
+
+async function getLowStockItems(): Promise<Array<{product: Product; stock: number}>> {
+  const result: Array<{product: Product; stock: number}> = [];
+  for (const product of await listProducts()) {
+    const stock = await getStock(product.id);
+    if (product.active && product.lowStock > 0 && stock <= product.lowStock) result.push({ product, stock });
+  }
+  return result;
+}
+
+async function checkLowStockAlerts(): Promise<void> {
+  const low = await getLowStockItems();
+  const ids = new Set(low.map(x => x.product.id));
+  let alerted: string[] = [];
+  try { alerted = JSON.parse(localStorage.getItem(LOW_STOCK_ALERT_KEY) || "[]"); } catch {}
+  const old = new Set(alerted);
+  const fresh = low.filter(x => !old.has(x.product.id));
+  fresh.forEach(x => old.add(x.product.id));
+  [...old].forEach(id => { if (!ids.has(id)) old.delete(id); });
+  localStorage.setItem(LOW_STOCK_ALERT_KEY, JSON.stringify([...old]));
+  if (!fresh.length) return;
+  showToast("⚠️ " + fresh.map(x => x.product.name).join("، ") + " نیاز به تأمین دارد");
+  if ("speechSynthesis" in window) {
+    const u = new SpeechSynthesisUtterance("هشدار موجودی. " + fresh.map(x => x.product.name + " به " + x.stock + " " + x.product.unit + " رسیده").join("، ") + ". نیاز به تأمین دارد.");
+    u.lang = "fa-IR"; u.rate = 0.9; window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
+  }
+  try {
+    const p = await LocalNotifications.checkPermissions();
+    if (p.display !== "granted") await LocalNotifications.requestPermissions();
+    await LocalNotifications.schedule({ notifications: fresh.map((x, i) => ({
+      id: 7100 + i, title: "⚠️ هشدار تأمین موجودی", body: x.product.name + ": " + x.stock + " " + x.product.unit + " باقی مانده؛ نیاز به تأمین دارد.",
+      schedule: { at: new Date(Date.now() + 1000) }
+    })) });
+  } catch {}
+}
+
 
 function layout(content: string, subscription: Subscription): void {
   app.innerHTML = `
@@ -1157,6 +1194,7 @@ function bindReportControls(): void {
 }
 
 async function render(): Promise<void> {
+  void checkLowStockAlerts();
   const subscription = await getSubscription().catch(() => ({ status: "none", plan: "none", expiresAt: null } as Subscription));
   // Bind global navigation/actions before the subscription gate so buttons always have a click handler.
   await bindActions();
