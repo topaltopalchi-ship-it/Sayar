@@ -700,7 +700,7 @@ async function applyReportRange(): Promise<void> {
   const from = jalaliToGregorianDate(fromValue);
   const to = jalaliToGregorianDate(toValue);
   if (!from || !to) {
-    showToast("تاریخ واردشده معتبر نیست؛ نمونه صحیح: ۱۴۰۵۰۷۱۶");
+    showToast("تاریخ واردشده معتبر نیست؛ نمونه صحیح: ۱۴۰۵/۰۷/۱۶");
     return;
   }
   if (from.getTime() > to.getTime()) {
