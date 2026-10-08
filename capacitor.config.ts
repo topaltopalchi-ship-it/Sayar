@@ -5,6 +5,11 @@ const config: CapacitorConfig = {
   appName: "سای‌سای",
   webDir: "dist",
   bundledWebRuntime: false,
+  plugins: {
+    App: {
+      disableBackButtonHandler: true,
+    },
+  },
   server: {
     androidScheme: "https"
   }
