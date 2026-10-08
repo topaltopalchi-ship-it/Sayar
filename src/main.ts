@@ -1599,6 +1599,10 @@ async function render(): Promise<void> {
 
   const q = question.replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/ة/g, "ه").replace(/[أإ]/g, "ا").replace(/[؟?!]+/g, "").replace(/\s+/g, " ").trim();
     const compact = q.replace(/\s+/g, "");
+  if (/^(?:سای‌?سای[، ]*)?(?:ماشین حساب|ماشین‌حساب|حسابگر)/.test(q)) {
+    window.dispatchEvent(new CustomEvent("sayar-open-calculator"));
+    return "ماشین حساب صوتی را باز کردم. حالا عملیات را بگویید.";
+  }
   const [dashboard, transactions, products, parties, balances] = await Promise.all([getDashboard(), listTransactions(), listProducts(), listParties(), getPartyBalances()]);
 const commandAmountMatch = q.match(/(?:دریافت|وصول|گرفتم|پرداخت|پرداختم|دادم)[^۰-۹٠-٩\d]*(?:از|به|برای)?[^۰-۹٠-٩\d]*(?:[۰-۹٠-٩\d][۰-۹٠-٩\d٬,\.]*\s*(?:هزار|هزارتا|میلیون|میلیونی|میلیارد|میلیاردی)?|(?:یک|دو|سه|چهار|پنج|شش|هفت|هشت|نه|ده|بیست)\s*(?:هزار|هزارتا|میلیون|میلیونی|میلیارد|میلیاردی)?)/);
   const commandAmount = commandAmountMatch ? parseVoiceMoney(commandAmountMatch[0]) : 0;
