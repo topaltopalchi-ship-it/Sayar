@@ -20,6 +20,16 @@ const navItems: Array<[Tab, string, string]> = [
   ["inventory", "موجودی", "▤"], ["people", "اشخاص", "♙"], ["reports", "گزارش‌ها", "◫"], ["more", "خزانه", "▣"], ["checks", "چک‌ها", "✓"],
 ];
 const money = new Intl.NumberFormat("fa-IR");
+
+function numericValue(value: string | number | undefined | null): number {
+  const normalized = String(value ?? "")
+    .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+    .replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+    .replace(/[٬,]/g, "")
+    .trim();
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : 0;
+}
 const dateTime = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
   year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit"
 });
@@ -286,9 +296,9 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
     try {
       const p = products.find(x => x.id === product.value); const qty = Number(quantity.value);
       if (!p || qty <= 0) throw new Error("کالا و مقدار فروش را بررسی کنید");
-      const disc = Math.max(0, Number(discount.value) || 0);
+      const disc = Math.max(0, numericValue(discount.value));
       const amount = Math.max(0, qty * p.salePrice - disc);
-      const paidValue = Math.min(amount, Math.max(0, Number(paid.value) || 0));
+      const paidValue = Math.min(amount, Math.max(0, numericValue(paid.value)));
       const line: TransactionLine = { productId: p.id, quantity: qty, unitPrice: p.salePrice, discount: disc };
       const savedSale = existing
         ? await updateTransaction(existing.id, { date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue })
@@ -337,7 +347,7 @@ function bindAdjustmentModal(): void {
   modal.querySelector("#adjust-submit")?.addEventListener("click", async () => {
     try {
       const productId = modal.querySelector<HTMLSelectElement>("#adjust-product")!.value;
-      const quantity = Number(modal.querySelector<HTMLInputElement>("#adjust-qty")!.value);
+      const quantity = numericValue(modal.querySelector<HTMLInputElement>("#adjust-qty")!.value);
       await addStockAdjustment({ date: Date.now(), productId, quantity, description: modal.querySelector<HTMLInputElement>("#adjust-desc")!.value.trim() || "اصلاح موجودی" });
       modal.remove(); showToast("اصلاح موجودی ثبت شد"); await render();
     } catch (e) { showToast(e instanceof Error ? e.message : "اصلاح موجودی ناموفق بود"); }
@@ -377,7 +387,7 @@ function bindProductModal(): void {
         await updateProduct({ ...existing, ...values });
       } else {
         const created = await addProduct(values);
-        const initialStock = Math.max(0, Number(modal.querySelector<HTMLInputElement>("#p-initial-stock")?.value) || 0);
+        const initialStock = Math.max(0, numericValue(modal.querySelector<HTMLInputElement>("#p-initial-stock")?.value));
         if (initialStock > 0) {
           await addStockAdjustment({ date: Date.now(), productId: created.id, quantity: initialStock, description: "موجودی اولیه کالا" });
         }
@@ -630,7 +640,7 @@ async function applyReportRange(): Promise<void> {
   const from = jalaliToGregorianDate(fromValue);
   const to = jalaliToGregorianDate(toValue);
   if (!from || !to) {
-    showToast("تاریخ را کامل و به شکل ۱۴۰۵/۰۷/۱۶ وارد کنید");
+    showToast("تاریخ واردشده معتبر نیست؛ نمونه صحیح: ۱۴۰۵/۰۷/۱۶");
     return;
   }
   if (from.getTime() > to.getTime()) {
