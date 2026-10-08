@@ -400,14 +400,15 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
   modal.querySelector("#sale-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#sale-submit")?.addEventListener("click", async () => {
     try {
-      const p = products.find(x => x.id === product.value); const qty = numericValue(quantity.value);
+      const p = products.find(x => x.id === product.value); const qty = numericValue(quantity.value); const customerName = modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value.trim();
+      if (!customerName) throw new Error("نام مشتری الزامی است");
       if (!p || qty <= 0) throw new Error("کالا و مقدار فروش را بررسی کنید");
       const disc = parseMoneyInput(discount.value);
       const amount = Math.max(0, qty * p.salePrice - disc);
       const paidValue = Math.min(amount, parseMoneyInput(paid.value));
       const line: TransactionLine = { productId: p.id, quantity: qty, unitPrice: p.salePrice, discount: disc };
       const savedSale = existing
-        ? await updateTransaction(existing.id, { date: Date.now(), partyId: undefined, customerName: modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value.trim() || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue })
+        ? await updateTransaction(existing.id, { date: Date.now(), partyId: undefined, customerName, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue })
         : await addSale({ date: Date.now(), partyId: undefined, customerName: modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value.trim() || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
       modal.remove();
 
