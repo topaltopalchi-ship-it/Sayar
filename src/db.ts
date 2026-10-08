@@ -2,7 +2,7 @@ import type { Account, AccountEntry, Check, Dashboard, Expense, Party, Product, 
 import { lineTotal, newId, transactionTotal } from "./domain";
 
 const DB_NAME = "sayar-db";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 const stores = ["products", "parties", "transactions", "movements", "expenses", "accounts", "accountEntries", "checks"] as const;
 type StoreName = typeof stores[number];
@@ -64,6 +64,68 @@ export async function deleteAccount(accountId: string): Promise<void> {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+let integrityRepairDone = false;
+
+export async function repairDataIntegrity(): Promise<void> {
+  if (integrityRepairDone) return;
+  const db = await openDb();
+  const [transactions, movements] = await Promise.all([listTransactions(), listMovements()]);
+  const inventoryTransactions = transactions.filter(t => t.type === "sale" || t.type === "purchase");
+  const expectedByReference = new Map<string, StockMovement[]>();
+
+  for (const t of inventoryTransactions) {
+    const rows: StockMovement[] = [];
+    for (const line of t.lines) {
+      rows.push({
+        id: newId(),
+        productId: line.productId,
+        date: t.date,
+        type: t.type,
+        quantity: t.type === "sale" ? -line.quantity : line.quantity,
+        referenceId: t.id,
+      });
+    }
+    expectedByReference.set(t.id, rows);
+  }
+
+  const needsRepair = inventoryTransactions.some(t => {
+    const existing = movements.filter(m => m.referenceId === t.id && (m.type === "sale" || m.type === "purchase"));
+    const expected = expectedByReference.get(t.id) ?? [];
+    if (existing.length !== expected.length) return true;
+    return expected.some(e => !existing.some(m =>
+      m.productId === e.productId &&
+      m.quantity === e.quantity &&
+      m.type === e.type
+    ));
+  });
+
+  if (!needsRepair) {
+    integrityRepairDone = true;
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(["transactions", "movements"], "readwrite");
+    const store = tx.objectStore("movements");
+
+    for (const m of movements) {
+      if (m.referenceId && expectedByReference.has(m.referenceId) && (m.type === "sale" || m.type === "purchase")) {
+        store.delete(m.id);
+      }
+    }
+
+    for (const rows of expectedByReference.values()) {
+      for (const row of rows) store.put(row);
+    }
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error("اصلاح گردش موجودی ناموفق بود"));
+    tx.onabort = () => reject(tx.error ?? new Error("اصلاح گردش موجودی ناموفق بود"));
+  });
+
+  integrityRepairDone = true;
 }
 
 export async function listProducts(): Promise<Product[]> { return getAll<Product>("products"); }
