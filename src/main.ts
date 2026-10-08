@@ -19,7 +19,7 @@ import { accountModal, accountLedgerModal, accountsView, bindAccountLedger, bind
 import { getAccountBalances, listAccounts } from "./db";
 import { checksView, checkModal, bindCheckModal, bindCheckStatuses, bindCheckActions } from "./checks-ui";
 import { jalaliToGregorianDate, todayJalaliInput, formatJalaliInput, toPersianDigits } from "./calendar";
-import { bindVoiceAssistant, type VoiceSaleDraft } from "./voice-assistant";
+import { bindVoiceAssistant, type VoiceSaleDraft, type VoiceSaleItem } from "./voice-assistant";
 
 type Tab = "dashboard" | "sales" | "purchases" | "orders" | "inventory" | "people" | "reports" | "more" | "checks";
 
@@ -1200,6 +1200,27 @@ async function render(): Promise<void> {
     if (unitPrice && draft.unitPrice > 0) unitPrice.value = String(draft.unitPrice);
     if (paid) paid.value = draft.paid ? String(draft.paid) : "";
     productSelect?.dispatchEvent(new Event("change", { bubbles: true }));
+    if (draft.items?.length) {
+      const addLine = modal.querySelector<HTMLButtonElement>("#sale-add-line");
+      const setLine = (row: HTMLElement, item: VoiceSaleItem) => {
+        const select = row.querySelector<HTMLSelectElement>(".sale-line-product");
+        const q = row.querySelector<HTMLInputElement>(".sale-line-quantity");
+        const price = row.querySelector<HTMLInputElement>(".sale-line-price");
+        const hint = item.productHint.trim().toLowerCase();
+        const match = available.find(p => hint && (p.name.toLowerCase().includes(hint) || hint.includes(p.name.toLowerCase())));
+        if (match && select) select.value = match.id;
+        if (q) q.value = String(item.quantity || 1);
+        if (price && item.unitPrice > 0) price.value = String(item.unitPrice);
+      };
+      const rows = () => Array.from(modal.querySelectorAll<HTMLElement>("[data-sale-line]"));
+      setLine(rows()[0], draft.items[0]);
+      for (let i = 1; i < draft.items.length; i++) {
+        addLine?.click();
+        const current = rows().at(-1);
+        if (current) setLine(current, draft.items[i]);
+      }
+      rows().forEach(row => row.dispatchEvent(new Event("input", { bubbles: true })));
+    }
     quantity?.dispatchEvent(new Event("input", { bubbles: true }));
     paid?.dispatchEvent(new Event("input", { bubbles: true }));
     if (!matched && draft.productHint) showToast(`کالای «${draft.productHint}» پیدا نشد؛ کالا را انتخاب کنید`);
