@@ -406,10 +406,8 @@ async function openInvoice(t: Transaction): Promise<void> {
   invoice.querySelector("#invoice-branding-settings")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", invoiceBrandingModal()); bindInvoiceBrandingModal(); });
 }
 
-function saleModal(existing?: Transaction): string {
-  const accountOptions = (window as typeof window & { __saiAccounts?: {id:string;name:string;type:string}[] }).__saiAccounts?.map(a => `<option value="${a.id}">${a.name}</option>`).join("") || "";
-  const initialLines = existing?.lines?.length ? existing.lines : [{ productId: products[0]?.id || "", quantity: 1, unitPrice: products[0]?.salePrice || 0, discount: 0 }];
-  const lineHtml = (line: TransactionLine, index: number) => `
+function saleLineHtml(line: TransactionLine, index: number): string {
+  return `
     <div class="sale-line" data-sale-line>
       <label class="field"><span>کالا</span><select class="sale-line-product" data-index="${index}">${products.map(p => `<option value="${p.id}" ${p.id === line.productId ? "selected" : ""}>${p.name} — ${rial(p.salePrice)} / ${p.unit}</option>`).join("")}</select></label>
       <div class="form-grid">
@@ -419,6 +417,11 @@ function saleModal(existing?: Transaction): string {
       <label class="field"><span>تخفیف (${getCurrencyLabel()})</span><input class="sale-line-discount" type="text" inputmode="numeric" value="${moneyInputValue(line.discount || 0)}"></label>
       ${index > 0 ? '<button type="button" class="secondary-button wide sale-remove-line">حذف این کالا</button>' : ""}
     </div>`;
+}
+
+function saleModal(existing?: Transaction): string {
+  const accountOptions = (window as typeof window & { __saiAccounts?: {id:string;name:string;type:string}[] }).__saiAccounts?.map(a => `<option value="${a.id}">${a.name}</option>`).join("") || "";
+  const initialLines = existing?.lines?.length ? existing.lines : [{ productId: products[0]?.id || "", quantity: 1, unitPrice: products[0]?.salePrice || 0, discount: 0 }];
   return `
     <div class="modal-backdrop" id="sale-modal"><section class="modal" role="dialog" aria-modal="true">
       <button class="modal-close" id="sale-close">×</button><span class="eyebrow">فاکتور فروش</span><h2>${existing ? "ویرایش فروش" : "ثبت فروش"}</h2>
@@ -456,7 +459,7 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
   lines.addEventListener("input", update);
   lines.addEventListener("change", update);
   modal.querySelector("#sale-add-line")?.addEventListener("click", () => {
-    lines.insertAdjacentHTML("beforeend", lineHtml({ productId: products[0].id, quantity: 1, unitPrice: products[0].salePrice, discount: 0 }, lines.children.length));
+    lines.insertAdjacentHTML("beforeend", saleLineHtml({ productId: products[0].id, quantity: 1, unitPrice: products[0].salePrice, discount: 0 }, lines.children.length));
     update();
   });
   lines.addEventListener("click", event => {
