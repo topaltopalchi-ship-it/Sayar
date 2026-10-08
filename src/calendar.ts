@@ -1,13 +1,8 @@
-export function jalaliToGregorianDate(value: string): Date | null {
-  const normalized = value.trim().replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
-  const match = normalized.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
-  if (!match) return null;
-  const jy = Number(match[1]), jm = Number(match[2]), jd = Number(match[3]);
-  if (jm < 1 || jm > 12 || jd < 1 || jd > (jm <= 6 ? 31 : jm <= 11 ? 30 : 30)) return null;
-
-  let j = jy + 1597;
-  let days = -355668 + 365 * j + Math.floor(j / 33) * 8 + Math.floor(((j % 33) + 3) / 4) + jd
+function jalaliToGregorianParts(jy: number, jm: number, jd: number): [number, number, number] {
+  const y = jy + 1595;
+  let days = -355668 + 365 * y + Math.floor(y / 33) * 8 + Math.floor(((y % 33) + 3) / 4) + jd
     + (jm < 7 ? (jm - 1) * 31 : (jm - 7) * 30 + 186);
+
   let gy = 400 * Math.floor(days / 146097);
   days %= 146097;
   if (days > 36524) {
@@ -21,6 +16,7 @@ export function jalaliToGregorianDate(value: string): Date | null {
     gy += Math.floor((days - 1) / 365);
     days = (days - 1) % 365;
   }
+
   const gd = days + 1;
   const leap = (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0;
   const monthDays = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -29,7 +25,34 @@ export function jalaliToGregorianDate(value: string): Date | null {
   while (gm < 12 && remaining > monthDays[gm]) {
     remaining -= monthDays[gm++];
   }
-  return new Date(gy, gm, remaining);
+  return [gy, gm + 1, remaining];
+}
+
+export function jalaliToGregorianDate(value: string): Date | null {
+  const normalized = value.trim().replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
+  const match = normalized.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
+  if (!match) return null;
+
+  const jy = Number(match[1]);
+  const jm = Number(match[2]);
+  const jd = Number(match[3]);
+
+  if (jy < 1 || jm < 1 || jm > 12 || jd < 1) return null;
+  const maxDay = jm <= 6 ? 31 : jm <= 11 ? 30 : 30;
+  if (jd > maxDay) return null;
+
+  // Esfand 30 only exists in a leap Jalali year. We determine it by
+  // comparing the Gregorian start of this Jalali year with the next one.
+  if (jm === 12 && jd === 30) {
+    const [g1y, g1m, g1d] = jalaliToGregorianParts(jy, 1, 1);
+    const [g2y, g2m, g2d] = jalaliToGregorianParts(jy + 1, 1, 1);
+    const start = Date.UTC(g1y, g1m - 1, g1d);
+    const next = Date.UTC(g2y, g2m - 1, g2d);
+    if (Math.round((next - start) / 86400000) !== 366) return null;
+  }
+
+  const [gy, gm, gd] = jalaliToGregorianParts(jy, jm, jd);
+  return new Date(gy, gm - 1, gd);
 }
 
 export function todayJalaliInput(): string {
