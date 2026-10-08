@@ -408,7 +408,7 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
       const line: TransactionLine = { productId: p.id, quantity: qty, unitPrice: p.salePrice, discount: disc };
       const savedSale = existing
         ? await updateTransaction(existing.id, { date: Date.now(), partyId: undefined, customerName: modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value.trim() || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue })
-        : await addSale({ date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
+        : await addSale({ date: Date.now(), partyId: undefined, customerName: modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value.trim() || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
       modal.remove();
 
       // Mount the invoice immediately after saving so the render cycle cannot hide it.
