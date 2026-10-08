@@ -1273,13 +1273,29 @@ async function render(): Promise<void> {
   }, showToast);
 
   bindVoiceQuestionAssistant(async (question: string) => {
-    const q = question.replace(/ي/g, "ی").replace(/ك/g, "ک");
+    const q = question.replace(/ي/g, "ی").replace(/ك/g, "ک").replace(/ة/g, "ه").trim();
     const d = await getDashboard();
-    if (/فروش|فروخت|درآمد/.test(q) && /امروز/.test(q)) return `امروز ${rial(d.salesToday)} فروش داشتی.`;
-    if (/دریافت|وصول/.test(q) && /امروز/.test(q)) return `امروز ${rial(d.receiptsToday)} دریافت داشتی.`;
-    if (/مطالبات|بدهکار/.test(q)) return `مجموع مطالبات فعلی ${rial(d.receivables)} است.`;
-    if (/موجودی|انبار|کم/.test(q)) return `${money.format(d.lowStock)} کالا به حد هشدار موجودی رسیده است.`;
-    return "فعلاً این سؤال را یاد نگرفته‌ام؛ سؤال‌های فروش امروز، دریافت امروز، مطالبات و موجودی را می‌توانم پاسخ بدهم.";
+    const transactions = await listTransactions();
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const monthSales = transactions.filter(t => t.type === "sale" && t.date >= monthStart).reduce((s, t) => s + t.amount, 0);
+    const monthReceipts = transactions.filter(t => t.type === "receipt" && t.date >= monthStart).reduce((s, t) => s + t.amount, 0);
+
+    if (/فروش|فروخت|درآمد|گردش/.test(q) && /امروز|امروزم|الان/.test(q))
+      return `امروز ${rial(d.salesToday)} فروش داشتی.`;
+    if (/فروش|فروخت|درآمد|گردش/.test(q) && /ماه|این ماه|ماه جاری/.test(q))
+      return `فروش این ماه تا امروز ${rial(monthSales)} بوده است.`;
+    if (/اوضاع فروش|وضع فروش|چطور فروختم|خوب فروختم|فروش خوب/.test(q))
+      return `تا امروز فروش این ماه ${rial(monthSales)} بوده و امروز ${rial(d.salesToday)} فروش داشتی.`;
+    if (/دریافت|وصول|پول گرفتم/.test(q) && /امروز|امروزم|الان/.test(q))
+      return `امروز ${rial(d.receiptsToday)} دریافت داشتی.`;
+    if (/دریافت|وصول/.test(q) && /ماه|این ماه|ماه جاری/.test(q))
+      return `دریافت این ماه ${rial(monthReceipts)} بوده است.`;
+    if (/مطالبات|بدهکار|طلب/.test(q))
+      return `مجموع مطالبات فعلی ${rial(d.receivables)} است.`;
+    if (/موجودی|انبار|کمبود|رو به اتمام/.test(q))
+      return `${d.lowStock.toLocaleString("fa-IR")} کالا به حد هشدار موجودی رسیده است.`;
+    return "می‌توانم درباره فروش امروز و این ماه، دریافت‌ها، مطالبات و موجودی انبار به شما جواب بدهم.";
   }, showToast);
 
   bindReportControls();
