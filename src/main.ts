@@ -240,7 +240,7 @@ async function dashboardView(subscription: Subscription): Promise<string> {
   const insights = await buildBusinessInsights(allProducts, allParties, tx, expenses);
   const brief = dailyBrief(insights);
   const insightHtml = insights.slice(0, 6).map((x: BusinessInsight) =>
-    '<div class="transaction-row"><div class="transaction-icon">' + (x.tone === "danger" ? "!" : x.tone === "warning" ? "⚠" : x.tone === "success" ? "↑" : "💡") + '</div><div class="transaction-main"><strong>' + x.title + '</strong><small>' + x.text + '</small></div>' + (x.action ? '<span class="muted">' + x.action + '</span>' : '') + '</div>'
+    '<div class="transaction-row"><div class="transaction-icon">' + (x.tone === "danger" ? "!" : x.tone === "warning" ? "⚠" : x.tone === "success" ? "↑" : "💡") + '</div><div class="transaction-main"><strong>' + x.title + '</strong><small>' + x.text + '</small></div>' + (x.action ? '<button type="button" class="secondary-button insight-action" data-insight-id="' + x.id + '">' + x.action + '</button>' : '') + '</div>'
   ).join("");
   const lowStockHtml = lowStock.length ? '<section class="panel low-stock-alert-panel"><div class="section-head"><div><h3>⚠️ کالاهای نیازمند تأمین</h3><span class="muted">موجودی به حد هشدار رسیده است</span></div><strong>' + money.format(lowStock.length) + ' کالا</strong></div>' +
     lowStock.map(x => '<div class="person-row"><div class="person-avatar">!</div><div><strong>' + x.product.name + '</strong><small>حد هشدار: ' + money.format(x.product.lowStock) + ' ' + x.product.unit + (x.product.supplierId ? ' · تأمین‌کننده: ' + (supplierParties.find(p => p.id === x.product.supplierId)?.name || 'ثبت نشده') : '') + '</small></div><b class="debt-amount">' + money.format(x.stock) + ' ' + x.product.unit + '</b><span class="account-actions"><button type="button" class="secondary-button supply-item" data-supply-product="' + x.product.id + '">تأمین کالا</button>' + ((supplierParties.find(p => p.id === x.product.supplierId)?.phone || "").trim() ? '<a class="secondary-button" href="tel:' + (supplierParties.find(p => p.id === x.product.supplierId)?.phone || "").trim() + '">📞 تماس</a>' : '') + '</span></div>').join("") + '</section>' : "";
@@ -1485,6 +1485,40 @@ return receiptCommand ? ("دریافت " + rial(commandAmount) + " از " + comm
       const modal = document.querySelector<HTMLElement>("#account-ledger-modal");
       if (modal) await bindAccountLedger(modal);
     } catch (e) { showToast(e instanceof Error ? e.message : "نمایش گردش حساب ناموفق بود"); }
+  }));
+  document.querySelectorAll<HTMLElement>("[data-insight-id]").forEach(button => button.addEventListener("click", async () => {
+    const id = button.dataset.insightId || "";
+    try {
+      if (id.startsWith("stock-") || id.startsWith("fast-")) {
+        const productId = id.replace(/^(stock|fast)-/, "");
+        products = await listProducts(); parties = await listParties();
+        openPurchaseModal(products, parties, rial, async m => { showToast(m); await render(); }, undefined, productId);
+      } else if (id.startsWith("dormant-") || id.startsWith("margin-")) {
+        const productId = id.replace(/^(dormant|margin)-/, "");
+        products = await listProducts(); parties = await listParties();
+        const product = products.find(p => p.id === productId);
+        if (product) { document.body.insertAdjacentHTML("beforeend", priceRecommendationModal(product)); await bindPriceRecommendationModal(product); }
+      } else if (id.startsWith("debt-")) {
+        await openSettlement("receipt");
+      } else if (id.startsWith("customer-")) {
+        activeTab = "people";
+        await render();
+      } else if (id === "forecast") {
+        activeTab = "purchases";
+        await render();
+      } else if (id === "sales-drop") {
+        activeTab = "reports";
+        await render();
+      } else if (id === "expense-ratio") {
+        activeTab = "reports";
+        await render();
+      } else if (id.startsWith("discount-")) {
+        activeTab = "sales";
+        await render();
+      }
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "اجرای پیشنهاد سای‌سای ناموفق بود");
+    }
   }));
   document.querySelector("#more-refresh")?.addEventListener("click", () => render());
   window.addEventListener("sai-sai-refresh", () => { void render(); });
