@@ -53,9 +53,9 @@ function parseVoiceSale(transcript: string): VoiceSaleDraft {
   const product = text.match(/(?:تا|عدد|عددِ|یک|دو|سه|چهار|پنج)\s+([^،,.]+?)(?=\s*(?:فروختم|فروخت|خریدم|خرید|به|هر|دونه|دانه|یکی|با|داد|پرداخت)|[،,.]|$)/i)?.[1]?.trim() || "";
   const quantityMatch = text.match(/(?:^|\s)([۰-۹٠-٩\d]+|یک|دو|سه|چهار|پنج|شش|هفت|هشت|نه|ده)\s*(?:تا|عدد|عددِ)/i);
   const quantity = quantityMatch ? firstNumber(quantityMatch[1]) : 1;
-  const priceMatch = text.match(/(?:هر\s*(?:کدوم|کدام|دونه|دانه)?\s*|قیمت(?:ش)?\s*|دونه‌ای\s*)([۰-۹٠-٩\d][۰-۹٠-٩\d٬,]*)/i);
+  const priceMatch = text.match(/(?:هر\s*(?:کدوم|کدام|دونه|دانه)?\s*|قیمت(?:ش)?\s*|دونه‌ای\s*)([۰-۹٠-٩\d][۰-۹٠-٩d٬,]*(?:\s*(?:هزار|میلیون|میلیونی|میلیارد|میلیاردی))?)/i);
   const unitPrice = priceMatch ? moneyNumber(priceMatch[1]) : 0;
-  const paidMatch = text.match(/(?:پرداخت(?:\s*کرد)?|داد|داده|واریز(?:\s*کرد)?)\s*(?:مبلغ\s*)?([۰-۹٠-٩\d][۰-۹٠-٩\d٬,]*)/i);
+  const paidMatch = text.match(/(?:پرداخت(?:\s*کرد)?|داد|داده|واریز(?:\s*کرد)?)\s*(?:مبلغ\s*)?([۰-۹٠-٩\d][۰-۹٠-٩d٬,]*(?:\s*(?:هزار|میلیون|میلیونی|میلیارد|میلیاردی))?)/i);
   const paid = paidMatch ? moneyNumber(paidMatch[1]) : 0;
   const items: VoiceSaleItem[] = [];
   for (const chunk of text.split(/،|,/).map(x => x.trim()).filter(Boolean)) {
