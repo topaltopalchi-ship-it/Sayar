@@ -83,7 +83,7 @@ function spokenMoney(text: string): number {
   const direct = moneyNumber(text);
   if (direct) return direct;
   const small: Record<string, number> = { صفر:0, یک:1, یکی:1, دو:2, سه:3, چهار:4, پنج:5, شش:6, هفت:7, هشت:8, نه:9, ده:10, یازده:11, دوازده:12, سیزده:13, چهارده:14, پانزده:15, شانزده:16, هفده:17, هجده:18, نوزده:19, بیست:20, سی:30, چهل:40, پنجاه:50, شصت:60, هفتاد:70, هشتاد:80, نود:90, صد:100, دویست:200, سیصد:300, چهارصد:400, پانصد:500, ششصد:600, هفتصد:700, هشتصد:800, نهصد:900 };
-  const words = text.replace(/،/g, " ").split(/\\s+/).filter(Boolean);
+  const words = text.replace(/،/g, " ").split(/\s+/).filter(Boolean);
   let total=0, current=0;
   for (const w of words) {
     if (small[w] !== undefined) current += small[w];
@@ -96,24 +96,24 @@ function spokenMoney(text: string): number {
 
 export function parseVoiceProduct(transcript: string): VoiceProductDraft {
   const text = transcript.trim();
-  const nameMatch = text.match(/(?:کالا(?:ی)?|جنس)\\s+(.+?)(?=\\s+(?:کد|شماره|موجودی|تعداد|قیمت|خرید|فروش|واحد|حداقل)|[،,.]|$)/i);
-  const name = (nameMatch?.[1] || text.split(/[،,.]/)[0] || "").replace(/^(یک|یه)\\s+/i, "").trim();
-  const sku = text.match(/(?:کد|شماره(?:\\s+کالا)?)\\s*([A-Za-z0-9۰-۹_-]+)/i)?.[1] || "";
-  const stockText = text.match(/(?:موجودی|تعداد)\\s*(?:اولیه)?\\s*(?:[=:]\\s*)?([^،,.]+?)(?=\\s+(?:عدد|تا|قیمت|کد|واحد|حداقل)|[،,.]|$)/i)?.[1] || "";
+  const nameMatch = text.match(/(?:کالا(?:ی)?|جنس)\s+(.+?)(?=\s+(?:کد|شماره|موجودی|تعداد|قیمت|خرید|فروش|واحد|حداقل)|[،,.]|$)/i);
+  const name = (nameMatch?.[1] || text.split(/[،,.]/)[0] || "").replace(/^(یک|یه)\s+/i, "").trim();
+  const sku = text.match(/(?:کد|شماره(?:\s+کالا)?)\s*([A-Za-z0-9۰-۹_-]+)/i)?.[1] || "";
+  const stockText = text.match(/(?:موجودی|تعداد)\s*(?:اولیه)?\s*(?:[=:]\s*)?([^،,.]+?)(?=\s+(?:عدد|تا|قیمت|کد|واحد|حداقل)|[،,.]|$)/i)?.[1] || "";
   const initialStock = firstNumber(stockText) || 0;
-  const buyText = text.match(/(?:قیمت\\s*خرید|خرید)\\s*(?:[=:]\\s*)?([^،,.]+?)(?=\\s+(?:قیمت\\s*فروش|فروش|موجودی|کد|واحد|حداقل)|[،,.]|$)/i)?.[1] || "";
-  const saleText = text.match(/(?:قیمت\\s*فروش|فروش)\\s*(?:[=:]\\s*)?([^،,.]+?)(?=\\s+(?:قیمت\\s*خرید|خرید|موجودی|کد|واحد|حداقل)|[،,.]|$)/i)?.[1] || "";
+  const buyText = text.match(/(?:قیمت\s*خرید|خرید)\s*(?:[=:]\s*)?([^،,.]+?)(?=\s+(?:قیمت\s*فروش|فروش|موجودی|کد|واحد|حداقل)|[،,.]|$)/i)?.[1] || "";
+  const saleText = text.match(/(?:قیمت\s*فروش|فروش)\s*(?:[=:]\s*)?([^،,.]+?)(?=\s+(?:قیمت\s*خرید|خرید|موجودی|کد|واحد|حداقل)|[،,.]|$)/i)?.[1] || "";
   const purchasePrice = spokenMoney(buyText);
   const salePrice = spokenMoney(saleText);
-  const unitText = text.match(/(?:واحد)\\s*(?:[=:]\\s*)?(عدد|کیلو(?:گرم)?|گرم|لیتر|متر|بسته)/i)?.[1] || "عدد";
+  const unitText = text.match(/(?:واحد)\s*(?:[=:]\s*)?(عدد|کیلو(?:گرم)?|گرم|لیتر|متر|بسته)/i)?.[1] || "عدد";
   const unit = unitText === "کیلو" || unitText === "کیلوگرم" ? "کیلوگرم" : unitText as VoiceProductDraft["unit"];
-  const lowText = text.match(/(?:حداقل\\s+موجودی|هشدار\\s+موجودی)\\s*(?:[=:]\\s*)?([^،,.]+?)(?=\\s+(?:عدد|تا)|[،,.]|$)/i)?.[1] || "";
+  const lowText = text.match(/(?:حداقل\s+موجودی|هشدار\s+موجودی)\s*(?:[=:]\s*)?([^،,.]+?)(?=\s+(?:عدد|تا)|[،,.]|$)/i)?.[1] || "";
   const lowStock = firstNumber(lowText) || 0;
   return { transcript:text, name, sku, unit, purchasePrice, salePrice, initialStock, lowStock };
 }
 
 export function parseVoiceProducts(transcript: string): VoiceProductDraft[] {
-  const chunks = transcript.split(/(?:بعدی|و همچنین|همچنین|؛|\\n)/).map(x => x.trim()).filter(Boolean);
+  const chunks = transcript.split(/(?:بعدی|و همچنین|همچنین|؛|\n)/).map(x => x.trim()).filter(Boolean);
   const drafts = chunks.map(parseVoiceProduct).filter(x => x.name || x.purchasePrice || x.salePrice || x.initialStock);
   return drafts.length ? drafts : [parseVoiceProduct(transcript)];
 }
@@ -131,8 +131,9 @@ export function bindVoiceProductAssistant(onConfirm: (draft: VoiceProductDraft) 
       const result=await SpeechRecognition.start({ language:"fa-IR", maxResults:3, partialResults:false, popup:true, prompt:"مشخصات کالا را به فارسی بگویید" });
       const transcript=result.matches?.[0]?.trim() || "";
       if (!transcript) throw new Error("مشخصات کالا تشخیص داده نشد");
-      const draft=parseVoiceProduct(transcript);
-      speakSaiSai("مشخصات کالا را شنیدم. قبل از ثبت بررسی کنید.");
+      const drafts=parseVoiceProducts(transcript);
+      const draft=drafts[0];
+      speakSaiSai(drafts.length > 1 ? (String(drafts.length) + " کالا را تشخیص دادم. قبل از ثبت بررسی کنید.") : "مشخصات کالا را شنیدم. قبل از ثبت بررسی کنید.");
       const modal=document.createElement("div"); modal.className="modal-backdrop"; modal.id="voice-product-modal";
       if (drafts.length > 1) {
         modal.innerHTML='<section class="modal" role="dialog" aria-modal="true"><button class="modal-close" id="voice-product-close">×</button><span class="eyebrow">ورود گروهی کالا</span><h2>بررسی کالاها</h2><p class="muted">همه کالاهای تشخیص‌داده‌شده را قبل از ثبت بررسی کنید.</p><div id="vp-many"></div><div class="form-actions"><button class="secondary-button" id="vp-cancel">لغو</button><button class="primary-button" id="vp-confirm">تأیید و ثبت همه</button></div></section>';
