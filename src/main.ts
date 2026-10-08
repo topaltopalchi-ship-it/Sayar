@@ -308,12 +308,12 @@ async function inventoryView(): Promise<string> {
     const stock = await getStock(p.id);
     return `<div class="product-row" data-product-id="${p.id}"><div><strong>${p.name}</strong><small>${p.sku || "بدون کد"} · ${p.unit}</small></div><div class="stock-number ${stock <= p.lowStock ? "low" : ""}">${money.format(stock)}<small>موجودی</small></div><b>${rial(p.salePrice)}</b><span class="account-actions"><button type="button" class="secondary-button product-edit" data-product-edit="${p.id}">ویرایش</button><button type="button" class="secondary-button product-delete" data-product-delete="${p.id}">حذف</button></span></div>`;
   }));
-  return pageHead("انبار", "موجودی کالا", "موجودی از روی گردش‌های ثبت‌شده محاسبه می‌شود.", `<button class="primary-button" id="new-product">＋ کالای جدید</button>`) +
+  return pageHead("انبار", "موجودی کالا", "موجودی واقعی از روی گردش انبار محاسبه می‌شود؛ «حداقل موجودی» فقط آستانه هشدار است.", `<div class="head-actions"><button class="secondary-button" id="new-adjustment">＋ اصلاح موجودی</button><button class="primary-button" id="new-product">＋ کالای جدید</button></div>`) +
     `<section class="panel">${rows.length ? rows.join("") : `<div class="empty-inline"><span>▤</span><p>هنوز کالایی ثبت نشده است.</p></div>`}</section>`;
 }
 
 function adjustmentModal(): string {
-  const options = products.map(p => `<option value="${p.id}">${p.name} · موجودی فعلی ${money.format(0)} ${p.unit}</option>`).join("");
+  const options = products.map(p => `<option value="${p.id}">${p.name} · ${p.unit}</option>`).join("");
   return `<div class="modal-backdrop" id="adjust-modal"><section class="modal"><button class="modal-close" id="adjust-close">×</button><span class="eyebrow">کنترل انبار</span><h2>اصلاح موجودی</h2>
     <label class="field"><span>کالا</span><select id="adjust-product">${options}</select></label>
     <label class="field"><span>مقدار تغییر</span><input id="adjust-qty" type="number" step="0.001" placeholder="مثبت برای افزایش، منفی برای کاهش"></label>
@@ -339,7 +339,8 @@ function productModal(product?: Product): string {
     <label class="field"><span>نام کالا</span><input id="p-name" placeholder="مثلاً برنج ایرانی" value="${product?.name || ""}"></label>
     <div class="form-grid"><label class="field"><span>کد کالا</span><input id="p-sku" placeholder="اختیاری" value="${product?.sku || ""}"></label><label class="field"><span>واحد</span><select id="p-unit">${["عدد","کیلوگرم","گرم","لیتر","متر","بسته"].map(u => `<option ${product?.unit === u ? "selected" : ""}>${u}</option>`).join("")}</select></label></div>
     <div class="form-grid"><label class="field"><span>قیمت خرید</span><input id="p-buy" type="number" min="0" value="${product?.purchasePrice ?? 0}"></label><label class="field"><span>قیمت فروش</span><input id="p-sale" type="number" min="0" value="${product?.salePrice ?? 0}"></label></div>
-    <label class="field"><span>حداقل موجودی</span><input id="p-low" type="number" min="0" step="0.001" value="${product?.lowStock ?? 5}"></label>
+    <label class="field"><span>حداقل موجودی (هشدار)</span><input id="p-low" type="number" min="0" step="0.001" value="${product?.lowStock ?? 5}"></label>
+    ${product ? "" : '<label class="field"><span>موجودی اولیه</span><input id="p-initial-stock" type="number" min="0" step="0.001" value="0" placeholder="مثلاً 20"></label>'}
     <button class="primary-button wide" id="product-submit">${product ? "ذخیره تغییرات" : "ذخیره کالا"}</button></section></div>`;
 }
 
@@ -365,7 +366,11 @@ function bindProductModal(): void {
         if (!existing) throw new Error("کالا پیدا نشد");
         await updateProduct({ ...existing, ...values });
       } else {
-        await addProduct(values);
+        const created = await addProduct(values);
+        const initialStock = Math.max(0, Number(modal.querySelector<HTMLInputElement>("#p-initial-stock")?.value) || 0);
+        if (initialStock > 0) {
+          await addStockAdjustment({ date: Date.now(), productId: created.id, quantity: initialStock, description: "موجودی اولیه کالا" });
+        }
       }
       modal.remove(); showToast(editId ? "تغییرات کالا ذخیره شد" : "کالا با موفقیت ثبت شد"); await render();
     } catch (e) { showToast(e instanceof Error ? e.message : "ذخیره کالا ناموفق بود"); }
@@ -412,7 +417,7 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const label = range==="today"?"امروز":range==="week"?"۷ روز اخیر":range==="all"?"همه":range==="custom"?"بازه انتخابی":"ماه جاری";
   const defaultFrom = toPersianDigits(localStorage.getItem("sai-sai-report-from") || todayJalaliInput());
   const defaultTo = toPersianDigits(localStorage.getItem("sai-sai-report-to") || todayJalaliInput());
-  const summary = `<section class="panel report-list"><div class="report-range"><button data-report-range="today">امروز</button><button data-report-range="week">۷ روز</button><button data-report-range="month">ماه جاری</button><button data-report-range="all">همه</button></div><div class="report-custom-range">
+  const summary = `<section class="panel report-list"><div class="report-range"><button type="button" data-report-range="today" style="color:#fff!important;-webkit-text-fill-color:#fff!important;background:#162238!important;border:1px solid #385277!important;">امروز</button><button type="button" data-report-range="week" style="color:#fff!important;-webkit-text-fill-color:#fff!important;background:#162238!important;border:1px solid #385277!important;">۷ روز</button><button type="button" data-report-range="month" style="color:#fff!important;-webkit-text-fill-color:#fff!important;background:#162238!important;border:1px solid #385277!important;">ماه جاری</button><button type="button" data-report-range="all" style="color:#fff!important;-webkit-text-fill-color:#fff!important;background:#162238!important;border:1px solid #385277!important;">همه</button></div><div class="report-custom-range">
   <label class="field"><span>از تاریخ شمسی</span><div class="report-date-input"><input id="report-from-date" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" placeholder="۱۴۰۵/۰۸/۰۷" value="${defaultFrom}" style="color:#111827!important;background:#ffffff!important;text-align:center!important;font-size:17px!important;font-weight:700!important;"><button type="button" class="report-slash" data-date-slash="report-from-date" style="color:#ffffff!important;background:#162238!important;">/</button></div></label>
   <label class="field"><span>تا تاریخ شمسی</span><div class="report-date-input"><input id="report-to-date" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" placeholder="۱۴۰۵/۰۸/۰۷" value="${defaultTo}" style="color:#111827!important;background:#ffffff!important;text-align:center!important;font-size:17px!important;font-weight:700!important;"><button type="button" class="report-slash" data-date-slash="report-to-date" style="color:#ffffff!important;background:#162238!important;">/</button></div></label>
   <button class="primary-button wide" id="report-apply-range">اعمال بازه</button>
@@ -572,101 +577,6 @@ async function bindActions(): Promise<void> {
   if (!root || root.dataset.actionsBound === "1") return;
   root.dataset.actionsBound = "1";
 
-  document.addEventListener("input", event => {
-    const input = (event.target as HTMLElement).closest<HTMLInputElement>("[data-jalali-input]");
-    if (!input) return;
-    const pos = input.selectionStart ?? input.value.length;
-    const beforeRaw = input.value.slice(0, pos);
-    const formatted = formatJalaliInput(input.value);
-    const formattedBefore = formatJalaliInput(beforeRaw);
-    if (input.value !== formatted) {
-      input.value = formatted;
-      const caret = Math.min(formatted.length, formattedBefore.length);
-      input.setSelectionRange(caret, caret);
-    }
-  });
-  const normalizeReportDateInput = (input: HTMLInputElement): void => {
-    const formatted = formatJalaliInput(input.value);
-    if (input.value !== formatted) {
-      const pos = input.selectionStart ?? input.value.length;
-      const before = formatJalaliInput(input.value.slice(0, pos));
-      input.value = formatted;
-      const caret = Math.min(formatted.length, before.length);
-      try { input.setSelectionRange(caret, caret); } catch { /* Android WebView may reject selection updates */ }
-    }
-  };
-
-  document.addEventListener("change", event => {
-    const input = (event.target as HTMLElement).closest<HTMLInputElement>("[data-jalali-input]");
-    if (input) normalizeReportDateInput(input);
-  });
-
-  document.addEventListener("compositionend", event => {
-    const input = (event.target as HTMLElement).closest<HTMLInputElement>("[data-jalali-input]");
-    if (input) normalizeReportDateInput(input);
-  });
-
-  document.addEventListener("keydown", event => {
-    const target = event.target as HTMLElement;
-    if (target.closest<HTMLInputElement>("[data-jalali-input]") && event.key === "Enter") {
-      event.preventDefault();
-      document.querySelector<HTMLElement>("#report-apply-range")?.click();
-    }
-  });
-
-  // Report controls live inside #app, which is replaced on every render.
-  // Keep their handler on document so it survives Android WebView re-renders.
-  document.addEventListener("click", async event => {
-    const target = event.target as HTMLElement;
-
-    const reportRange = target.closest<HTMLElement>("[data-report-range]");
-    if (reportRange) {
-      localStorage.setItem("sai-sai-report-range", reportRange.dataset.reportRange || "month");
-      await render();
-      return;
-    }
-
-    const slashButton = target.closest<HTMLButtonElement>("[data-date-slash]");
-    if (slashButton) {
-      const id = slashButton.dataset.dateSlash;
-      const input = id ? document.querySelector<HTMLInputElement>("#" + id) : null;
-      if (input) {
-        const pos = input.selectionStart ?? input.value.length;
-        const rawBefore = input.value.slice(0, pos).replace(/\//g, "");
-        const rawAfter = input.value.slice(pos).replace(/\//g, "");
-        input.value = formatJalaliInput(rawBefore + "/" + rawAfter);
-        const caret = Math.min(input.value.length, rawBefore.length + 1);
-        input.focus();
-        try { input.setSelectionRange(caret, caret); } catch { /* Android WebView */ }
-      }
-      return;
-    }
-
-    const reportApply = target.closest<HTMLElement>("#report-apply-range");
-    if (reportApply) {
-      const fromInput = document.querySelector<HTMLInputElement>("#report-from-date");
-      const toInput = document.querySelector<HTMLInputElement>("#report-to-date");
-      if (!fromInput || !toInput) return;
-      normalizeReportDateInput(fromInput);
-      normalizeReportDateInput(toInput);
-      const from = jalaliToGregorianDate(fromInput.value);
-      const to = jalaliToGregorianDate(toInput.value);
-      if (!from || !to) {
-        showToast("تاریخ را کامل و به شکل ۱۴۰۵/۰۸/۰۷ وارد کنید");
-        return;
-      }
-      if (from.getTime() > to.getTime()) {
-        showToast("تاریخ شروع نباید بعد از تاریخ پایان باشد");
-        return;
-      }
-      localStorage.setItem("sai-sai-report-from", fromInput.value);
-      localStorage.setItem("sai-sai-report-to", toInput.value);
-      localStorage.setItem("sai-sai-report-range", "custom");
-      await render();
-      return;
-    }
-  });
-
   root.addEventListener("click", async event => {
     const target = event.target as HTMLElement;
     const invoiceButton = target.closest<HTMLElement>("[data-invoice-id]");
@@ -708,6 +618,59 @@ async function bindActions(): Promise<void> {
   });
 }
 
+function bindReportControls(): void {
+  if (activeTab !== "reports") return;
+  const fromInput = document.querySelector<HTMLInputElement>("#report-from-date");
+  const toInput = document.querySelector<HTMLInputElement>("#report-to-date");
+  const formatInput = (input: HTMLInputElement) => {
+    const pos = input.selectionStart ?? input.value.length;
+    const rawBefore = input.value.slice(0, pos);
+    const formatted = formatJalaliInput(input.value);
+    const formattedBefore = formatJalaliInput(rawBefore);
+    if (input.value !== formatted) {
+      input.value = formatted;
+      const caret = Math.min(formatted.length, formattedBefore.length);
+      try { input.setSelectionRange(caret, caret); } catch {}
+    }
+  };
+  [fromInput, toInput].forEach(input => {
+    if (!input) return;
+    input.addEventListener("input", () => formatInput(input));
+    input.addEventListener("change", () => formatInput(input));
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-report-range]").forEach(button => {
+    button.addEventListener("click", async () => {
+      localStorage.setItem("sai-sai-report-range", button.dataset.reportRange || "month");
+      await render();
+    });
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-date-slash]").forEach(button => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.dateSlash;
+      const input = id ? document.getElementById(id) as HTMLInputElement | null : null;
+      if (!input) return;
+      const pos = input.selectionStart ?? input.value.length;
+      const raw = input.value.replace(/\//g, "");
+      const digitsBefore = input.value.slice(0, pos).replace(/\//g, "");
+      input.value = formatJalaliInput(raw);
+      const caret = Math.min(input.value.length, digitsBefore.length + 1);
+      input.focus();
+      try { input.setSelectionRange(caret, caret); } catch {}
+    });
+  });
+  document.querySelector("#report-apply-range")?.addEventListener("click", async () => {
+    if (!fromInput || !toInput) return;
+    formatInput(fromInput); formatInput(toInput);
+    const from = jalaliToGregorianDate(fromInput.value);
+    const to = jalaliToGregorianDate(toInput.value);
+    if (!from || !to) { showToast("تاریخ را کامل و به شکل ۱۴۰۵/۰۸/۰۷ وارد کنید"); return; }
+    if (from.getTime() > to.getTime()) { showToast("تاریخ شروع نباید بعد از تاریخ پایان باشد"); return; }
+    localStorage.setItem("sai-sai-report-from", fromInput.value);
+    localStorage.setItem("sai-sai-report-to", toInput.value);
+    localStorage.setItem("sai-sai-report-range", "custom");
+    await render();
+  });
+}
 async function render(): Promise<void> {
   const subscription = await getSubscription().catch(() => ({ status: "none", plan: "none", expiresAt: null } as Subscription));
   // Bind global navigation/actions before the subscription gate so buttons always have a click handler.
@@ -733,7 +696,7 @@ async function render(): Promise<void> {
   else if (activeTab === "reports") content = await reportsView(await listTransactions());
   else if (activeTab === "more") content = await accountsView();
   else if (activeTab === "checks") content = await checksView();
-  layout(content, subscription);
+  layout(content, subscription);\n  bindReportControls();
 
   document.querySelectorAll<HTMLButtonElement>("[data-invoice-id]").forEach(b => b.addEventListener("click", async () => {
     const tx = (await listTransactions()).find(t => t.id === b.dataset.invoiceId);
