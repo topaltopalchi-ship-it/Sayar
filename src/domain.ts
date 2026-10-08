@@ -126,10 +126,12 @@ export interface Order {
   id: ID;
   partyId: ID;
   productId: ID;
+  orderType: string;
   quantity: number;
   unitPrice: Money;
   orderDate: number;
   deliveryDate: number;
+  deliveryTime?: string;
   note: string;
   status: OrderStatus;
   createdAt: number;
