@@ -19,7 +19,7 @@ import { accountModal, accountLedgerModal, accountsView, bindAccountLedger, bind
 import { getAccountBalances, listAccounts } from "./db";
 import { checksView, checkModal, bindCheckModal, bindCheckStatuses, bindCheckActions } from "./checks-ui";
 import { jalaliToGregorianDate, todayJalaliInput, formatJalaliInput, toPersianDigits } from "./calendar";
-import { bindVoiceAssistant, type VoiceSaleDraft, type VoiceSaleItem } from "./voice-assistant";
+import { bindVoiceAssistant, bindVoiceQuestionAssistant, type VoiceSaleDraft, type VoiceSaleItem } from "./voice-assistant";
 
 type Tab = "dashboard" | "sales" | "purchases" | "orders" | "inventory" | "people" | "reports" | "more" | "checks";
 
@@ -197,7 +197,7 @@ async function dashboardView(subscription: Subscription): Promise<string> {
         <button class="quick-card" data-action="sale"><b>＋</b><span>${isProfessionalMode() ? "ثبت فروش" : "فروش جدید"}</span><small>${isProfessionalMode() ? "صدور فاکتور فروش" : "یک فاکتور در چند مرحله"}</small></button>
         <button class="quick-card" data-action="purchase"><b>⇩</b><span>${isProfessionalMode() ? "ثبت خرید" : "خرید کالا"}</span><small>${isProfessionalMode() ? "ثبت خرید و افزایش موجودی" : "موجودی را بیشتر کنید"}</small></button>
         <button class="quick-card" data-action="receipt"><b>↙</b><span>دریافت وجه</span><small>ثبت پول دریافتی از مشتری</small></button>
-        <button class="quick-card voice-quick-card" id="voice-sale"><b>🎙</b><span>ثبت فروش با صدا</span><small>فروش را به فارسی بگویید</small></button>
+        <button class="quick-card voice-quick-card" id="voice-sale"><b>🎙</b><span>ثبت فروش با صدا</span><small>فروش را به فارسی بگویید</small></button><button class="quick-card voice-quick-card" id="voice-query"><b>🔊</b><span>از سای‌سای بپرس</span><small>فروش، دریافت و موجودی</small></button>
         ${isProfessionalMode() ? `<button class="quick-card" data-action="expense"><b>−</b><span>ثبت هزینه</span><small>هزینه‌های کسب‌وکار</small></button>` : `<button class="quick-card" data-nav-shortcut="inventory"><b>▤</b><span>کالاها</span><small>مشاهده و مدیریت موجودی</small></button>`}
       </div>
     </section>
@@ -1270,6 +1270,16 @@ async function render(): Promise<void> {
     quantity?.dispatchEvent(new Event("input", { bubbles: true }));
     paid?.dispatchEvent(new Event("input", { bubbles: true }));
     if (!matched && draft.productHint) showToast(`کالای «${draft.productHint}» پیدا نشد؛ کالا را انتخاب کنید`);
+  }, showToast);
+
+  bindVoiceQuestionAssistant(async (question: string) => {
+    const q = question.replace(/ي/g, "ی").replace(/ك/g, "ک");
+    const d = await getDashboard();
+    if (/فروش|فروخت|درآمد/.test(q) && /امروز/.test(q)) return `امروز ${rial(d.salesToday)} فروش داشتی.`;
+    if (/دریافت|وصول/.test(q) && /امروز/.test(q)) return `امروز ${rial(d.receiptsToday)} دریافت داشتی.`;
+    if (/مطالبات|بدهکار/.test(q)) return `مجموع مطالبات فعلی ${rial(d.receivables)} است.`;
+    if (/موجودی|انبار|کم/.test(q)) return `${money.format(d.lowStock)} کالا به حد هشدار موجودی رسیده است.`;
+    return "فعلاً این سؤال را یاد نگرفته‌ام؛ سؤال‌های فروش امروز، دریافت امروز، مطالبات و موجودی را می‌توانم پاسخ بدهم.";
   }, showToast);
 
   bindReportControls();
