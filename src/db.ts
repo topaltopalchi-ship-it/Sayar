@@ -541,7 +541,7 @@ export function calculateHistoricalCOGS(transactions: Transaction[], products: P
 }
 
 export async function addSale(input: {
-  date: number; partyId?: string; accountId?: string; description: string; lines: Transaction["lines"]; paid: number;
+  date: number; partyId?: string; customerName?: string; accountId?: string; description: string; lines: Transaction["lines"]; paid: number;
 }): Promise<Transaction> {
   for (const line of input.lines) {
     const stock = await getStock(line.productId);
@@ -549,7 +549,7 @@ export async function addSale(input: {
     if (stock < line.quantity) throw new Error("موجودی کالا برای این فروش کافی نیست");
   }
   return addTransaction({
-    type: "sale", date: input.date, partyId: input.partyId, accountId: input.accountId, description: input.description,
+    type: "sale", date: input.date, partyId: input.partyId, customerName: input.customerName?.trim() || undefined, accountId: input.accountId, description: input.description,
     lines: input.lines, paid: Math.max(0, input.paid),
   });
 }
