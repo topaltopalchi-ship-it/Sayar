@@ -281,3 +281,25 @@ body{background:radial-gradient(circle at 12% 0,#223657 0,#10182a 34%,#090e1b 78
   .invoice-modal{background:#fff!important;color:#111!important}
   .invoice-cover{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
+
+
+/* Final invoice presentation */
+.invoice-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px;background:linear-gradient(135deg,#173d72,#2563eb 58%,#38bdf8);color:#fff}
+.invoice-head h2{margin:6px 0 4px;color:#fff;font-size:24px}
+.invoice-head p{margin:0;color:#dbeafe;font-size:11px}
+.invoice-brand-logo{width:68px;height:68px;flex:0 0 68px;border-radius:18px;border:1px solid #ffffff55;background:#ffffff18;object-fit:cover}
+.invoice-party{margin:14px 18px;padding:14px 16px;border-radius:16px;background:#fff;border:1px solid #dce5f2}
+.invoice-party>div{display:grid;gap:5px}
+.invoice-party span{font-size:10px;color:#64748b}
+.invoice-party strong{font-size:15px;color:#17233a}
+.invoice-party small{font-size:10px;color:#718096}
+.invoice-section-title{margin:14px 18px 8px}
+.invoice-table-wrap{margin:0 18px}
+.invoice-summary{margin:14px 18px}
+.invoice-signatures{margin:18px 18px 0}
+@media(max-width:560px){
+  .invoice-head{padding:18px}
+  .invoice-head h2{font-size:21px}
+  .invoice-brand-logo{width:58px;height:58px;flex-basis:58px}
+  .invoice-table{min-width:540px}
+}
