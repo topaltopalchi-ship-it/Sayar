@@ -555,7 +555,7 @@ async function bindActions(): Promise<void> {
   if (!root || root.dataset.actionsBound === "1") return;
   root.dataset.actionsBound = "1";
 
-  root.addEventListener("input", event => {
+  document.addEventListener("input", event => {
     const input = (event.target as HTMLElement).closest<HTMLInputElement>("[data-jalali-input]");
     if (!input) return;
     const pos = input.selectionStart ?? input.value.length;
@@ -568,7 +568,7 @@ async function bindActions(): Promise<void> {
       input.setSelectionRange(caret, caret);
     }
   });
-  root.addEventListener("keydown", event => {
+  document.addEventListener("keydown", event => {
     const target = event.target as HTMLElement;
     if (target.closest<HTMLInputElement>("[data-jalali-input]") && event.key === "Enter") {
       event.preventDefault();
