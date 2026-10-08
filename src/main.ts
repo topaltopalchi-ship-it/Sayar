@@ -4,14 +4,15 @@ import { App } from "@capacitor/app";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import { Printer } from "@gingersnapsoftware/capacitor-plugin-printer";
+import { LocalNotifications } from "@capacitor/local-notifications";
 import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import {
   addParty, addProduct, updateProduct, deleteProduct, addSale, addSettlement, addExpense, addStockAdjustment, getDashboard, getStock, updateTransaction, deleteTransaction, updateExpense, deleteExpense,
-  listParties, updateParty, deleteParty, listProducts, listTransactions, listExpenses, listMovements, calculateHistoricalCOGS, repairDataIntegrity
+  listParties, updateParty, deleteParty, listProducts, listTransactions, listExpenses, listMovements, listOrders, calculateHistoricalCOGS, repairDataIntegrity
 } from "./db";
 import { createMonthlyCheckout, getSubscription, type Subscription } from "./billing";
-import { lineTotal, type Party, type Product, type Transaction, type TransactionLine } from "./domain";
+import { lineTotal, type Order, type Party, type Product, type Transaction, type TransactionLine } from "./domain";
 import { formatMoney, getCurrencyUnit, setCurrencyUnit, getCurrencyLabel, parseMoneyInput, moneyInputValue } from "./settings";
 import { openPurchaseModal } from "./purchase-ui";
 import { accountModal, accountLedgerModal, accountsView, bindAccountLedger, bindAccountModal, bindTransferModal, transferModal } from "./accounts-ui";
@@ -411,6 +412,184 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
   update();
 }
 
+
+function orderNotificationId(orderId: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < orderId.length; i++) {
+    hash ^= orderId.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash) % 2000000000 + 1000;
+}
+
+async function scheduleOrderReminder(order: Order): Promise<void> {
+  if (order.status !== "pending" || !Capacitor.isNativePlatform()) return;
+  const reminderAt = new Date(order.deliveryDate);
+  reminderAt.setDate(reminderAt.getDate() - 1);
+  reminderAt.setHours(10, 0, 0, 0);
+  if (reminderAt.getTime() <= Date.now()) return;
+  try {
+    const permission = await LocalNotifications.checkPermissions();
+    if (permission.display !== "granted") {
+      const requested = await LocalNotifications.requestPermissions();
+      if (requested.display !== "granted") return;
+    }
+    await LocalNotifications.createChannel({
+      id: "saisai-orders",
+      name: "یادآوری سفارشات",
+      description: "یادآوری سفارش‌های در انتظار تحویل",
+      importance: 4,
+      vibration: true,
+    }).catch(() => undefined);
+    const id = orderNotificationId(order.id);
+    await LocalNotifications.cancel({ notifications: [{ id }] });
+    const [orderParties, orderProducts] = await Promise.all([listParties(), listProducts()]);
+    const party = orderParties.find(p => p.id === order.partyId);
+    const product = orderProducts.find(p => p.id === order.productId);
+    await LocalNotifications.schedule({
+      notifications: [{
+        id,
+        title: "یادآوری سفارش سای‌سای",
+        body: `فردا سفارش ${product?.name || "کالا"} برای ${party?.name || "مشتری"} تحویل دارد.`,
+        channelId: "saisai-orders",
+        schedule: { at: reminderAt, allowWhileIdle: true },
+        autoCancel: true,
+      }],
+    });
+  } catch (error) {
+    console.warn("Order reminder could not be scheduled", error);
+  }
+}
+
+async function cancelOrderReminder(orderId: string): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  try { await LocalNotifications.cancel({ notifications: [{ id: orderNotificationId(orderId) }] }); } catch {}
+}
+
+function orderModal(existing?: Order): string {
+  const customerOptions = parties.filter(p => p.type === "customer" || p.type === "both")
+    .map(p => `<option value="${p.id}" ${existing?.partyId === p.id ? "selected" : ""}>${p.name}</option>`).join("");
+  const productOptions = products.map(p => `<option value="${p.id}" ${existing?.productId === p.id ? "selected" : ""}>${p.name} · ${rial(p.salePrice)}</option>`).join("");
+  const delivery = new Date(existing?.deliveryDate ?? Date.now() + 86400000);
+  const dateValue = `${delivery.getFullYear()}-${String(delivery.getMonth()+1).padStart(2,"0")}-${String(delivery.getDate()).padStart(2,"0")}`;
+  return `<div class="modal-backdrop" id="order-modal"><section class="modal" role="dialog" aria-modal="true">
+    <button class="modal-close" id="order-close">×</button><span class="eyebrow">مدیریت سفارش</span><h2>${existing ? "ویرایش سفارش" : "دریافت سفارش جدید"}</h2>
+    <label class="field"><span>مشتری</span><select id="order-party"><option value="">انتخاب مشتری</option>${customerOptions}</select></label>
+    <label class="field"><span>کالا</span><select id="order-product">${productOptions}</select></label>
+    <div class="form-grid"><label class="field"><span>تعداد</span><input id="order-quantity" type="text" inputmode="decimal" value="${existing?.quantity ?? 1}"></label>
+      <label class="field"><span>قیمت واحد</span><input id="order-price" type="text" inputmode="numeric" value="${existing?.unitPrice ?? products.find(p => p.id === (existing?.productId || products[0]?.id))?.salePrice ?? 0}"></label></div>
+    <label class="field"><span>تاریخ تحویل</span><input id="order-delivery" type="date" value="${dateValue}"></label>
+    <label class="field"><span>یادداشت</span><input id="order-note" placeholder="مثلاً تحویل درب مغازه" value="${existing?.note || ""}"></label>
+    <button class="primary-button wide" id="order-submit">${existing ? "ذخیره تغییرات" : "ثبت سفارش و یادآوری"}</button>
+  </section></div>`;
+}
+
+async function ordersView(): Promise<string> {
+  const orders = await listOrders();
+  const partyMap = new Map(parties.map(p => [p.id, p]));
+  const productMap = new Map(products.map(p => [p.id, p]));
+  const rows = orders.map(o => {
+    const party = partyMap.get(o.partyId);
+    const product = productMap.get(o.productId);
+    const status = o.status === "completed" ? "تحویل شد" : o.status === "cancelled" ? "لغو شد" : "در انتظار";
+    return `<article class="order-card ${o.status}">
+      <div class="order-card-head"><div><span class="eyebrow">سفارش</span><h3>${party?.name || "مشتری حذف‌شده"}</h3></div><span class="order-status">${status}</span></div>
+      <div class="order-details"><span>کالا: <b>${product?.name || "کالای حذف‌شده"}</b></span><span>تعداد: <b>${money.format(o.quantity)}</b></span><span>تحویل: <b>${dateLabel(o.deliveryDate)}</b></span></div>
+      <p class="muted">${o.note || "بدون یادداشت"} · مبلغ تقریبی ${rial(Math.round(o.quantity * o.unitPrice))}</p>
+      <div class="order-actions">
+        ${o.status === "pending" ? `<button class="primary-button" data-order-complete="${o.id}">تحویل شد</button><button class="secondary-button" data-order-cancel="${o.id}">لغو</button>` : ""}
+        <button class="secondary-button" data-order-edit="${o.id}">ویرایش</button><button class="secondary-button" data-order-delete="${o.id}">حذف</button>
+      </div>
+    </article>`;
+  }).join("");
+  return pageHead("سفارشات", "دریافت و پیگیری سفارش‌ها", "نام مشتری، کالا، تاریخ تحویل و یادآوری یک روز قبل.", `<button class="primary-button" id="new-order">＋ سفارش جدید</button>`) +
+    `<section class="panel order-summary"><span>در انتظار تحویل</span><strong>${orders.filter(o => o.status === "pending").length}</strong></section><section class="orders-list">${rows || '<div class="panel empty-inline"><span>◷</span><p>هنوز سفارشی ثبت نشده است.</p></div>'}</section>`;
+}
+
+function bindOrderModal(existing?: Order): void {
+  const modal = document.querySelector<HTMLDivElement>("#order-modal");
+  if (!modal) return;
+  const product = modal.querySelector<HTMLSelectElement>("#order-product")!;
+  const price = modal.querySelector<HTMLInputElement>("#order-price")!;
+  const syncPrice = () => {
+    if (existing) return;
+    const p = products.find(x => x.id === product.value);
+    if (p) price.value = String(p.salePrice);
+  };
+  product.addEventListener("change", syncPrice);
+  modal.querySelector("#order-close")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#order-submit")?.addEventListener("click", async () => {
+    try {
+      const partyId = modal.querySelector<HTMLSelectElement>("#order-party")!.value;
+      const productId = product.value;
+      const quantity = numericValue(modal.querySelector<HTMLInputElement>("#order-quantity")!.value);
+      const unitPrice = numericValue(price.value);
+      const dateText = modal.querySelector<HTMLInputElement>("#order-delivery")!.value;
+      const deliveryDate = dateText ? new Date(dateText + "T12:00:00").getTime() : 0;
+      if (!partyId) throw new Error("انتخاب مشتری الزامی است");
+      if (!productId || quantity <= 0 || unitPrice < 0) throw new Error("کالا، تعداد و قیمت سفارش را بررسی کنید");
+      if (!deliveryDate || deliveryDate < Date.now() - 86400000) throw new Error("تاریخ تحویل را درست انتخاب کنید");
+      let saved: Order;
+      if (existing) {
+        saved = { ...existing, partyId, productId, quantity, unitPrice, deliveryDate, note: modal.querySelector<HTMLInputElement>("#order-note")!.value.trim() };
+        await dbUpdateOrder(saved);
+      } else {
+        saved = await dbAddOrder({ partyId, productId, quantity, unitPrice, orderDate: Date.now(), deliveryDate, note: modal.querySelector<HTMLInputElement>("#order-note")!.value.trim(), status: "pending" });
+      }
+      if (existing) await cancelOrderReminder(saved.id);
+      await scheduleOrderReminder(saved);
+      modal.remove();
+      await render();
+      showToast(existing ? "سفارش ویرایش شد" : "سفارش ثبت شد؛ یادآوری یک روز قبل تنظیم شد");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "ثبت سفارش ناموفق بود");
+    }
+  });
+  syncPrice();
+}
+
+async function dbAddOrder(input: Omit<Order, "id" | "createdAt">): Promise<Order> {
+  const { addOrder } = await import("./db");
+  return addOrder(input);
+}
+async function dbUpdateOrder(order: Order): Promise<void> {
+  const { updateOrder } = await import("./db");
+  await updateOrder(order);
+}
+async function dbDeleteOrder(id: string): Promise<void> {
+  const { deleteOrder } = await import("./db");
+  await deleteOrder(id);
+}
+
+function bindOrderActions(): void {
+  document.querySelector("#new-order")?.addEventListener("click", async () => {
+    parties = await listParties(); products = await listProducts();
+    if (!parties.some(p => p.type === "customer" || p.type === "both")) { showToast("ابتدا یک مشتری ثبت کنید"); return; }
+    if (!products.length) { showToast("ابتدا یک کالا ثبت کنید"); return; }
+    document.body.insertAdjacentHTML("beforeend", orderModal());
+    bindOrderModal();
+  });
+  document.querySelectorAll<HTMLElement>("[data-order-edit]").forEach(b => b.addEventListener("click", async () => {
+    const order = (await listOrders()).find(x => x.id === (b.dataset.orderEdit || ""));
+    if (!order) return;
+    parties = await listParties(); products = await listProducts();
+    document.body.insertAdjacentHTML("beforeend", orderModal(order)); bindOrderModal(order);
+  }));
+  document.querySelectorAll<HTMLElement>("[data-order-delete]").forEach(b => b.addEventListener("click", async () => {
+    const id = b.dataset.orderDelete || ""; if (!id || !confirm("این سفارش حذف شود؟")) return;
+    try { await cancelOrderReminder(id); await dbDeleteOrder(id); showToast("سفارش حذف شد"); await render(); } catch(e) { showToast(e instanceof Error ? e.message : "حذف سفارش ناموفق بود"); }
+  }));
+  document.querySelectorAll<HTMLElement>("[data-order-complete],[data-order-cancel]").forEach(b => b.addEventListener("click", async () => {
+    const id = b.dataset.orderComplete || b.dataset.orderCancel || "";
+    const order = (await listOrders()).find(x => x.id === id);
+    if (!order) return;
+    const nextStatus = b.dataset.orderComplete ? "completed" : "cancelled";
+    await dbUpdateOrder({ ...order, status: nextStatus });
+    await cancelOrderReminder(order.id);
+    showToast(nextStatus === "completed" ? "سفارش تحویل شد" : "سفارش لغو شد");
+    await render();
+  }));
+}
 
 async function inventoryView(): Promise<string> {
   products = await listProducts();
@@ -956,7 +1135,7 @@ async function render(): Promise<void> {
       bindOrderControls(orderProducts, orderParties, rial, async () => { await render(); }, showToast);
     });
   }
-  document.querySelector("#new-sale")?.addEventListener("click", () => void openSaleModal());
+  if (activeTab === "orders") bindOrderActions();\n  document.querySelector("#new-sale")?.addEventListener("click", () => void openSaleModal());
   document.querySelectorAll<HTMLElement>("[data-sale-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.saleEdit); if(t) await openSaleModal(t); }));
   document.querySelectorAll<HTMLElement>("[data-sale-delete]").forEach(b => b.addEventListener("click", async () => { const id=b.dataset.saleDelete||""; if(!id||!confirm("این فاکتور فروش حذف شود؟")) return; try { await deleteTransaction(id); showToast("فاکتور حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف فاکتور ناموفق بود"); } }));
   document.querySelectorAll<HTMLElement>("[data-purchase-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.purchaseEdit); if(!t) return; products=await listProducts(); parties=await listParties(); openPurchaseModal(products, parties, rial, async m=>{showToast(m);await render();}, t); }));
