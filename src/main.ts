@@ -555,6 +555,27 @@ async function bindActions(): Promise<void> {
   if (!root || root.dataset.actionsBound === "1") return;
   root.dataset.actionsBound = "1";
 
+  root.addEventListener("input", event => {
+    const input = (event.target as HTMLElement).closest<HTMLInputElement>("[data-jalali-input]");
+    if (!input) return;
+    const pos = input.selectionStart ?? input.value.length;
+    const beforeRaw = input.value.slice(0, pos);
+    const formatted = formatJalaliInput(input.value);
+    const formattedBefore = formatJalaliInput(beforeRaw);
+    if (input.value !== formatted) {
+      input.value = formatted;
+      const caret = Math.min(formatted.length, formattedBefore.length);
+      input.setSelectionRange(caret, caret);
+    }
+  });
+  root.addEventListener("keydown", event => {
+    const target = event.target as HTMLElement;
+    if (target.closest<HTMLInputElement>("[data-jalali-input]") && event.key === "Enter") {
+      event.preventDefault();
+      document.querySelector<HTMLElement>("#report-apply-range")?.click();
+    }
+  });
+
   root.addEventListener("click", async event => {
     const target = event.target as HTMLElement;
     const nav = target.closest<HTMLElement>("[data-nav], [data-nav-shortcut]");
@@ -741,27 +762,6 @@ async function render(): Promise<void> {
   }));
   document.querySelector("#more-refresh")?.addEventListener("click", () => render());
   window.addEventListener("sai-sai-refresh", () => { void render(); });
-  // Date inputs are handled by the persistent #app event delegation so they keep working after every render.
-  root.addEventListener("input", event => {
-    const input = (event.target as HTMLElement).closest<HTMLInputElement>("[data-jalali-input]");
-    if (!input) return;
-    const pos = input.selectionStart ?? input.value.length;
-    const beforeRaw = input.value.slice(0, pos);
-    const formatted = formatJalaliInput(input.value);
-    const formattedBefore = formatJalaliInput(beforeRaw);
-    if (input.value !== formatted) {
-      input.value = formatted;
-      const caret = Math.min(formatted.length, formattedBefore.length);
-      input.setSelectionRange(caret, caret);
-    }
-  });
-  root.addEventListener("keydown", event => {
-    const target = event.target as HTMLElement;
-    if (target.closest<HTMLInputElement>("[data-jalali-input]") && event.key === "Enter") {
-      event.preventDefault();
-      document.querySelector<HTMLElement>("#report-apply-range")?.click();
-    }
-  });
   document.querySelector("#report-print")?.addEventListener("click", () => window.print());
   document.querySelectorAll<HTMLElement>("[data-settlement-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.settlementEdit); if(t && (t.type==="receipt"||t.type==="payment")) await openSettlement(t.type,t); }));
   document.querySelectorAll<HTMLElement>("[data-settlement-delete]").forEach(b => b.addEventListener("click", async () => { const id=b.dataset.settlementDelete||""; if(!id||!confirm("این دریافت/پرداخت حذف شود؟")) return; try { await deleteTransaction(id); showToast("ثبت حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف ناموفق بود"); } }));
