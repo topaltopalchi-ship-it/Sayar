@@ -425,7 +425,7 @@ function saleModal(existing?: Transaction): string {
   return `
     <div class="modal-backdrop" id="sale-modal"><section class="modal" role="dialog" aria-modal="true">
       <button class="modal-close" id="sale-close">×</button><span class="eyebrow">فاکتور فروش</span><h2>${existing ? "ویرایش فروش" : "ثبت فروش"}</h2>
-      <div id="sale-lines">${initialLines.map(lineHtml).join("")}</div>
+      <div id="sale-lines">${initialLines.map(saleLineHtml).join("")}</div>
       <button type="button" class="secondary-button wide" id="sale-add-line">＋ افزودن کالا به فاکتور</button>
       <label class="field"><span>نام مشتری</span><input id="sale-customer-name" type="text" autocomplete="name" placeholder="نام مشتری را وارد کنید" value="${existing?.customerName || ""}"></label>
       <label class="field"><span>مبلغ پرداختی (${getCurrencyLabel()})</span><input id="sale-paid" type="text" inputmode="numeric" autocomplete="off" value="${moneyInputValue(existing?.paid ?? 0)}"></label>
