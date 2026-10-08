@@ -502,11 +502,12 @@ async function ordersView(): Promise<string> {
   const partyMap = new Map(parties.map(p => [p.id, p]));
   const productMap = new Map(products.map(p => [p.id, p]));
   const rows = orders.map(o => {
-    const party = partyMap.get(o.partyId);
+    const party = o.partyId ? partyMap.get(o.partyId) : undefined;
+    const customerName = o.customerName?.trim() || party?.name || "مشتری حذف‌شده";
     const product = productMap.get(o.productId);
     const status = o.status === "completed" ? "تحویل شد" : o.status === "cancelled" ? "لغو شد" : "در انتظار";
     return `<article class="order-card ${o.status}">
-      <div class="order-card-head"><div><span class="eyebrow">سفارش</span><h3>${party?.name || "مشتری حذف‌شده"}</h3></div><span class="order-status">${status}</span></div>
+      <div class="order-card-head"><div><span class="eyebrow">سفارش</span><h3>${customerName}</h3></div><span class="order-status">${status}</span></div>
       <div class="order-details"><span>نوع: <b>${o.orderType || "سفارش کالا"}</b></span><span>کالا: <b>${product?.name || "کالای حذف‌شده"}</b></span><span>مقدار: <b>${money.format(o.quantity)} ${product?.unit || ""}</b></span><span>تحویل: <b>${dateLabel(o.deliveryDate)}${o.deliveryTime ? ` · ساعت ${o.deliveryTime}` : ""}</b></span></div>
       <p class="muted">${o.note || "بدون یادداشت"} · مبلغ تقریبی ${rial(Math.round(o.quantity * o.unitPrice))}</p>
       <div class="order-actions">
@@ -541,15 +542,15 @@ function bindOrderModal(existing?: Order): void {
       const dateText = modal.querySelector<HTMLInputElement>("#order-delivery")!.value;
       const deliveryTime = modal.querySelector<HTMLInputElement>("#order-delivery-time")!.value || "12:00";
       const deliveryDate = dateText ? new Date(dateText + "T" + deliveryTime + ":00").getTime() : 0;
-      if (!partyId) throw new Error("انتخاب مشتری الزامی است");
+      if (!customerName) throw new Error("نام مشتری الزامی است");
       if (!productId || quantity <= 0 || unitPrice < 0) throw new Error("کالا، مقدار و قیمت سفارش را بررسی کنید");
       if (!deliveryDate || deliveryDate < Date.now() - 86400000) throw new Error("تاریخ تحویل را درست انتخاب کنید");
       let saved: Order;
       if (existing) {
-        saved = { ...existing, partyId, productId, orderType, quantity, unitPrice, deliveryDate, deliveryTime, note: modal.querySelector<HTMLInputElement>("#order-note")!.value.trim() };
+        saved = { ...existing, partyId: undefined, customerName, productId, orderType, quantity, unitPrice, deliveryDate, deliveryTime, note: modal.querySelector<HTMLInputElement>("#order-note")!.value.trim() };
         await dbUpdateOrder(saved);
       } else {
-        saved = await dbAddOrder({ partyId, productId, orderType, quantity, unitPrice, orderDate: Date.now(), deliveryDate, deliveryTime, note: modal.querySelector<HTMLInputElement>("#order-note")!.value.trim(), status: "pending" });
+        saved = await dbAddOrder({ partyId: undefined, customerName, productId, orderType, quantity, unitPrice, orderDate: Date.now(), deliveryDate, deliveryTime, note: modal.querySelector<HTMLInputElement>("#order-note")!.value.trim(), status: "pending" });
       }
       if (existing) await cancelOrderReminder(saved.id);
       await scheduleOrderReminder(saved);
@@ -578,8 +579,7 @@ async function dbDeleteOrder(id: string): Promise<void> {
 
 function bindOrderActions(): void {
   document.querySelector("#new-order")?.addEventListener("click", async () => {
-    parties = await listParties(); products = await listProducts();
-    if (!parties.some(p => p.type === "customer" || p.type === "both")) { showToast("ابتدا یک مشتری ثبت کنید"); return; }
+    products = await listProducts();
     if (!products.length) { showToast("ابتدا یک کالا ثبت کنید"); return; }
     document.body.insertAdjacentHTML("beforeend", orderModal());
     bindOrderModal();
