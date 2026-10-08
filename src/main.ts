@@ -1276,9 +1276,36 @@ async function render(): Promise<void> {
   }, showToast);
 
   bindVoiceQuestionAssistant(async (question: string) => {
-    const q = question.replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/ة/g, "ه").replace(/[أإ]/g, "ا").replace(/[؟?!]+/g, "").replace(/\s+/g, " ").trim();
+    const parseVoiceMoney = (text: string): number => {
+    const normalized = text.replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[٬,،]/g, " ").replace(/\s+/g, " ").trim();
+    const units: Record<string, number> = { هزار: 1_000, هزارتا: 1_000, میلیون: 1_000_000, میلیونی: 1_000_000, میلیارد: 1_000_000_000, میلیاردی: 1_000_000_000 };
+    const direct = normalized.match(/(\d+(?:\.\d+)?)(?:\s*(هزار|هزارتا|میلیون|میلیونی|میلیارد|میلیاردی))?/);
+    if (direct) return Number(direct[1]) * (direct[2] ? units[direct[2]] : 1);
+    const words: Record<string, number> = { یک:1, یکی:1, دو:2, سه:3, چهار:4, پنج:5, شش:6, هفت:7, هشت:8, نه:9, ده:10, بیست:20 };
+    let current = 0, total = 0;
+    for (const part of normalized.split(" ")) {
+      if (words[part]) current = words[part];
+      else if (units[part]) { total += (current || 1) * units[part]; current = 0; }
+    }
+    return total + current;
+  };
+
+  const q = question.replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/ة/g, "ه").replace(/[أإ]/g, "ا").replace(/[؟?!]+/g, "").replace(/\s+/g, " ").trim();
     const compact = q.replace(/\s+/g, "");
-    const [dashboard, transactions, products, parties, balances] = await Promise.all([getDashboard(), listTransactions(), listProducts(), listParties(), getPartyBalances()]);
+    const commandAmountMatch = q.match(/(?:دریافت|وصول|گرفتم|پرداخت|پرداختم|دادم)[^۰-۹٠-٩\d]*(?:از|به|برای)?[^۰-۹٠-٩\d]*(?:[۰-۹٠-٩\d][۰-۹٠-٩\d٬,\.]*\s*(?:هزار|هزارتا|میلیون|میلیونی|میلیارد|میلیاردی)?|(?:یک|دو|سه|چهار|پنج|شش|هفت|هشت|نه|ده|بیست)\s*(?:هزار|هزارتا|میلیون|میلیونی|میلیارد|میلیاردی)?)/);
+  const commandAmount = commandAmountMatch ? parseVoiceMoney(commandAmountMatch[0]) : 0;
+  const receiptCommand = /^(?:سای‌?سای[، ]*)?(?:ثبت\s*)?(?:دریافت|وصول|گرفتم)\b/.test(q) && commandAmount > 0;
+  const paymentCommand = /^(?:سای‌?سای[، ]*)?(?:ثبت\s*)?(?:پرداخت|پرداختم|دادم)\b/.test(q) && commandAmount > 0;
+  if (receiptCommand || paymentCommand) {
+    const commandParty = parties.map(p => ({ p, n: normalized(p.name) }))
+      .filter(x => x.n && (q.includes(x.n) || x.n.split(/\s+/).some(part => part.length >= 3 && q.includes(part))))
+      .sort((a,b) => b.n.length-a.n.length)[0]?.p;
+    if (!commandParty) return "نام مشتری یا تأمین‌کننده را در دستور دریافت یا پرداخت بگویید.";
+    await addSettlement({ type: receiptCommand ? "receipt" : "payment", date: Date.now(), partyId: commandParty.id, amount: commandAmount, description: receiptCommand ? "دریافت صوتی" : "پرداخت صوتی" });
+    return receiptCommand ? ("دریافت " + rial(commandAmount) + " از " + commandParty.name + " ثبت شد.") : ("پرداخت " + rial(commandAmount) + " به " + commandParty.name + " ثبت شد.");
+  }
+
+  const [dashboard, transactions, products, parties, balances] = await Promise.all([getDashboard(), listTransactions(), listProducts(), listParties(), getPartyBalances()]);
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
     const monthSales = transactions.filter(t => t.type === "sale" && t.date >= monthStart).reduce((s, t) => s + t.amount, 0);
