@@ -141,7 +141,7 @@ async function checkLowStockAlerts(): Promise<void> {
     const p = await LocalNotifications.checkPermissions();
     if (p.display !== "granted") await LocalNotifications.requestPermissions();
     await LocalNotifications.schedule({ notifications: fresh.map((x, i) => ({
-      id: 7100 + i, title: "⚠️ هشدار تأمین موجودی", body: (() => { const supplier = alertParties.find(p => p.id === x.product.supplierId); return x.product.name + ": " + x.stock + " " + x.product.unit + " باقی مانده؛ " + (supplier ? "تأمین‌کننده: " + supplier.name + (supplier.phone ? " | " + supplier.phone : "") + "؛ " : "") + "نیاز به تأمین دارد."; })(),",
+      id: 7100 + i, title: "⚠️ هشدار تأمین موجودی", body: (() => { const supplier = alertParties.find(p => p.id === x.product.supplierId); return x.product.name + ": " + x.stock + " " + x.product.unit + " باقی مانده؛ " + (supplier ? "تأمین‌کننده: " + supplier.name + (supplier.phone ? " | " + supplier.phone : "") + "؛ " : "") + "نیاز به تأمین دارد."; })(),
       schedule: { at: new Date(Date.now() + 1000) }
     })) });
   } catch {}
