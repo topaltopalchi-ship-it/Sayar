@@ -3,6 +3,9 @@ export type Money = number; // integer rial
 
 export type Unit = "عدد" | "کیلوگرم" | "گرم" | "لیتر" | "متر" | "بسته";
 
+export type MarketBasis = "none" | "dollar" | "gold" | "market";
+export type CustomerTier = "regular" | "silver" | "gold";
+
 export interface Product {
   id: ID;
   name: string;
@@ -12,6 +15,10 @@ export interface Product {
   purchasePrice: Money;
   lowStock: number;
   supplierId?: ID;
+  marketBasis?: MarketBasis;
+  marketReferenceRate?: number;
+  targetMarginPercent?: number;
+  minMarginPercent?: number;
   createdAt: number;
   active: boolean;
 }
@@ -23,6 +30,8 @@ export interface Party {
   name: string;
   phone: string;
   type: PartyType;
+  customerTier?: CustomerTier;
+  tierLocked?: boolean;
   createdAt: number;
 }
 
