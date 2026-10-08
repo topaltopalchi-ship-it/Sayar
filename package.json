@@ -24,6 +24,7 @@
     "@capacitor/share": "^7.0.4",
     "@gingersnapsoftware/capacitor-plugin-printer": "^0.0.15",
     "xlsx": "^0.18.5",
-    "html2canvas": "^1.4.1"
+    "html2canvas": "^1.4.1",
+    "@capacitor/app": "^7.4.3"
   }
 }
