@@ -115,7 +115,8 @@ export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise
       });
       const transcript = result.matches?.[0]?.trim() || "";
       if (!transcript) throw new Error("صدایی تشخیص داده نشد");
-      const draft = parseVoiceSale(transcript);\n      speakSaiSai("صدایتان را شنیدم. اطلاعات فروش آماده بررسی است.");
+      const draft = parseVoiceSale(transcript);
+      speakSaiSai("صدایتان را شنیدم. اطلاعات فروش آماده بررسی است.");
       const m = showVoiceModal(
         '<div class="modal-backdrop" id="voice-sale-modal"><section class="modal" role="dialog" aria-modal="true">' +
         '<button class="modal-close" id="voice-close">×</button><span class="eyebrow">ثبت فروش با صدا</span><h2>اطلاعات فروش</h2>' +
