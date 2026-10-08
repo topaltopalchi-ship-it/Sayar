@@ -100,10 +100,30 @@ export async function deleteProduct(productId: string): Promise<void> {
   });
 }
 
-export async function addProduct(input: Omit<Product, "id" | "createdAt" | "active">): Promise<Product> {
+export async function addProduct(
+  input: Omit<Product, "id" | "createdAt" | "active">,
+  initialStock = 0,
+): Promise<Product> {
   const product: Product = { ...input, id: newId(), createdAt: Date.now(), active: true };
-  await put("products", product);
-  return product;
+  const openingQuantity = Number.isFinite(initialStock) ? Math.max(0, initialStock) : 0;
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(["products", "movements"], "readwrite");
+    tx.objectStore("products").put(product);
+    if (openingQuantity > 0) {
+      tx.objectStore("movements").put({
+        id: newId(),
+        productId: product.id,
+        date: Date.now(),
+        type: "adjustment",
+        quantity: openingQuantity,
+        referenceId: product.id,
+      } satisfies StockMovement);
+    }
+    tx.oncomplete = () => resolve(product);
+    tx.onerror = () => reject(tx.error ?? new Error("ذخیره کالا ناموفق بود"));
+    tx.onabort = () => reject(tx.error ?? new Error("ذخیره کالا ناموفق بود"));
+  });
 }
 
 export async function updateParty(party: Party): Promise<void> { await put("parties", party); }
@@ -193,11 +213,10 @@ export async function updateTransaction(id: string, input: {
   const products = await listProducts();
   const movements = await listMovements();
   if (current.type === "sale") {
-    const stock = new Map(products.map(p => [p.id, 0]));
-    for (const m of movements) if (m.referenceId !== id) stock.set(m.productId, (stock.get(m.productId) ?? 0) + m.quantity);
     for (const line of input.lines) {
       if (line.quantity <= 0) throw new Error("مقدار کالا باید بیشتر از صفر باشد");
-      if ((stock.get(line.productId) ?? 0) < line.quantity) throw new Error("موجودی کالا برای این فروش کافی نیست");
+      const available = await getStock(line.productId, id);
+      if (available < line.quantity) throw new Error("موجودی کالا برای این فروش کافی نیست");
     }
   }
   const amount = current.type === "receipt" || current.type === "payment" ? Math.max(0, Math.round(input.paid)) : transactionTotal(input.lines);
@@ -318,8 +337,8 @@ export async function getDashboard(): Promise<Dashboard> {
   const purchasesDebt = transactions.filter(t => t.type === "purchase").reduce((s,t)=>s+Math.max(0,t.amount-t.paid),0);
   const payments = transactions.filter(t => t.type === "payment").reduce((s,t)=>s+t.paid,0);
 
-  const quantities = new Map<string, number>();
-  for (const movement of movements) quantities.set(movement.productId, (quantities.get(movement.productId) ?? 0) + movement.quantity);
+  const stockEntries = await Promise.all(products.map(async p => [p.id, await getStock(p.id)] as const));
+  const quantities = new Map(stockEntries);
 
   return {
     salesToday,
@@ -332,15 +351,12 @@ export async function getDashboard(): Promise<Dashboard> {
   };
 }
 
-export async function getStock(productId: string): Promise<number> {
+export async function getStock(productId: string, excludeTransactionId?: string): Promise<number> {
   const [movements, transactions] = await Promise.all([
     getAll<StockMovement>("movements"),
     listTransactions(),
   ]);
 
-  // The stock ledger is authoritative. For older/local data where a purchase
-  // or sale exists without its movement row, include that transaction once
-  // so the UI does not incorrectly report zero stock.
   const productMovements = movements.filter(m => m.productId === productId);
   const movementReferences = new Set(
     productMovements.map(m => m.referenceId).filter(Boolean),
@@ -348,7 +364,10 @@ export async function getStock(productId: string): Promise<number> {
 
   let stock = productMovements.reduce((sum, movement) => sum + movement.quantity, 0);
 
+  // Backward compatibility: some older/local records can contain a purchase
+  // or sale without a movement row. Rebuild those quantities from transactions.
   for (const transaction of transactions) {
+    if (transaction.id === excludeTransactionId) continue;
     if (movementReferences.has(transaction.id)) continue;
     if (transaction.type !== "purchase" && transaction.type !== "sale") continue;
 
