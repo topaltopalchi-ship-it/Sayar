@@ -27,6 +27,6 @@
     "html2canvas": "^1.4.1",
     "@capacitor/app": "^7.1.2",
     "@capacitor/local-notifications": "^7.0.7",
-    "@capacitor-community/speech-recognition": "^7.0.1"
+    "@capacitor-community/speech-recognition": "npm:@capgo/capacitor-speech-recognition@7.0.0"
   }
 }
