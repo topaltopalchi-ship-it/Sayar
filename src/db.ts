@@ -762,9 +762,28 @@ export async function updateCheck(id: string, patch: Partial<Check>): Promise<vo
   const items = await listChecks();
   const current = items.find(x => x.id === id);
   if (!current) throw new Error("چک پیدا نشد");
+
+  const nextStatus = patch.status ?? current.status;
+  if (current.clearedEntryId && nextStatus !== "cleared") {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(["checks", "accountEntries"], "readwrite");
+      tx.objectStore("accountEntries").delete(current.clearedEntryId!);
+      tx.objectStore("checks").put({
+        ...current, ...patch, id,
+        status: nextStatus,
+        clearedEntryId: undefined,
+        accountId: nextStatus === "pending" ? undefined : (patch.accountId ?? current.accountId),
+      } as Check);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? new Error("اصلاح وضعیت چک ناموفق بود"));
+      tx.onabort = () => reject(tx.error ?? new Error("اصلاح وضعیت چک ناموفق بود"));
+    });
+    return;
+  }
+
   await put("checks", { ...current, ...patch, id } as Check);
 }
-
 export async function clearCheck(id: string, accountId: string): Promise<void> {
   if (!accountId) throw new Error("انتخاب حساب مالی الزامی است");
   const db = await openDb();
