@@ -154,15 +154,39 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
   const button = document.querySelector<HTMLButtonElement>("#voice-query");
   if (!button) return;
   button.addEventListener("click", async () => {
+    const available = await SpeechRecognition.available().catch(() => ({ available: false }));
+    if (!available.available) {
+      notify("تشخیص صدا در این دستگاه در دسترس نیست");
+      return;
+    }
+    const permission = await SpeechRecognition.requestPermissions().catch(() => null);
+    if (permission && permission.speechRecognition !== "granted") {
+      notify("اجازه دسترسی به میکروفون و تشخیص صدا لازم است");
+      return;
+    }
     button.disabled = true;
+    const originalLabel = button.textContent || "🔊 از سای‌سای بپرس";
+    button.textContent = "🎙 در حال شنیدن…";
     try {
-      const result = await SpeechRecognition.start({ language: "fa-IR", maxResults: 1, partialResults: false, popup: true, prompt: "سؤال خود را از سای‌سای بپرسید" });
+      const result = await SpeechRecognition.start({
+        language: "fa-IR",
+        maxResults: 1,
+        partialResults: false,
+        popup: true,
+        prompt: "سؤال خود را از سای‌سای بپرسید"
+      });
       const question = result.matches?.[0]?.trim() || "";
       if (!question) throw new Error("سؤالی تشخیص داده نشد");
       const answer = await onAnswer(question);
       speakSaiSai(answer);
       notify(answer);
-    } catch (error) { notify(error instanceof Error ? error.message : "پاسخ‌گویی ناموفق بود"); }
-    finally { button.disabled = false; }
+    } catch (error) {
+      if (!/cancel|abort/i.test(error instanceof Error ? error.name + error.message : String(error))) {
+        notify(error instanceof Error ? error.message : "پاسخ‌گویی ناموفق بود");
+      }
+    } finally {
+      button.disabled = false;
+      button.textContent = originalLabel;
+    }
   });
 }
