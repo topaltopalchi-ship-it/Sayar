@@ -414,33 +414,29 @@ export async function getDashboard(): Promise<Dashboard> {
 }
 
 export async function getStock(productId: string, excludeTransactionId?: string): Promise<number> {
-  // Inventory source of truth:
-  // 1) explicit stock adjustments (opening balance / manual corrections)
-  // 2) purchase and sale transaction lines
-  //
-  // Do not depend on sale/purchase movement rows here. Older app versions could
-  // have missing or stale movement rows, which made the UI show zero even when
-  // the actual purchase/sale transaction existed.
+  // Purchase/sale quantities come from the transaction ledger, which is the
+  // source of truth. Only manual opening/adjustment movements are read from
+  // the movements store. This prevents a missing or stale movement row from
+  // making inventory appear as zero.
   const [movements, transactions] = await Promise.all([
     getAll<StockMovement>("movements"),
     listTransactions(),
   ]);
 
-  let stock = movements
+  const adjustmentStock = movements
     .filter(m => m.productId === productId && m.type === "adjustment")
-    .reduce((sum, movement) => sum + movement.quantity, 0);
+    .reduce((sum, movement) => sum + Number(movement.quantity || 0), 0);
 
-  for (const transaction of transactions) {
-    if (transaction.id === excludeTransactionId) continue;
-    if (transaction.type !== "purchase" && transaction.type !== "sale") continue;
+  const transactionStock = transactions
+    .filter(t => t.id !== excludeTransactionId && (t.type === "purchase" || t.type === "sale"))
+    .reduce((sum, transaction) => {
+      const quantity = transaction.lines
+        .filter(line => line.productId === productId)
+        .reduce((lineSum, line) => lineSum + Number(line.quantity || 0), 0);
+      return sum + (transaction.type === "purchase" ? quantity : -quantity);
+    }, 0);
 
-    for (const line of transaction.lines) {
-      if (line.productId !== productId) continue;
-      stock += transaction.type === "purchase" ? line.quantity : -line.quantity;
-    }
-  }
-
-  return Number.isFinite(stock) ? stock : 0;
+  return adjustmentStock + transactionStock;
 }
 
 export interface PartyBalance {
