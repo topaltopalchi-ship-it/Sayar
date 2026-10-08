@@ -128,3 +128,43 @@ body{background:radial-gradient(circle at 12% 0,#223657 0,#10182a 34%,#090e1b 78
 /* Keep report controls from being recolored by Android/WebView darkening. */
 .report-range button{color-scheme:dark;forced-color-adjust:none;background-color:#2b4266!important;color:#fff!important;-webkit-text-fill-color:#fff!important}
 .report-range button span{display:block;color:#fff!important;-webkit-text-fill-color:#fff!important}
+
+/* Report date fields: split year/month/day so Android WebView cannot remove the visual separators. */
+.report-date-parts{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  direction:ltr;
+  min-height:58px;
+  padding:6px 10px;
+  background:#fff!important;
+  border:1px solid #d6deeb;
+  border-radius:14px;
+  box-sizing:border-box;
+}
+.report-date-parts input{
+  appearance:none;
+  -webkit-appearance:none;
+  border:0!important;
+  outline:0;
+  background:transparent!important;
+  color:#111827!important;
+  -webkit-text-fill-color:#111827!important;
+  text-align:center;
+  font-size:17px!important;
+  font-weight:700;
+  min-width:0;
+  padding:8px 2px;
+}
+.report-date-parts input[id$="-year"]{width:62px}
+.report-date-parts input[id$="-month"],
+.report-date-parts input[id$="-day"]{width:34px}
+.report-date-separator{
+  color:#111827!important;
+  font-size:20px;
+  font-weight:800;
+  line-height:1;
+  user-select:none;
+  -webkit-user-select:none;
+}
