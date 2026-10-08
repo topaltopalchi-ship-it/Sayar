@@ -788,7 +788,46 @@ async function saveVoiceProduct(draft: VoiceProductDraft): Promise<void> {
 function bindProductModal(): void {
   const modal = document.querySelector<HTMLDivElement>("#product-modal")!;
   modal.querySelector("#product-close")?.addEventListener("click", () => modal.remove());
-  modal.querySelector("#photo-product")?.addEventListener("click", () => { if(!getVisionApiKey()){document.body.insertAdjacentHTML("beforeend",visionSettingsModal());bindVisionSettingsModal();showToast("ابتدا کلید هوش تصویری را وارد کنید");return;} const input=document.createElement("input");input.type="file";input.accept="image/*";input.capture="environment";input.onchange=async()=>{const file=input.files?.[0];if(!file)return;const b=modal.querySelector<HTMLButtonElement>("#photo-product");if(b){b.disabled=true;b.textContent="📷 در حال تحلیل تصویر…";}try{const r=await analyzeProductPhoto(file);if(!r.name)throw new Error("نام کالا از تصویر تشخیص داده نشد");const n=modal.querySelector<HTMLInputElement>("#p-name");if(n)n.value=r.name;const s=modal.querySelector<HTMLInputElement>("#p-sku");if(s&&r.sku)s.value=r.sku;const u=modal.querySelector<HTMLSelectElement>("#p-unit");if(u)u.value=r.unit;showToast("نام کالا از روی عکس تشخیص داده شد؛ لطفاً بررسی کنید");}catch(e){showToast(e instanceof Error?e.message:"تشخیص تصویر ناموفق بود");}finally{if(b){b.disabled=false;b.textContent="📷 شناسایی کالا از روی عکس";}}};input.click(); });
+  modal.querySelector("#photo-product")?.addEventListener("click", () => {
+    if (!getVisionApiKey()) {
+      document.body.insertAdjacentHTML("beforeend", visionSettingsModal());
+      bindVisionSettingsModal();
+      showToast("ابتدا کلید هوش تصویری را وارد کنید");
+      return;
+    }
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.capture = "environment";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const button = modal.querySelector<HTMLButtonElement>("#photo-product");
+      if (button) {
+        button.disabled = true;
+        button.textContent = "📷 در حال تحلیل تصویر…";
+      }
+      try {
+        const result = await analyzeProductPhoto(file);
+        if (!result.name) throw new Error("نام کالا از تصویر تشخیص داده نشد");
+        const name = modal.querySelector<HTMLInputElement>("#p-name");
+        const sku = modal.querySelector<HTMLInputElement>("#p-sku");
+        const unit = modal.querySelector<HTMLSelectElement>("#p-unit");
+        if (name) name.value = result.name;
+        if (sku && result.sku) sku.value = result.sku;
+        if (unit) unit.value = result.unit;
+        showToast("نام کالا از روی عکس تشخیص داده شد؛ لطفاً بررسی کنید");
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "تشخیص تصویر ناموفق بود");
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = "📷 شناسایی کالا از روی عکس";
+        }
+      }
+    };
+    input.click();
+  });
   const voicePhotoButton = modal.querySelector<HTMLButtonElement>("#voice-photo-product");
   if (voicePhotoButton && !modal.dataset.editId) {
     bindVoiceProductFieldAssistant(voicePhotoButton, showToast, async draft => {
