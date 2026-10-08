@@ -153,6 +153,7 @@ export function bindVoiceProductFieldAssistant(
     button.disabled = true;
     button.textContent = "🎙 در حال شنیدن…";
     try {
+      await prepareSpeechRecognition();
       const result = await SpeechRecognition.start({
         language: "fa-IR",
         maxResults: 3,
@@ -185,6 +186,7 @@ export function bindVoiceProductAssistant(onConfirm: (draft: VoiceProductDraft) 
     if (permission && permission.speechRecognition !== "granted") { notify("اجازه دسترسی به میکروفون و تشخیص صدا لازم است"); return; }
     button.disabled=true; button.textContent="🎙 در حال شنیدن…";
     try {
+      await prepareSpeechRecognition();
       const result=await SpeechRecognition.start({ language:"fa-IR", maxResults:3, partialResults:false, popup: false, prompt:"مشخصات کالا را به فارسی بگویید" });
       const transcript=result.matches?.[0]?.trim() || "";
       if (!transcript) throw new Error("مشخصات کالا تشخیص داده نشد");
@@ -266,6 +268,7 @@ export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise
     button.disabled = true;
     button.textContent = "🎙 در حال شنیدن…";
     try {
+      await prepareSpeechRecognition();
       const result = await SpeechRecognition.start({
         language: "fa-IR",
         maxResults: 3,
@@ -328,6 +331,7 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
     const originalLabel = button.textContent || "🔊 از سای‌سای بپرس";
     button.textContent = "🎙 در حال شنیدن…";
     try {
+      await prepareSpeechRecognition();
       const result = await SpeechRecognition.start({
         language: "fa-IR",
         maxResults: 1,
