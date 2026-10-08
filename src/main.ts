@@ -22,7 +22,7 @@ import { jalaliToGregorianDate, todayJalaliInput, formatJalaliInput, toPersianDi
 import { bindVoiceAssistant, bindVoiceQuestionAssistant, bindVoiceProductAssistant, bindVoiceProductFieldAssistant, type VoiceSaleDraft, type VoiceSaleItem, type VoiceProductDraft } from "./voice-assistant";
 import { getCustomerTier, getMarketSettings, setMarketSettings, recommendPrice, tierLabel } from "./pricing";
 import { buildBusinessInsights, dailyBrief, customerScore, type BusinessInsight } from "./intelligence";
-import { analyzeProductPhoto, getVisionApiKey, setVisionApiKey } from "./product-vision";
+import { analyzeProductPhoto } from "./product-vision";
 
 type Tab = "dashboard" | "sales" | "purchases" | "orders" | "inventory" | "people" | "reports" | "more" | "checks";
 
@@ -81,8 +81,8 @@ function bindSettingsModal(): void {
     showToast("واحد مبلغ ذخیره شد");
   });
 }
-function visionSettingsModal(): string { const key=getVisionApiKey(); return '<div class="modal-backdrop" id="vision-settings-modal"><section class="modal"><button class="modal-close" id="vision-close">×</button><span class="eyebrow">هوش تصویری سای‌سای</span><h2>شناساگر کالا از روی عکس</h2><p class="muted">برای تشخیص نام کالا از روی عکس، کلید OpenAI API لازم است.</p><label class="field"><span>کلید Gemini API</span><input id="vision-api-key" type="password" value="'+key+'" placeholder="AIza..."></label><p class="muted">فعلاً کلید روی همین دستگاه ذخیره می‌شود؛ نسخه نهایی بهتر است از سرور امن استفاده کند.</p><button class="primary-button wide" id="vision-save">ذخیره</button></section></div>'; }
-function bindVisionSettingsModal(): void { const m=document.querySelector<HTMLDivElement>("#vision-settings-modal"); if(!m)return; m.querySelector("#vision-close")?.addEventListener("click",()=>m.remove()); m.querySelector("#vision-save")?.addEventListener("click",()=>{setVisionApiKey(m.querySelector<HTMLInputElement>("#vision-api-key")?.value||"");m.remove();showToast("تنظیمات هوش تصویری ذخیره شد");}); }
+function visionSettingsModal(): string { return '<div class="modal-backdrop" id="vision-settings-modal"><section class="modal"><button class="modal-close" id="vision-close">×</button><span class="eyebrow">هوش تصویری سای‌سای</span><h2>خواندن نوشته‌های کالا</h2><p class="muted">بدون ثبت‌نام و کلید API. متن فارسی و انگلیسی روی تصویر در خود برنامه خوانده می‌شود. برای دریافت داده‌های زبان در اولین استفاده، اینترنت لازم است؛ سپس پردازش تصویر روی دستگاه انجام می‌شود. پیشنهاد نام ممکن است نیاز به اصلاح دستی داشته باشد.</p><button class="primary-button wide" id="vision-save">متوجه شدم</button></section></div>'; }
+function bindVisionSettingsModal(): void { const m=document.querySelector<HTMLDivElement>("#vision-settings-modal"); if(!m)return; m.querySelector("#vision-close")?.addEventListener("click",()=>m.remove()); m.querySelector("#vision-save")?.addEventListener("click",()=>m.remove()); }
 function pricingSettingsModal(): string {
   const s = getMarketSettings();
   return `<div class="modal-backdrop" id="pricing-settings-modal"><section class="modal"><button class="modal-close" id="pricing-close">×</button>
@@ -887,12 +887,6 @@ function bindProductModal(): void {
   const modal = document.querySelector<HTMLDivElement>("#product-modal")!;
   modal.querySelector("#product-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#photo-product")?.addEventListener("click", () => {
-    if (!getVisionApiKey()) {
-      document.body.insertAdjacentHTML("beforeend", visionSettingsModal());
-      bindVisionSettingsModal();
-      showToast("ابتدا کلید هوش تصویری را وارد کنید");
-      return;
-    }
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
@@ -938,12 +932,6 @@ function bindProductModal(): void {
       if (draft.salePrice > 0 && sale) sale.value = String(draft.salePrice);
       if (draft.lowStock > 0 && low) low.value = String(draft.lowStock);
 
-      if (!getVisionApiKey()) {
-        document.body.insertAdjacentHTML("beforeend", visionSettingsModal());
-        bindVisionSettingsModal();
-        showToast("اطلاعات عددی ثبت شد؛ ابتدا کلید هوش تصویری را وارد کنید");
-        return;
-      }
       const input = document.createElement("input");
       input.type = "file";
       input.accept = "image/*";
@@ -989,12 +977,6 @@ function bindProductModal(): void {
         showToast("عکس و اطلاعات صوتی با هم ترکیب شدند؛ حالا ثبت کالا را بزنید");
       },
       async () => {
-        if (!getVisionApiKey()) {
-          document.body.insertAdjacentHTML("beforeend", visionSettingsModal());
-          bindVisionSettingsModal();
-          showToast("ابتدا کلید هوش تصویری را وارد کنید");
-          return false;
-        }
         const input = document.createElement("input");
         input.type = "file";
         input.accept = "image/*";
