@@ -313,15 +313,15 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
         : await addSale({ date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
       modal.remove();
 
-      // Open the invoice immediately after the database transaction completes.
-      // Rendering the app first could race with Android WebView's overlay/paint cycle.
+      // Finish the screen render first, then mount the invoice overlay.
+      // This avoids Android WebView repainting over an invoice that was mounted
+      // while the underlying #app tree was still being replaced.
+      await render();
       try {
         await openInvoice(savedSale);
       } catch (error) {
         showToast(error instanceof Error ? `فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود: ${error.message}` : "فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود");
       }
-
-      await render();
       showToast(`${existing ? "فاکتور ویرایش شد" : "فروش ثبت شد"}؛ مانده ${rial(amount - paidValue)}`);
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت فروش ناموفق بود"); }
   });
@@ -454,10 +454,10 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
       <span class="report-date-separator" aria-hidden="true">/</span>
       <input id="report-${prefix}-day" data-report-date-part type="tel" inputmode="numeric" maxlength="2" value="${parts.day}" aria-label="روز">
     </div>`;
-  const summary = `<section class="panel report-list"><div class="report-range" role="group" aria-label="بازه گزارش"><div class="report-range-item" role="button" tabindex="0" data-report-range="today">امروز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="week">۷ روز</div><div class="report-range-item" role="button" tabindex="0" data-report-range="month">ماه جاری</div><div class="report-range-item" role="button" tabindex="0" data-report-range="all">همه</div></div><form id="report-range-form" class="report-custom-range">
+  const summary = `<section class="panel report-list"><div class="report-range" role="group" aria-label="بازه گزارش"><button type="button" class="report-range-item" data-report-range="today">امروز</button><button type="button" class="report-range-item" data-report-range="week">۷ روز</button><button type="button" class="report-range-item" data-report-range="month">ماه جاری</button><button type="button" class="report-range-item" data-report-range="all">همه</button></div><form id="report-range-form" class="report-custom-range">
   <label class="field"><span>از تاریخ شمسی</span>${dateField("from", fromParts)}</label>
   <label class="field"><span>تا تاریخ شمسی</span>${dateField("to", toParts)}</label>
-  <button type="button" class="primary-button wide" id="report-apply-range">اعمال بازه</button>
+  <button type="submit" class="primary-button wide" id="report-apply-range">اعمال بازه</button>
 </form><p class="muted">بازه فعال: ${label}</p></section>`;
   const stats = `<section class="stats-grid">${stat("فروش",rial(sales),"primary")}${stat("بهای تمام‌شده",rial(cost),"warning")}${stat("سود ناخالص",rial(gross),"success")}${stat("سود خالص",rial(net),"success")}</section>`;
   const cash = `<section class="panel report-list"><div><span>خرید</span><b>${rial(purchases)}</b></div><div><span>هزینه</span><b>${rial(expenseTotal)}</b></div><div><span>دریافت</span><b>${rial(receipts)}</b></div><div><span>پرداخت</span><b>${rial(payments)}</b></div><div><span>خالص جریان نقدی</span><b>${rial(receipts-payments-expenseTotal)}</b></div><div><span>تعداد فروش</span><b>${money.format(salesTx.length)}</b></div></section>`;
@@ -747,46 +747,20 @@ async function bindActions(): Promise<void> {
 function bindReportControls(): void {
   if (activeTab !== "reports") return;
 
-  const normalizeCombined = (input: HTMLInputElement) => {
-    const raw = input.value
-      .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
-      .replace(/[^0-9]/g, "")
-      .slice(0, 8);
-    let formatted = raw;
-    if (raw.length > 4) formatted = `${raw.slice(0, 4)}/${raw.slice(4, 6)}`;
-    if (raw.length > 6) formatted = `${raw.slice(0, 4)}/${raw.slice(4, 6)}/${raw.slice(6, 8)}`;
-    input.value = formatted;
-  };
-
-  document.querySelectorAll<HTMLInputElement>("[data-jalali-input]").forEach(input => {
-    const normalize = () => normalizeCombined(input);
-    normalize();
-    window.requestAnimationFrame(normalize);
-    window.setTimeout(normalize, 0);
-    let attempts = 0;
-    const timer = window.setInterval(() => {
-      normalize();
-      attempts += 1;
-      if (attempts >= 20) window.clearInterval(timer);
-    }, 50);
-    input.addEventListener("input", normalize);
-    input.addEventListener("change", normalize);
-    input.addEventListener("blur", normalize);
-    input.addEventListener("focus", normalize);
-    input.addEventListener("click", normalize);
-  });
-
   document.querySelectorAll<HTMLInputElement>("[data-report-date-part]").forEach(input => {
     const normalize = () => {
       input.value = input.value
         .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+        .replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
         .replace(/[^0-9]/g, "")
         .slice(0, Number(input.maxLength) || 2);
     };
+
     input.addEventListener("input", normalize);
     input.addEventListener("change", normalize);
     input.addEventListener("blur", normalize);
     normalize();
+
     input.addEventListener("input", () => {
       if (input.value.length < Number(input.maxLength)) return;
       const nextId = input.id.includes("year")
@@ -798,14 +772,18 @@ function bindReportControls(): void {
     });
   });
 
-  document.querySelectorAll<HTMLElement>("[data-report-range]").forEach(button => {
-    button.setAttribute("aria-pressed", (button.dataset.reportRange || "month") === (localStorage.getItem("sai-sai-report-range") || "month") ? "true" : "false");
-    button.addEventListener("keydown", async event => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
+  document.querySelectorAll<HTMLButtonElement>("[data-report-range]").forEach(button => {
+    const selected = (button.dataset.reportRange || "month") === (localStorage.getItem("sai-sai-report-range") || "month");
+    button.setAttribute("aria-pressed", selected ? "true" : "false");
+    button.addEventListener("click", async () => {
       localStorage.setItem("sai-sai-report-range", button.dataset.reportRange || "month");
       await render();
     });
+  });
+
+  document.querySelector<HTMLFormElement>("#report-range-form")?.addEventListener("submit", async event => {
+    event.preventDefault();
+    await applyReportRange();
   });
 }
 
