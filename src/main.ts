@@ -219,18 +219,26 @@ function invoiceModal(t: Transaction, productMap: Map<string, Product>, partyMap
   const title = t.type === "purchase" ? "فاکتور خرید" : "فاکتور فروش";
   return `<div class="modal-backdrop invoice-backdrop" id="invoice-modal"><section class="modal invoice-modal">
     <button class="modal-close no-print" id="invoice-close">×</button>
-    <div class="invoice-head"><div><span class="eyebrow">سای‌سای</span><h2>${title}</h2><p>${t.invoiceNumber || "بدون شماره"} · ${dateLabel(t.date)}</p></div><div class="invoice-brand">س</div></div>
+    <div class="invoice-cover">
+      <div><span class="invoice-kicker">سای‌سای · مدیریت مالی و فروش</span><h2>${title}</h2><p>${t.invoiceNumber || "بدون شماره"} · ${dateLabel(t.date)}</p></div>
+      <div class="invoice-logo">سای</div>
+    </div>
     ${t.type === "sale" && t.amount > t.paid ? '<div class="invoice-unsettled">تسویه نشده</div>' : ''}
-    <div class="invoice-party"><span>طرف حساب</span><strong>${party?.name || "ثبت نشده"}</strong><small>${party?.phone || "بدون شماره تماس"}</small></div>
+    <div class="invoice-party-card"><div><span>طرف حساب</span><strong>${party?.name || "ثبت نشده"}</strong></div><div><span>تماس</span><strong>${party?.phone || "—"}</strong></div></div>
+    <div class="invoice-section-title">اقلام فاکتور</div>
     <div class="invoice-table-wrap"><table class="invoice-table"><thead><tr><th>#</th><th>کالا</th><th>مقدار</th><th>قیمت</th><th>تخفیف</th><th>جمع</th></tr></thead><tbody>${rows || '<tr><td colspan="6">بدون ردیف</td></tr>'}</tbody></table></div>
-    <div class="invoice-summary"><div><span>جمع فاکتور</span><b>${rial(t.amount)}</b></div><div><span>پرداخت‌شده</span><b>${rial(t.paid)}</b></div><div class="invoice-balance"><span>مانده</span><b>${rial(Math.max(0, t.amount - t.paid))}</b></div></div>
+    <div class="invoice-summary">
+      <div><span>جمع فاکتور</span><b>${rial(t.amount)}</b></div>
+      <div><span>پرداخت‌شده</span><b>${rial(t.paid)}</b></div>
+      <div class="invoice-balance"><span>مانده</span><b>${rial(Math.max(0, t.amount - t.paid))}</b></div>
+    </div>
     <div class="invoice-signatures">
       ${getInvoiceBranding().showSlogan && getInvoiceBranding().slogan ? '<img class="invoice-slogan" src="' + getInvoiceBranding().slogan + '" alt="شعار">' : ''}
       ${getInvoiceBranding().showStamp && getInvoiceBranding().stamp ? '<img class="invoice-stamp" src="' + getInvoiceBranding().stamp + '" alt="مهر">' : ''}
       ${getInvoiceBranding().showSignature && getInvoiceBranding().signature ? '<img class="invoice-signature" src="' + getInvoiceBranding().signature + '" alt="امضا">' : ''}
     </div>
     <div class="invoice-branding no-print"><button class="secondary-button" id="invoice-branding-settings">⚙ امضا، مهر و شعار</button></div>
-    <div class="invoice-actions no-print"><button class="secondary-button" id="invoice-share">اشتراک‌گذاری فاکتور</button><button class="primary-button" id="invoice-print">چاپ / ذخیره PDF</button></div>
+    <div class="invoice-actions no-print"><button class="secondary-button" id="invoice-share">ارسال فاکتور</button><button class="primary-button" id="invoice-print">چاپ / ذخیره PDF</button></div>
   </section></div>`;
 }
 
