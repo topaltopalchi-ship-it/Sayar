@@ -1,4 +1,9 @@
 import "./style.css";
+import { Capacitor } from "@capacitor/core";
+import { Filesystem, Directory } from "@capacitor/filesystem";
+import { Share } from "@capacitor/share";
+import { Printer } from "@gingersnapsoftware/capacitor-plugin-printer";
+import * as XLSX from "xlsx";
 import {
   addParty, addProduct, updateProduct, deleteProduct, addSale, addSettlement, addExpense, addStockAdjustment, getDashboard, getStock, updateTransaction, deleteTransaction, updateExpense, deleteExpense,
   listParties, updateParty, deleteParty, listProducts, listTransactions, listExpenses, listMovements, calculateHistoricalCOGS, repairDataIntegrity
@@ -602,29 +607,63 @@ async function subscribe(): Promise<void> {
 }
 
 
-function formatReportDateInput(input: HTMLInputElement): void {
-  const raw = input.value
+function compactJalaliInput(value: string): string {
+  return value
     .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+    .replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
     .replace(/[^0-9]/g, "")
     .slice(0, 8);
-
-  let formatted = raw;
-  if (raw.length > 4) formatted = `${raw.slice(0, 4)}/${raw.slice(4, 6)}`;
-  if (raw.length > 6) formatted = `${raw.slice(0, 4)}/${raw.slice(4, 6)}/${raw.slice(6, 8)}`;
-
-  if (input.value !== formatted) input.value = formatted;
 }
 
-function enforceReportDateFormat(input: HTMLInputElement): void {
-  const normalize = () => formatReportDateInput(input);
+function nativeApp(): boolean {
+  return Capacitor.isNativePlatform();
+}
 
-  normalize();
-  // Android WebView/IME may restore the raw value after the page is rendered.
-  // Re-apply the display format at several points during the first few seconds.
-  [0, 50, 150, 300, 600, 1000, 2000, 4000].forEach(delay => {
-    window.setTimeout(normalize, delay);
+async function shareBase64File(filename: string, base64: string, title: string): Promise<void> {
+  if (!nativeApp()) {
+    const bytes = Uint8Array.from(atob(base64), char => char.charCodeAt(0));
+    const blob = new Blob([bytes], { type: "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast("فایل آماده شد");
+    return;
+  }
+  const result = await Filesystem.writeFile({
+    path: `sai-sai/${Date.now()}-${filename}`,
+    data: base64,
+    directory: Directory.Cache,
   });
-  window.requestAnimationFrame(normalize);
+  await Share.share({ title, files: [result.uri], dialogTitle: "ارسال یا ذخیره فایل" });
+}
+
+async function printHtml(title: string, bodyHtml: string, orientation: "portrait" | "landscape" = "portrait"): Promise<void> {
+  if (!nativeApp()) {
+    window.print();
+    return;
+  }
+  const html = `<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><style>
+    *{box-sizing:border-box}body{font-family:Tahoma,Arial,sans-serif;color:#111;background:#fff;padding:20px;direction:rtl}
+    table{width:100%;border-collapse:collapse;margin:16px 0}th,td{border:1px solid #bbb;padding:7px;text-align:right}
+    h1,h2,h3{margin:0 0 10px}.no-print{display:none!important}.invoice-summary{display:grid;gap:8px;margin-top:18px}
+    .invoice-summary>div{display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #ddd}
+    .invoice-party{margin:14px 0;padding:10px;border:1px solid #ccc}.report-list{margin:14px 0;padding:10px;border:1px solid #ddd}
+  </style></head><body>${bodyHtml}</body></html>`;
+  await Printer.print({ content: html, name: title, orientation });
+}
+
+function buildReportWorkbook(transactions: Transaction[], expenses: import("./domain").Expense[]): XLSX.WorkBook {
+  const rows: (string | number)[][] = [["نوع","شماره فاکتور","تاریخ","مبلغ","پرداخت","شرح"]];
+  for (const t of transactions) rows.push([t.type, t.invoiceNumber || "", dateLabel(t.date), t.amount, t.paid, t.description || ""]);
+  const expenseRows: (string | number)[][] = [["تاریخ","عنوان","مبلغ","شرح"]];
+  for (const e of expenses) expenseRows.push([dateLabel(e.date), e.title, e.amount, e.description || ""]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), "تراکنش‌ها");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(expenseRows), "هزینه‌ها");
+  return wb;
 }
 
 async function applyReportRange(): Promise<void> {
