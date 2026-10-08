@@ -48,7 +48,7 @@ function showVoiceModal(html: string): HTMLElement {
   return document.querySelector<HTMLElement>("#voice-sale-modal")!;
 }
 
-export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise<void>): void {
+export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise<void>, notify: (message: string) => void): void {
   const button = document.querySelector<HTMLButtonElement>("#voice-sale");
   if (!button) return;
 
@@ -63,7 +63,7 @@ export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise
 
     const permission = await SpeechRecognition.requestPermissions().catch(() => null);
     if (permission && permission.speechRecognition !== "granted") {
-      showToast("اجازه دسترسی به میکروفون و تشخیص صدا لازم است");
+      notify("اجازه دسترسی به میکروفون و تشخیص صدا لازم است");
       return;
     }
 
@@ -103,7 +103,7 @@ export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise
       m.querySelector("#voice-confirm")?.addEventListener("click", async () => { m.remove(); await onConfirm(draft); });
     } catch (error) {
       if (!/cancel|abort/i.test(error instanceof Error ? error.name + error.message : String(error))) {
-        showToast(error instanceof Error ? error.message : "تشخیص صدا ناموفق بود");
+        notify(error instanceof Error ? error.message : "تشخیص صدا ناموفق بود");
       }
     } finally {
       button.disabled = false;
