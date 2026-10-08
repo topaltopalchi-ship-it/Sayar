@@ -710,19 +710,6 @@ async function bindActions(): Promise<void> {
       return;
     }
 
-    const reportRange = target.closest<HTMLElement>("[data-report-range]");
-    if (reportRange) {
-      localStorage.setItem("sai-sai-report-range", reportRange.dataset.reportRange || "month");
-      await render();
-      return;
-    }
-
-    const reportApply = target.closest<HTMLButtonElement>("#report-apply-range");
-    if (reportApply) {
-      await applyReportRange();
-      return;
-    }
-
     const actionButton = target.closest<HTMLButtonElement>("[data-action]");
     if (!actionButton) return;
     const action = actionButton.dataset.action;
