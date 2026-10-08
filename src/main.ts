@@ -1134,3 +1134,178 @@ function bindReportControls(): void {
   });
 }
 
+async function render(): Promise<void> {
+  const subscription = await getSubscription().catch(() => ({ status: "none", plan: "none", expiresAt: null } as Subscription));
+  // Bind global navigation/actions before the subscription gate so buttons always have a click handler.
+  await bindActions();
+  if (subscription.status !== "active") {
+    layout(paywall(subscription), subscription);
+    document.querySelectorAll<HTMLButtonElement>("[data-subscribe]").forEach(b => b.addEventListener("click", subscribe));
+    return;
+  }
+
+  let content = "";
+  if (activeTab === "dashboard") content = await dashboardView(subscription);
+  else if (activeTab === "sales") {
+    const tx = (await listTransactions()).filter(t => t.type === "sale");
+    content = pageHead("فروش", "دفتر فروش", "فاکتورهای فروش و مانده مشتریان.", `<button class="primary-button" id="new-sale">＋ ثبت فروش</button>`) +
+      `<section class="panel">${tx.length ? tx.map(t => `<div class="transaction-actions-row"><button class="transaction-row transaction-button" data-invoice-id="${t.id}">${transactionRow(t)}</button><button class="secondary-button" data-sale-edit="${t.id}">ویرایش</button><button class="secondary-button" data-sale-delete="${t.id}">حذف</button></div>`).join("") : `<div class="empty-inline"><span>↗</span><p>هنوز فاکتور فروشی ثبت نشده است.</p></div>`}</section>`;
+  } else if (activeTab === "purchases") {
+    const tx = (await listTransactions()).filter(t => t.type === "purchase");
+    content = pageHead("خرید", "دفتر خرید", "خریدها و افزایش خودکار موجودی.", `<button class="primary-button" id="new-purchase">＋ ثبت خرید</button>`) +
+      `<section class="panel">${tx.length ? tx.map(t => `<div class="transaction-actions-row"><div class="transaction-row">${transactionRow(t)}</div><button class="secondary-button" data-purchase-edit="${t.id}">ویرایش</button><button class="secondary-button" data-purchase-delete="${t.id}">حذف</button></div>`).join("") : `<div class="empty-inline"><span>↙</span><p>هنوز خریدی ثبت نشده است.</p></div>`}</section>`;
+  } else if (activeTab === "inventory") content = await inventoryView();
+  else if (activeTab === "people") { parties = await listParties(); content = await peopleView(); }
+  else if (activeTab === "reports") content = await reportsView(await listTransactions());
+  else if (activeTab === "more") content = await accountsView();
+  else if (activeTab === "checks") content = await checksView();
+  layout(content, subscription);
+  bindReportControls();
+
+  if (activeTab === "orders") bindOrderActions();
+  document.querySelector("#new-sale")?.addEventListener("click", () => void openSaleModal());
+  document.querySelectorAll<HTMLElement>("[data-sale-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.saleEdit); if(t) await openSaleModal(t); }));
+  document.querySelectorAll<HTMLElement>("[data-sale-delete]").forEach(b => b.addEventListener("click", async () => { const id=b.dataset.saleDelete||""; if(!id||!confirm("این فاکتور فروش حذف شود؟")) return; try { await deleteTransaction(id); showToast("فاکتور حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف فاکتور ناموفق بود"); } }));
+  document.querySelectorAll<HTMLElement>("[data-purchase-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.purchaseEdit); if(!t) return; products=await listProducts(); parties=await listParties(); openPurchaseModal(products, parties, rial, async m=>{showToast(m);await render();}, t); }));
+  document.querySelectorAll<HTMLElement>("[data-purchase-delete]").forEach(b => b.addEventListener("click", async () => { const id=b.dataset.purchaseDelete||""; if(!id||!confirm("این فاکتور خرید حذف شود؟")) return; try { await deleteTransaction(id); showToast("فاکتور خرید حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف فاکتور خرید ناموفق بود"); } }));
+  document.querySelector("#new-purchase")?.addEventListener("click", async () => {
+    products = await listProducts(); parties = await listParties();
+    openPurchaseModal(products, parties, rial, async m => { showToast(m); await render(); });
+  });
+  document.querySelector("#new-adjustment")?.addEventListener("click", async () => { products = await listProducts(); if (!products.length) { showToast("ابتدا یک کالا ثبت کنید"); return; } document.body.insertAdjacentHTML("beforeend", adjustmentModal()); bindAdjustmentModal(); });
+  document.querySelector("#new-product")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", productModal()); bindProductModal(); });
+  document.querySelectorAll<HTMLElement>("[data-product-edit]").forEach(button => button.addEventListener("click", async event => {
+    event.stopPropagation();
+    const id = button.dataset.productEdit; const product = id ? (await listProducts()).find(p => p.id === id) : undefined;
+    if (!product) return;
+    document.body.insertAdjacentHTML("beforeend", productModal(product));
+    const modal = document.querySelector<HTMLElement>("#product-modal"); if (modal) { modal.dataset.editId = product.id; bindProductModal(); }
+  }));
+  document.querySelectorAll<HTMLElement>("[data-product-delete]").forEach(button => button.addEventListener("click", async event => {
+    event.stopPropagation();
+    const id = button.dataset.productDelete; const product = id ? (await listProducts()).find(p => p.id === id) : undefined;
+    if (!product || !confirm(`کالای «${product.name}» حذف شود؟`)) return;
+    try { await deleteProduct(product.id); showToast("کالا حذف شد"); await render(); } catch (e) { showToast(e instanceof Error ? e.message : "حذف کالا ناموفق بود"); }
+  }));
+  document.querySelector("#new-party")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", partyModal()); bindPartyModal(); });
+  document.querySelectorAll<HTMLElement>("[data-party-edit]").forEach(button => button.addEventListener("click", async event => {
+    event.stopPropagation();
+    const id = button.dataset.partyEdit; const party = id ? (await listParties()).find(p => p.id === id) : undefined;
+    if (!party) return;
+    document.body.insertAdjacentHTML("beforeend", partyModal(party));
+    const modal = document.querySelector<HTMLElement>("#party-modal"); if (modal) { modal.dataset.editId = party.id; bindPartyModal(); }
+  }));
+  document.querySelectorAll<HTMLElement>("[data-party-delete]").forEach(button => button.addEventListener("click", async event => {
+    event.stopPropagation();
+    const id = button.dataset.partyDelete; const party = id ? (await listParties()).find(p => p.id === id) : undefined;
+    if (!party || !confirm(`شخص «${party.name}» حذف شود؟`)) return;
+    try { await deleteParty(party.id); showToast("شخص حذف شد"); await render(); } catch (e) { showToast(e instanceof Error ? e.message : "حذف شخص ناموفق بود"); }
+  }));
+  document.querySelector("#new-received-check")?.addEventListener("click", async () => { const [parties,accounts]=await Promise.all([listParties(),listAccounts()]); document.body.insertAdjacentHTML("beforeend", checkModal("received",parties,accounts)); const modal=document.querySelector<HTMLElement>("#check-modal"); if(modal) void bindCheckModal(modal,"received",async m=>{showToast(m);await render();}); });
+  document.querySelector("#new-issued-check")?.addEventListener("click", async () => { const [parties,accounts]=await Promise.all([listParties(),listAccounts()]); document.body.insertAdjacentHTML("beforeend", checkModal("issued",parties,accounts)); const modal=document.querySelector<HTMLElement>("#check-modal"); if(modal) void bindCheckModal(modal,"issued",async m=>{showToast(m);await render();}); });
+  void bindCheckStatuses(m=>showToast(m)); void bindCheckActions(m=>{showToast(m); void render();});
+  document.querySelectorAll<HTMLElement>("[data-check-edit]").forEach(b => b.addEventListener("click", async () => {
+    const id=b.dataset.checkEdit||""; const check=(await (await import("./db")).listChecks()).find(x=>x.id===id); if(!check) return;
+    if(check.clearedEntryId){ showToast("چک وصول‌شده قابل ویرایش نیست"); return; } const [ps,as]=await Promise.all([listParties(),listAccounts()]);
+    document.body.insertAdjacentHTML("beforeend", checkModal(check.direction, ps, as, check));
+    const m=document.querySelector<HTMLElement>("#check-modal"); if(m){m.dataset.editId=check.id; void bindCheckModal(m,check.direction,async msg=>{showToast(msg);await render();});}
+  }));
+  document.querySelector("#new-account")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", accountModal()); const modal = document.querySelector<HTMLElement>("#account-modal"); if (modal) void bindAccountModal(modal, async m => { showToast(m); await render(); }); });
+  document.querySelectorAll<HTMLElement>("[data-account-edit]").forEach(button => button.addEventListener("click", async event => {
+    event.stopPropagation();
+    const id = button.dataset.accountEdit; if (!id) return;
+    const account = (await listAccounts()).find(a => a.id === id); if (!account) return;
+    document.body.insertAdjacentHTML("beforeend", accountModal(account));
+    const modal = document.querySelector<HTMLElement>("#account-modal");
+    if (modal) { modal.dataset.editId = account.id; modal.dataset.createdAt = String(account.createdAt); void bindAccountModal(modal, async m => { showToast(m); await render(); }); }
+  }));
+  document.querySelectorAll<HTMLElement>("[data-account-delete]").forEach(button => button.addEventListener("click", async event => {
+    event.stopPropagation();
+    const id = button.dataset.accountDelete; if (!id) return;
+    const account = (await listAccounts()).find(a => a.id === id); if (!account) return;
+    if (!confirm(`حساب «${account.name}» حذف شود؟`)) return;
+    try { const db = await import("./db"); await db.deleteAccount(id); showToast("حساب حذف شد"); await render(); }
+    catch (e) { showToast(e instanceof Error ? e.message : "حذف حساب ناموفق بود"); }
+  }));
+  document.querySelector("#new-transfer")?.addEventListener("click", async () => { const accounts = await listAccounts(); if (accounts.length < 2) { showToast("برای انتقال حداقل دو حساب ثبت کنید"); return; } const balances = await getAccountBalances(); document.body.insertAdjacentHTML("beforeend", transferModal(accounts, balances)); const modal = document.querySelector<HTMLElement>("#transfer-modal"); if (modal) void bindTransferModal(modal, async m => { showToast(m); await render(); }); });
+  document.querySelectorAll<HTMLElement>("[data-account-ledger]").forEach(b => b.addEventListener("click", async () => {
+    try {
+      const id = b.dataset.accountLedger; if (!id) return;
+      document.body.insertAdjacentHTML("beforeend", await accountLedgerModal(id));
+      const modal = document.querySelector<HTMLElement>("#account-ledger-modal");
+      if (modal) await bindAccountLedger(modal);
+    } catch (e) { showToast(e instanceof Error ? e.message : "نمایش گردش حساب ناموفق بود"); }
+  }));
+  document.querySelector("#more-refresh")?.addEventListener("click", () => render());
+  window.addEventListener("sai-sai-refresh", () => { void render(); });
+  document.querySelector("#report-print")?.addEventListener("click", async () => {
+    try {
+      await printHtml("گزارش سود و زیان سای‌سای", document.querySelector("#view")?.innerHTML || "", "portrait");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "چاپ / PDF در دسترس نیست");
+    }
+  });
+  document.querySelector("#report-csv")?.addEventListener("click", async () => {
+    try {
+      const [transactions, expenses] = await Promise.all([listTransactions(), listExpenses()]);
+      const workbook = buildReportWorkbook(transactions, expenses);
+      const base64 = XLSX.write(workbook, { bookType: "xlsx", type: "base64" });
+      await shareBase64File(`sai-sai-report-${new Date().toISOString().slice(0,10)}.xlsx`, base64, "گزارش Excel سای‌سای");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "خروجی Excel ناموفق بود");
+    }
+  });
+  document.querySelectorAll<HTMLElement>("[data-settlement-edit]").forEach(b => b.addEventListener("click", async () => { const t=(await listTransactions()).find(x=>x.id===b.dataset.settlementEdit); if(t && (t.type==="receipt"||t.type==="payment")) await openSettlement(t.type,t); }));
+  document.querySelectorAll<HTMLElement>("[data-settlement-delete]").forEach(b => b.addEventListener("click", async () => { const id=b.dataset.settlementDelete||""; if(!id||!confirm("این دریافت/پرداخت حذف شود؟")) return; try { await deleteTransaction(id); showToast("ثبت حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف ناموفق بود"); } }));
+  document.querySelectorAll<HTMLElement>("[data-expense-edit]").forEach(b => b.addEventListener("click", async () => {
+    const e=(await listExpenses()).find(x=>x.id===b.dataset.expenseEdit); if(!e) return;
+    (window as typeof window & { __saiAccounts?: unknown[] }).__saiAccounts=await listAccounts();
+    document.body.insertAdjacentHTML("beforeend", expenseModal(e));
+    const m=document.querySelector<HTMLElement>("#expense-modal"); if(m){ m.dataset.editId=e.id; bindExpenseModal(); m.querySelector<HTMLSelectElement>("#expense-account")!.value=e.accountId||""; }
+  }));
+  document.querySelectorAll<HTMLElement>("[data-expense-delete]").forEach(b => b.addEventListener("click", async () => {
+    const id=b.dataset.expenseDelete||""; if(!id||!confirm("این هزینه حذف شود؟")) return;
+    try { await deleteExpense(id); showToast("هزینه حذف شد"); await render(); } catch(e){ showToast(e instanceof Error?e.message:"حذف هزینه ناموفق بود"); }
+  }));
+  document.querySelector("#more-backup")?.addEventListener("click", async () => {
+    const [products, parties, transactions, expenses, accounts, accountEntries, checks, movements, orders] = await Promise.all([listProducts(), listParties(), listTransactions(), listExpenses(), listAccounts(), (await import("./db")).listAccountEntries(), (await import("./db")).listChecks(), listMovements(), listOrders()]);
+    const payload = { version: 3, exportedAt: Date.now(), products, parties, transactions, expenses, accounts, accountEntries, checks, movements, orders };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `sai-sai-backup-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
+    showToast("فایل پشتیبان آماده شد");
+  });
+  document.querySelector("#more-restore")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", backupRestoreModal()); const m=document.querySelector<HTMLElement>("#backup-restore-modal")!; m.querySelector("#backup-restore-close")?.addEventListener("click",()=>m.remove()); m.querySelector("#backup-restore-submit")?.addEventListener("click",async()=>{ try { const input=m.querySelector<HTMLInputElement>("#backup-file")!; const file=input.files?.[0]; if(!file) throw new Error("فایل پشتیبان را انتخاب کنید"); if(!confirm("اطلاعات فعلی با این پشتیبان جایگزین می‌شود. ادامه می‌دهید؟")) return; const data=JSON.parse(await file.text()); if(!Array.isArray(data.products)||!Array.isArray(data.parties)||!Array.isArray(data.transactions)) throw new Error("فایل پشتیبان معتبر نیست"); const db=await import("./db"); await db.restoreBackup(data); m.remove(); showToast("بازیابی با موفقیت انجام شد"); await render(); } catch(e){showToast(e instanceof Error?e.message:"بازیابی ناموفق بود");} }); });
+
+}
+
+function placeholder(title: string, text: string): string {
+  return pageHead("سای‌سای", title, text) + `<section class="panel locked-panel"><div>◈</div><h3>این بخش در حال تکمیل است</h3><p class="muted">زیرساخت اصلی آماده است و قابلیت‌های تکمیلی در نسخه‌های بعدی اضافه می‌شوند.</p></section>`;
+}
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    const isCapacitorNative = location.hostname === "localhost";
+    if (isCapacitorNative) {
+      // Capacitor bundles hashed assets locally. A long-lived PWA cache can otherwise
+      // keep an older JS bundle and make bug fixes appear to have no effect.
+      void navigator.serviceWorker.getRegistrations()
+        .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
+        .then(() => "caches" in window ? caches.keys() : [])
+        .then(keys => Promise.all((keys as string[]).filter(key => key.startsWith("sai-sai-")).map(key => caches.delete(key))))
+        .catch(() => undefined);
+    } else {
+      void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    }
+  });
+}
+
+void (async () => {
+  try {
+    await setupNativeExitConfirmation();
+    // Repair legacy/missing sale-purchase stock movements before the first render.
+    await repairDataIntegrity();
+  } catch (error) {
+    console.error("Sayar startup repair/setup failed", error);
+  }
+  await render();
+})();
