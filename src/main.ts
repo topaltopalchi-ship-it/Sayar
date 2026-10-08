@@ -19,6 +19,7 @@ import { accountModal, accountLedgerModal, accountsView, bindAccountLedger, bind
 import { getAccountBalances, listAccounts } from "./db";
 import { checksView, checkModal, bindCheckModal, bindCheckStatuses, bindCheckActions } from "./checks-ui";
 import { jalaliToGregorianDate, todayJalaliInput, formatJalaliInput, toPersianDigits } from "./calendar";
+import { bindVoiceAssistant, type VoiceSaleDraft } from "./voice-assistant";
 
 type Tab = "dashboard" | "sales" | "purchases" | "orders" | "inventory" | "people" | "reports" | "more" | "checks";
 
@@ -153,6 +154,7 @@ async function dashboardView(subscription: Subscription): Promise<string> {
         <button class="quick-card" data-action="sale"><b>＋</b><span>${isProfessionalMode() ? "ثبت فروش" : "فروش جدید"}</span><small>${isProfessionalMode() ? "صدور فاکتور فروش" : "یک فاکتور در چند مرحله"}</small></button>
         <button class="quick-card" data-action="purchase"><b>⇩</b><span>${isProfessionalMode() ? "ثبت خرید" : "خرید کالا"}</span><small>${isProfessionalMode() ? "ثبت خرید و افزایش موجودی" : "موجودی را بیشتر کنید"}</small></button>
         <button class="quick-card" data-action="receipt"><b>↙</b><span>دریافت وجه</span><small>ثبت پول دریافتی از مشتری</small></button>
+        <button class="quick-card voice-quick-card" id="voice-sale"><b>🎙</b><span>ثبت فروش با صدا</span><small>فروش را به فارسی بگویید</small></button>
         ${isProfessionalMode() ? `<button class="quick-card" data-action="expense"><b>−</b><span>ثبت هزینه</span><small>هزینه‌های کسب‌وکار</small></button>` : `<button class="quick-card" data-nav-shortcut="inventory"><b>▤</b><span>کالاها</span><small>مشاهده و مدیریت موجودی</small></button>`}
       </div>
     </section>
@@ -1062,6 +1064,8 @@ async function bindActions(): Promise<void> {
         openPurchaseModal(products, parties, rial, async m => { showToast(m); await render(); });
       } else if (action === "receipt") {
         await openSettlement("receipt");
+      } else if (action === "voice-sale") {
+        document.querySelector<HTMLButtonElement>("#voice-sale")?.click();
       } else if (action === "expense") {
         document.body.insertAdjacentHTML("beforeend", expenseModal());
         bindExpenseModal();
@@ -1160,6 +1164,27 @@ async function render(): Promise<void> {
   else if (activeTab === "more") content = await accountsView();
   else if (activeTab === "checks") content = await checksView();
   layout(content, subscription);
+  bindVoiceAssistant(async (draft: VoiceSaleDraft) => {
+    await openSaleModal();
+    const modal = document.querySelector<HTMLDivElement>("#sale-modal");
+    if (!modal) return;
+    const productSelect = modal.querySelector<HTMLSelectElement>("#sale-product");
+    const customer = modal.querySelector<HTMLInputElement>("#sale-customer-name");
+    const quantity = modal.querySelector<HTMLInputElement>("#sale-quantity");
+    const paid = modal.querySelector<HTMLInputElement>("#sale-paid");
+    const available = await listProducts();
+    const hint = draft.productHint.trim().toLowerCase();
+    const matched = available.find(p => hint && (p.name.toLowerCase().includes(hint) || hint.includes(p.name.toLowerCase())));
+    if (matched && productSelect) productSelect.value = matched.id;
+    if (customer && draft.customerName) customer.value = draft.customerName;
+    if (quantity) quantity.value = String(draft.quantity || 1);
+    if (paid) paid.value = draft.paid ? String(draft.paid) : "";
+    productSelect?.dispatchEvent(new Event("change", { bubbles: true }));
+    quantity?.dispatchEvent(new Event("input", { bubbles: true }));
+    paid?.dispatchEvent(new Event("input", { bubbles: true }));
+    if (!matched && draft.productHint) showToast(`کالای «${draft.productHint}» پیدا نشد؛ کالا را انتخاب کنید`);
+  }, showToast);
+
   bindReportControls();
 
   if (activeTab === "orders") bindOrderActions();
