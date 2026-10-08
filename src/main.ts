@@ -130,16 +130,18 @@ async function checkLowStockAlerts(): Promise<void> {
   [...old].forEach(id => { if (!ids.has(id)) old.delete(id); });
   localStorage.setItem(LOW_STOCK_ALERT_KEY, JSON.stringify([...old]));
   if (!fresh.length) return;
+  const alertParties = await listParties();
+  const alertDetails = fresh.map(x => { const supplier = alertParties.find(p => p.id === x.product.supplierId); return x.product.name + " به " + x.stock + " " + x.product.unit + " رسیده" + (supplier ? "؛ تأمین‌کننده " + supplier.name + (supplier.phone ? "، شماره " + supplier.phone : "") : "؛ تأمین‌کننده ثبت نشده"); });
   showToast("⚠️ " + fresh.map(x => x.product.name).join("، ") + " نیاز به تأمین دارد");
   if ("speechSynthesis" in window) {
-    const u = new SpeechSynthesisUtterance("هشدار موجودی. " + fresh.map(x => x.product.name + " به " + x.stock + " " + x.product.unit + " رسیده").join("، ") + ". نیاز به تأمین دارد.");
+    const u = new SpeechSynthesisUtterance("هشدار موجودی. " + alertDetails.join("، ") + ". نیاز به تأمین دارد.");
     u.lang = "fa-IR"; u.rate = 0.9; window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
   }
   try {
     const p = await LocalNotifications.checkPermissions();
     if (p.display !== "granted") await LocalNotifications.requestPermissions();
     await LocalNotifications.schedule({ notifications: fresh.map((x, i) => ({
-      id: 7100 + i, title: "⚠️ هشدار تأمین موجودی", body: x.product.name + ": " + x.stock + " " + x.product.unit + " باقی مانده؛ نیاز به تأمین دارد.",
+      id: 7100 + i, title: "⚠️ هشدار تأمین موجودی", body: (() => { const supplier = alertParties.find(p => p.id === x.product.supplierId); return x.product.name + ": " + x.stock + " " + x.product.unit + " باقی مانده؛ " + (supplier ? "تأمین‌کننده: " + supplier.name + (supplier.phone ? " | " + supplier.phone : "") + "؛ " : "") + "نیاز به تأمین دارد."; })(),",
       schedule: { at: new Date(Date.now() + 1000) }
     })) });
   } catch {}
@@ -176,7 +178,9 @@ function pageHead(eyebrow: string, title: string, text: string, action = ""): st
 
 async function dashboardView(subscription: Subscription): Promise<string> {
   const d = await getDashboard();
-  const lowStock = await getLowStockItems();\n  const lowStockHtml = lowStock.length ? '<section class="panel low-stock-alert-panel"><div class="section-head"><div><h3>⚠️ کالاهای نیازمند تأمین</h3><span class="muted">موجودی به حد هشدار رسیده است</span></div><strong>' + money.format(lowStock.length) + ' کالا</strong></div>' + lowStock.map(x => '<div class="person-row"><div class="person-avatar">!</div><div><strong>' + x.product.name + '</strong><small>حد هشدار: ' + money.format(x.product.lowStock) + ' ' + x.product.unit + '</small></div><b class="debt-amount">' + money.format(x.stock) + ' ' + x.product.unit + '</b><button type="button" class="secondary-button supply-item" data-supply-product="' + x.product.id + '">تأمین کالا</button></div>').join("") + '</section>' : "";
+  const lowStock = await getLowStockItems();
+  const supplierParties = await listParties();
+  const lowStockHtml = lowStock.length ? '<section class="panel low-stock-alert-panel"><div class="section-head"><div><h3>⚠️ کالاهای نیازمند تأمین</h3><span class="muted">موجودی به حد هشدار رسیده است</span></div><strong>' + money.format(lowStock.length) + ' کالا</strong></div>' + lowStock.map(x => '<div class="person-row"><div class="person-avatar">!</div><div><strong>' + x.product.name + '</strong><small>حد هشدار: ' + money.format(x.product.lowStock) + ' ' + x.product.unit + (x.product.supplierId ? ' · تأمین‌کننده: ' + (supplierParties.find(p => p.id === x.product.supplierId)?.name || 'ثبت نشده') : '') + '</small></div><b class="debt-amount">' + money.format(x.stock) + ' ' + x.product.unit + '</b><span class="account-actions"><button type="button" class="secondary-button supply-item" data-supply-product="' + x.product.id + '">تأمین کالا</button>' + ((supplierParties.find(p => p.id === x.product.supplierId)?.phone || "").trim() ? '<a class="secondary-button" href="tel:' + (supplierParties.find(p => p.id === x.product.supplierId)?.phone || "").trim() + '">📞 تماس</a>' : '') + '</span></div>').join("") + '</section>' : "";
   const recent = d.recent.length ? d.recent.map(t => transactionRow(t)).join("") :
     `<div class="empty-inline"><span>◌</span><p>هنوز تراکنشی ثبت نشده است.</p></div>`;
 
@@ -702,7 +706,7 @@ function productModal(product?: Product): string {
     <label class="field"><span>نام کالا</span><input id="p-name" placeholder="مثلاً برنج ایرانی" value="${product?.name || ""}"></label>
     <div class="form-grid"><label class="field"><span>کد کالا</span><input id="p-sku" placeholder="اختیاری" value="${product?.sku || ""}"></label><label class="field"><span>واحد</span><select id="p-unit">${["عدد","کیلوگرم","گرم","لیتر","متر","بسته"].map(u => `<option ${product?.unit === u ? "selected" : ""}>${u}</option>`).join("")}</select></label></div>
     <div class="form-grid"><label class="field"><span>قیمت خرید (${getCurrencyLabel()})</span><input id="p-buy" type="number" min="0" value="${moneyInputValue(product?.purchasePrice ?? 0)}"></label><label class="field"><span>قیمت فروش (${getCurrencyLabel()})</span><input id="p-sale" type="number" min="0" value="${moneyInputValue(product?.salePrice ?? 0)}"></label></div>
-    <label class="field"><span>حداقل موجودی (هشدار)</span><input id="p-low" type="number" min="0" step="0.001" value="${product?.lowStock ?? 5}"></label>
+    <label class="field"><span>حداقل موجودی (هشدار)</span><input id="p-low" type="number" min="0" step="0.001" value="${product?.lowStock ?? 5}"></label><label class="field"><span>تأمین‌کننده این کالا</span><select id="p-supplier"><option value="">بدون تأمین‌کننده</option>${parties.filter(p => p.type === "supplier" || p.type === "both").map(p => `<option value="${p.id}" ${product?.supplierId === p.id ? "selected" : ""}>${p.name}${p.phone ? " · " + p.phone : ""}</option>`).join("")}</select></label>
     ${product ? "" : '<label class="field"><span>موجودی اولیه</span><input id="p-initial-stock" type="text" inputmode="decimal" autocomplete="off" value="0" placeholder="مثلاً 20"></label>'}
     <button class="primary-button wide" id="product-submit">${product ? "ذخیره تغییرات" : "ذخیره کالا"}</button></section></div>`;
 }
@@ -722,6 +726,7 @@ function bindProductModal(): void {
         purchasePrice: parseMoneyInput(modal.querySelector<HTMLInputElement>("#p-buy")!.value),
         salePrice: parseMoneyInput(modal.querySelector<HTMLInputElement>("#p-sale")!.value),
         lowStock: Math.max(0, Number(modal.querySelector<HTMLInputElement>("#p-low")!.value) || 0),
+        supplierId: modal.querySelector<HTMLSelectElement>("#p-supplier")?.value || undefined,
       };
       const editId = modal.dataset.editId;
       if (editId) {
@@ -1285,11 +1290,12 @@ async function render(): Promise<void> {
     openPurchaseModal(products, parties, rial, async m => { showToast(m); await render(); });
   });
   document.querySelector("#new-adjustment")?.addEventListener("click", async () => { products = await listProducts(); if (!products.length) { showToast("ابتدا یک کالا ثبت کنید"); return; } document.body.insertAdjacentHTML("beforeend", adjustmentModal()); bindAdjustmentModal(); });
-  document.querySelector("#new-product")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", productModal()); bindProductModal(); });
+  document.querySelector("#new-product")?.addEventListener("click", async () => { parties = await listParties(); document.body.insertAdjacentHTML("beforeend", productModal()); bindProductModal(); });
   document.querySelectorAll<HTMLElement>("[data-product-edit]").forEach(button => button.addEventListener("click", async event => {
     event.stopPropagation();
     const id = button.dataset.productEdit; const product = id ? (await listProducts()).find(p => p.id === id) : undefined;
     if (!product) return;
+    parties = await listParties();
     document.body.insertAdjacentHTML("beforeend", productModal(product));
     const modal = document.querySelector<HTMLElement>("#product-modal"); if (modal) { modal.dataset.editId = product.id; bindProductModal(); }
   }));
