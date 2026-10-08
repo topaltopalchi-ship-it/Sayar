@@ -45,7 +45,38 @@ export async function buildBusinessInsights(products: Product[], parties: Party[
   for (const t of transactions.filter(x => x.type === "sale" && x.date >= monthAgo)) { if (t.lines.some(l => l.unitPrice > 0 && l.discount > l.quantity * l.unitPrice * 0.25)) { insights.push({ id: "discount-" + t.id, tone: "warning", title: "تخفیف غیرعادی", text: "در یک فاکتور فروش تخفیف بیش از ۲۵٪ ثبت شده است.", action: "بررسی فاکتور", priority: 70 }); break; } }
   const dailySales = new Map<number, number>(); transactions.filter(t => t.type === "sale" && t.date >= monthAgo).forEach(t => { const d = dayStart(t.date); dailySales.set(d, (dailySales.get(d) || 0) + t.amount); });
   if (dailySales.size >= 7) { const projected = Math.round((recentSales / dailySales.size) * 30); insights.push({ id: "forecast", tone: "info", title: "پیش‌بینی فروش", text: "با روند فعلی، فروش ۳۰ روز آینده حدود " + projected.toLocaleString("fa-IR") + " ریال برآورد می‌شود.", action: "برنامه‌ریزی خرید", priority: 55 }); }
+
+  // Fast-moving products: compare units sold in the last 30 days with the previous 30 days.
+  const productVelocity = new Map<string, { recent: number; previous: number; revenue: number }>();
+  transactions.filter(t => t.type === "sale" && t.date >= prevMonthStart).forEach(t => {
+    for (const line of t.lines) {
+      const current = productVelocity.get(line.productId) || { recent: 0, previous: 0, revenue: 0 };
+      if (t.date >= monthAgo) { current.recent += Math.max(0, line.quantity); current.revenue += Math.max(0, line.quantity * line.unitPrice); }
+      else current.previous += Math.max(0, line.quantity);
+      productVelocity.set(line.productId, current);
+    }
+  });
+  [...productVelocity.entries()]
+    .filter(([, v]) => v.recent >= 3 && v.recent > v.previous * 1.2)
+    .sort((a,b) => b[1].recent - a[1].recent)
+    .slice(0, 3)
+    .forEach(([productId, v]) => {
+      const product = products.find(p => p.id === productId);
+      if (!product) return;
+      insights.push({
+        id: "fast-" + product.id,
+        tone: "success",
+        title: "کالای پرفروش",
+        text: product.name + " در ۳۰ روز اخیر " + v.recent.toLocaleString("fa-IR") + " " + product.unit + " فروخته و سرعت فروش آن بالاتر رفته است.",
+        action: "تقویت موجودی",
+        priority: 68
+      });
+    });
+
   return insights.sort((a,b) => b.priority - a.priority);
 }
 
-export function dailyBrief(insights: BusinessInsight[]): string { if (!insights.length) return "امروز مورد مهمی برای پیگیری پیدا نکردم؛ وضعیت کسب‌وکار پایدار است."; return "امروز " + insights.slice(0, 3).map((x, i) => (i + 1) + ") " + x.title + ": " + x.text).join(" "); }
+export function dailyBrief(insights: BusinessInsight[]): string {
+  if (!insights.length) return "امروز مورد مهمی برای پیگیری پیدا نکردم؛ وضعیت کسب‌وکار پایدار است.";
+  return "امروز " + insights.slice(0, 3).map((x, i) => (i + 1) + ") " + x.title + ": " + x.text + " اقدام: " + (x.action || "بررسی وضعیت")).join(" ");
+}
