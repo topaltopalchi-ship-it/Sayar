@@ -615,8 +615,8 @@ async function bindActions(): Promise<void> {
       const input = id ? document.querySelector<HTMLInputElement>("#" + id) : null;
       if (input) {
         const pos = input.selectionStart ?? input.value.length;
-        const rawBefore = input.value.slice(0, pos).replace(/\\//g, "");
-        const rawAfter = input.value.slice(pos).replace(/\\//g, "");
+        const rawBefore = input.value.slice(0, pos).replace(/\//g, "");
+        const rawAfter = input.value.slice(pos).replace(/\//g, "");
         input.value = formatJalaliInput(rawBefore + "/" + rawAfter);
         const caret = Math.min(input.value.length, rawBefore.length + 1);
         input.focus();
