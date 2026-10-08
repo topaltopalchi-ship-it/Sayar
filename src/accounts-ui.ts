@@ -1,5 +1,5 @@
 import { addAccount, updateAccount, deleteAccount, addAccountEntry, getAccountBalances, getAccountLedger, listAccounts, listAccountEntries, transferBetweenAccounts } from "./db";
-import { formatMoney } from "./settings";
+import { formatMoney, getCurrencyLabel, moneyInputValue, parseMoneyInput } from "./settings";
 import type { Account, AccountType } from "./domain";
 
 const money = new Intl.NumberFormat("fa-IR");
@@ -21,7 +21,7 @@ export function accountModal(account?: Account): string {
   return `<div class="modal-backdrop" id="account-modal"><section class="modal"><button class="modal-close" id="account-close">×</button><span class="eyebrow">خزانه‌داری</span><h2>${account ? "ویرایش حساب" : "حساب جدید"}</h2>
   <label class="field"><span>نام حساب</span><input id="account-name" placeholder="مثلاً صندوق فروشگاه یا بانک ملی" value="${account?.name || ""}"></label>
   <label class="field"><span>نوع حساب</span><select id="account-type"><option value="cash" ${account?.type === "cash" ? "selected" : ""}>صندوق نقدی</option><option value="bank" ${account?.type === "bank" ? "selected" : ""}>حساب بانکی</option></select></label>
-  <label class="field"><span>موجودی اولیه</span><input id="account-opening" type="number" min="0" value="${account?.openingBalance ?? 0}"></label>
+  <label class="field"><span>موجودی اولیه (${getCurrencyLabel()})</span><input id="account-opening" type="number" min="0" value="${moneyInputValue(account?.openingBalance ?? 0)}"></label>
   <button class="primary-button wide" id="account-submit">${account ? "ذخیره تغییرات" : "ثبت حساب"}</button></section></div>`;
 }
 
@@ -29,7 +29,7 @@ export function transferModal(accounts: Account[], balances: Record<string, numb
   const options = accounts.map(a => `<option value="${a.id}">${a.name} · ${rial(balances[a.id] ?? 0)}</option>`).join("");
   return `<div class="modal-backdrop" id="transfer-modal"><section class="modal"><button class="modal-close" id="transfer-close">×</button><span class="eyebrow">خزانه‌داری</span><h2>انتقال بین حساب‌ها</h2>
   <label class="field"><span>از حساب</span><select id="transfer-from">${options}</select></label><label class="field"><span>به حساب</span><select id="transfer-to">${options}</select></label>
-  <label class="field"><span>مبلغ</span><input id="transfer-amount" type="number" min="1" value="0"></label><label class="field"><span>شرح</span><input id="transfer-description" placeholder="مثلاً واریز از صندوق به بانک"></label>
+  <label class="field"><span>مبلغ (${getCurrencyLabel()})</span><input id="transfer-amount" type="number" min="1" value="0"></label><label class="field"><span>شرح</span><input id="transfer-description" placeholder="مثلاً واریز از صندوق به بانک"></label>
   <button class="primary-button wide" id="transfer-submit">ثبت انتقال</button></section></div>`;
 }
 
@@ -39,7 +39,7 @@ export async function bindAccountModal(modal: HTMLElement, done: (message: strin
     try {
       const name = (modal.querySelector<HTMLInputElement>("#account-name")?.value || "").trim();
       const type = (modal.querySelector<HTMLSelectElement>("#account-type")?.value || "cash") as AccountType;
-      const openingBalance = Math.max(0, Number(modal.querySelector<HTMLInputElement>("#account-opening")?.value || 0));
+      const openingBalance = parseMoneyInput(modal.querySelector<HTMLInputElement>("#account-opening")?.value || 0);
       if (!name) throw new Error("نام حساب الزامی است");
       const editId = modal.dataset.editId;
       if (editId) {
@@ -58,7 +58,7 @@ export async function bindTransferModal(modal: HTMLElement, done: (message: stri
     try {
       const from = modal.querySelector<HTMLSelectElement>("#transfer-from")?.value || "";
       const to = modal.querySelector<HTMLSelectElement>("#transfer-to")?.value || "";
-      const amount = Math.max(0, Number(modal.querySelector<HTMLInputElement>("#transfer-amount")?.value || 0));
+      const amount = parseMoneyInput(modal.querySelector<HTMLInputElement>("#transfer-amount")?.value || 0);
       const description = (modal.querySelector<HTMLInputElement>("#transfer-description")?.value || "").trim() || "انتقال بین حساب‌ها";
       const balances = await getAccountBalances();
       if (!from || !to || amount <= 0) throw new Error("حساب‌ها و مبلغ را بررسی کنید");
@@ -148,7 +148,7 @@ export function accountEntryModal(accounts: Account[], existing?: import("./doma
   return `<div class="modal-backdrop" id="account-entry-modal"><section class="modal"><button class="modal-close" id="account-entry-close">×</button><span class="eyebrow">گردش حساب</span><h2>${existing ? "ویرایش گردش دستی" : "ثبت گردش دستی"}</h2>
   <label class="field"><span>حساب</span><select id="entry-account" ${existing ? "disabled" : ""}>${options}</select></label>
   <label class="field"><span>نوع</span><select id="entry-type"><option value="deposit" ${type === "deposit" ? "selected" : ""}>واریز / دریافت</option><option value="withdraw" ${type === "withdraw" ? "selected" : ""}>برداشت / پرداخت</option></select></label>
-  <label class="field"><span>مبلغ</span><input id="entry-amount" type="number" min="1" value="${Math.abs(existing?.amount || 0)}"></label>
+  <label class="field"><span>مبلغ (${getCurrencyLabel()})</span><input id="entry-amount" type="number" min="1" value="${moneyInputValue(Math.abs(existing?.amount || 0))}"></label>
   <label class="field"><span>شرح</span><input id="entry-description" value="${existing?.description || ""}" placeholder="مثلاً واریز نقدی"></label>
   <button class="primary-button wide" id="account-entry-submit">${existing ? "ذخیره تغییرات" : "ثبت گردش"}</button></section></div>`;
 }
@@ -159,7 +159,7 @@ export async function bindAccountEntryModal(modal: HTMLElement, done: (message: 
     try {
       const accountId = modal.querySelector<HTMLSelectElement>("#entry-account")?.value || "";
       const type = (modal.querySelector<HTMLSelectElement>("#entry-type")?.value || "deposit") as "deposit" | "withdraw";
-      const amount = Math.abs(Number(modal.querySelector<HTMLInputElement>("#entry-amount")?.value || 0));
+      const amount = parseMoneyInput(modal.querySelector<HTMLInputElement>("#entry-amount")?.value || 0);
       const description = (modal.querySelector<HTMLInputElement>("#entry-description")?.value || "").trim() || "گردش دستی";
       const editId = modal.dataset.editId;
       if (!accountId || amount <= 0) throw new Error("حساب و مبلغ را بررسی کنید");
