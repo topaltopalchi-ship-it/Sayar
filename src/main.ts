@@ -676,7 +676,7 @@ async function applyReportRange(): Promise<void> {
   const from = jalaliToGregorianDate(fromValue);
   const to = jalaliToGregorianDate(toValue);
   if (!from || !to) {
-    showToast("تاریخ واردشده معتبر نیست؛ نمونه صحیح: ۱۴۰۵/۰۷/۱۶");
+    showToast("تاریخ واردشده معتبر نیست؛ نمونه صحیح: ۱۴۰۵۰۷۱۶");
     return;
   }
   if (from.getTime() > to.getTime()) {
@@ -701,7 +701,7 @@ async function bindActions(): Promise<void> {
 
   root.addEventListener("change", event => {
     const target = event.target as HTMLInputElement;
-    if (target.matches("[data-jalali-input]")) formatReportDateInput(target);
+    if (target.matches("[data-jalali-input]")) target.value = compactJalaliInput(target.value);
   });
 
   root.addEventListener("click", async event => {
