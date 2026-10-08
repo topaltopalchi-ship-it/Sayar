@@ -9,7 +9,7 @@ import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import {
   addParty, addProduct, updateProduct, deleteProduct, addSale, addSettlement, addExpense, addStockAdjustment, getDashboard, getStock, updateTransaction, deleteTransaction, updateExpense, deleteExpense,
-  listParties, updateParty, deleteParty, listProducts, listTransactions, listExpenses, listMovements, listOrders, calculateHistoricalCOGS, repairDataIntegrity
+  listParties, updateParty, deleteParty, listProducts, listTransactions, listExpenses, listMovements, listOrders, calculateHistoricalCOGS, repairDataIntegrity, getPartyBalances
 } from "./db";
 import { createMonthlyCheckout, getSubscription, type Subscription } from "./billing";
 import { lineTotal, type Order, type Party, type Product, type Transaction, type TransactionLine } from "./domain";
@@ -1273,29 +1273,39 @@ async function render(): Promise<void> {
   }, showToast);
 
   bindVoiceQuestionAssistant(async (question: string) => {
-    const q = question.replace(/ي/g, "ی").replace(/ك/g, "ک").replace(/ة/g, "ه").trim();
-    const d = await getDashboard();
-    const transactions = await listTransactions();
+    const q = question.replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/ة/g, "ه").replace(/[أإ]/g, "ا").trim();
+    const [dashboard, transactions, products, parties, balances] = await Promise.all([getDashboard(), listTransactions(), listProducts(), listParties(), getPartyBalances()]);
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
     const monthSales = transactions.filter(t => t.type === "sale" && t.date >= monthStart).reduce((s, t) => s + t.amount, 0);
     const monthReceipts = transactions.filter(t => t.type === "receipt" && t.date >= monthStart).reduce((s, t) => s + t.amount, 0);
-
-    if (/فروش|فروخت|درآمد|گردش/.test(q) && /امروز|امروزم|الان/.test(q))
-      return `امروز ${rial(d.salesToday)} فروش داشتی.`;
-    if (/فروش|فروخت|درآمد|گردش/.test(q) && /ماه|این ماه|ماه جاری/.test(q))
-      return `فروش این ماه تا امروز ${rial(monthSales)} بوده است.`;
-    if (/اوضاع فروش|وضع فروش|چطور فروختم|خوب فروختم|فروش خوب/.test(q))
-      return `تا امروز فروش این ماه ${rial(monthSales)} بوده و امروز ${rial(d.salesToday)} فروش داشتی.`;
-    if (/دریافت|وصول|پول گرفتم/.test(q) && /امروز|امروزم|الان/.test(q))
-      return `امروز ${rial(d.receiptsToday)} دریافت داشتی.`;
-    if (/دریافت|وصول/.test(q) && /ماه|این ماه|ماه جاری/.test(q))
-      return `دریافت این ماه ${rial(monthReceipts)} بوده است.`;
-    if (/مطالبات|بدهکار|طلب/.test(q))
-      return `مجموع مطالبات فعلی ${rial(d.receivables)} است.`;
-    if (/موجودی|انبار|کمبود|رو به اتمام/.test(q))
-      return `${d.lowStock.toLocaleString("fa-IR")} کالا به حد هشدار موجودی رسیده است.`;
-    return "می‌توانم درباره فروش امروز و این ماه، دریافت‌ها، مطالبات و موجودی انبار به شما جواب بدهم.";
+    const normalized = (value: string) => value.replace(/[يى]/g, "ی").replace(/ك/g, "ک").trim();
+    const party = parties.map(p => ({ p, n: normalized(p.name) })).filter(x => x.n && (q.includes(x.n) || x.n.split(/\s+/).some(part => part.length >= 3 && q.includes(part)))).sort((a,b) => b.n.length-a.n.length)[0]?.p;
+    const product = products.map(p => ({ p, n: normalized(p.name) })).filter(x => x.n && (q.includes(x.n) || x.n.split(/\s+/).some(part => part.length >= 3 && q.includes(part)))).sort((a,b) => b.n.length-a.n.length)[0]?.p;
+    if (party && /بدهکار|بدهی|طلب|حسابش|چقدر بده/.test(q)) {
+      const balance = balances[party.id]?.balance ?? 0;
+      if (balance > 0) return `${party.name} ${rial(balance)} بدهکار است.`;
+      if (balance < 0) return `${party.name} ${rial(Math.abs(balance))} بستانکار است.`;
+      return `حساب ${party.name} تسویه است.`;
+    }
+    if (party && /فروش|خرید|خریدم|فروختم|گردش/.test(q)) {
+      const b = balances[party.id];
+      if (!b) return `برای ${party.name} هنوز گردش مالی ثبت نشده است.`;
+      return `گردش ${party.name}: فروش ${rial(b.sales)}، خرید ${rial(b.purchases)}، دریافت ${rial(b.receipts)} و پرداخت ${rial(b.payments)}.`;
+    }
+    if (product && /موجودی|انبار|چندتا|چند تا|باقی|مانده/.test(q)) {
+      const stock = await getStock(product.id);
+      return `موجودی ${product.name} الان ${stock.toLocaleString("fa-IR")} ${product.unit} است.`;
+    }
+    if (product && /قیمت|چنده|چند است|فروشی/.test(q)) return `قیمت فروش ${product.name} ${rial(product.salePrice)} است.`;
+    if (/فروش|فروخت|درآمد|گردش/.test(q) && /امروز|امروزم|الان/.test(q)) return `امروز ${rial(dashboard.salesToday)} فروش داشتی.`;
+    if (/فروش|فروخت|درآمد|گردش/.test(q) && /ماه|این ماه|ماه جاری/.test(q)) return `فروش این ماه تا امروز ${rial(monthSales)} بوده است.`;
+    if (/اوضاع فروش|وضع فروش|چطور فروختم|خوب فروختم|فروش خوب/.test(q)) return `تا امروز فروش این ماه ${rial(monthSales)} بوده و امروز ${rial(dashboard.salesToday)} فروش داشتی.`;
+    if (/دریافت|وصول|پول گرفتم/.test(q) && /امروز|امروزم|الان/.test(q)) return `امروز ${rial(dashboard.receiptsToday)} دریافت داشتی.`;
+    if (/دریافت|وصول/.test(q) && /ماه|این ماه|ماه جاری/.test(q)) return `دریافت این ماه ${rial(monthReceipts)} بوده است.`;
+    if (/مطالبات|بدهکار|طلب/.test(q)) return `مجموع مطالبات فعلی ${rial(dashboard.receivables)} است.`;
+    if (/موجودی|انبار|کمبود|رو به اتمام/.test(q)) return `${dashboard.lowStock.toLocaleString("fa-IR")} کالا به حد هشدار موجودی رسیده است.`;
+    return "می‌توانم درباره فروش، دریافت، مطالبات، مشتری‌ها و موجودی کالا به شما جواب بدهم.";
   }, showToast);
 
   bindReportControls();
