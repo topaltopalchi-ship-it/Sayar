@@ -683,7 +683,14 @@ function bindReportControls(): void {
     input.addEventListener("change", () => formatReportDateInput(input));
   });
   document.querySelectorAll<HTMLElement>("[data-report-range]").forEach(button => {
+    button.setAttribute("aria-pressed", (button.dataset.reportRange || "month") === (localStorage.getItem("sai-sai-report-range") || "month") ? "true" : "false");
     button.addEventListener("click", async () => {
+      localStorage.setItem("sai-sai-report-range", button.dataset.reportRange || "month");
+      await render();
+    });
+    button.addEventListener("keydown", async event => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
       localStorage.setItem("sai-sai-report-range", button.dataset.reportRange || "month");
       await render();
     });
