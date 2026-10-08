@@ -588,9 +588,17 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
   modal.querySelector("#sale-submit")?.addEventListener("click", async () => {
     try {
       const customerName = modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value.trim();
-      if (!resolvedCustomerName) throw new Error("نام مشتری الزامی است");
+      if (!customerName) throw new Error("نام مشتری الزامی است");
       const data = lineData();
-      if (!data.length || data.some(x => !x.p || x.quantity <= 0 || x.unitPrice <= 0)) throw new Error("کالا، مقدار و قیمت همه اقلام را بررسی کنید");
+      if (!data.length || data.some(x => !x.p || x.quantity <= 0 || x.unitPrice <= 0 || x.discount < 0 || x.discount > x.quantity * x.unitPrice)) throw new Error("کالا، مقدار، قیمت و تخفیف همه اقلام را بررسی کنید");
+      const pricingSettings = getMarketSettings();
+      const regularTier = getCustomerTier(undefined, await listTransactions());
+      const belowFloor = data.filter(x => x.p && (x.unitPrice - (x.discount / Math.max(1, x.quantity))) < recommendPrice(x.p, regularTier, pricingSettings).floorPrice);
+      if (belowFloor.length) {
+        const names = belowFloor.map(x => x.p!.name).join("، ");
+        const proceed = window.confirm(`قیمت نهایی ${names} از کف امن فروش پایین‌تر است. ادامه می‌دهید؟`);
+        if (!proceed) return;
+      }
       const transactionLines: TransactionLine[] = data.map(x => ({ productId: x.productId, quantity: x.quantity, unitPrice: x.unitPrice, discount: x.discount }));
       const amount = data.reduce((sum, x) => sum + Math.max(0, x.quantity * x.unitPrice - x.discount), 0);
       const paidValue = Math.min(amount, parseMoneyInput(paid.value));
