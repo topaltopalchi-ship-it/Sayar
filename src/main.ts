@@ -774,7 +774,7 @@ function productModal(product?: Product): string {
 
 async function saveVoiceProduct(draft: VoiceProductDraft): Promise<void> {\n  if (!draft.name) { showToast("نام کالا از صدا تشخیص داده نشد؛ دوباره واضح‌تر بگویید"); return; }\n  try {\n    await addProduct({ name:draft.name, sku:draft.sku, unit:draft.unit, purchasePrice:draft.purchasePrice, salePrice:draft.salePrice, lowStock:draft.lowStock }, draft.initialStock);\n    showToast("کالا با صدا با موفقیت ثبت شد");\n    await render();\n  } catch (e) { showToast(e instanceof Error ? e.message : "ثبت کالای صوتی ناموفق بود"); }\n}\n\nfunction bindProductModal(): void {
   const modal = document.querySelector<HTMLDivElement>("#product-modal")!;
-  modal.querySelector("#product-close")?.addEventListener("click", () => modal.remove());\n  if (!modal.dataset.editId) bindVoiceProductAssistant(async draft => { modal.remove(); await saveVoiceProduct(draft); }, showToast);
+  modal.querySelector("#product-close")?.addEventListener("click", () => modal.remove());\n  if (!modal.dataset.editId) bindVoiceProductAssistant(async draft => { modal.remove(); await saveVoiceProduct(draft); }, showToast, async drafts => { modal.remove(); for (const draft of drafts) await saveVoiceProduct(draft); showToast(`${drafts.length} کالا ثبت شد`); });
   modal.querySelector("#product-submit")?.addEventListener("click", async () => {
     try {
       const name = (modal.querySelector<HTMLInputElement>("#p-name")!.value).trim();
