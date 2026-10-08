@@ -586,6 +586,23 @@ function formatReportDateInput(input: HTMLInputElement): void {
   if (input.value !== formatted) input.value = formatted;
 }
 
+function enforceReportDateFormat(input: HTMLInputElement): void {
+  const normalize = () => formatReportDateInput(input);
+
+  normalize();
+  window.requestAnimationFrame(normalize);
+  window.setTimeout(normalize, 0);
+
+  // Android WebView can restore an input's saved value after the page renders.
+  // Keep normalizing briefly so an 8-digit restored value becomes yyyy/mm/dd.
+  let attempts = 0;
+  const timer = window.setInterval(() => {
+    normalize();
+    attempts += 1;
+    if (attempts >= 20) window.clearInterval(timer);
+  }, 50);
+}
+
 async function applyReportRange(): Promise<void> {
   const fromInput = document.querySelector<HTMLInputElement>("#report-from-date");
   const toInput = document.querySelector<HTMLInputElement>("#report-to-date");
@@ -692,12 +709,10 @@ document.querySelectorAll<HTMLInputElement>("[data-jalali-input]").forEach(input
   input.addEventListener("keyup", () => formatReportDateInput(input));
   input.addEventListener("compositionend", () => formatReportDateInput(input));
   input.addEventListener("paste", () => window.setTimeout(() => formatReportDateInput(input), 0));
-
-  formatReportDateInput(input);
-  window.setTimeout(() => formatReportDateInput(input), 0);
-  window.requestAnimationFrame(() => formatReportDateInput(input));
   input.addEventListener("focus", () => formatReportDateInput(input));
   input.addEventListener("click", () => formatReportDateInput(input));
+
+  enforceReportDateFormat(input);
 });
 
   document.querySelectorAll<HTMLElement>("[data-report-range]").forEach(button => {
