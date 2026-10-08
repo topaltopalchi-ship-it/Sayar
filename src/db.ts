@@ -300,16 +300,22 @@ export async function updateTransaction(id: string, input: {
   }
   const amount = current.type === "receipt" || current.type === "payment" ? Math.max(0, Math.round(input.paid)) : transactionTotal(input.lines);
   const updated: Transaction = { ...current, date: input.date, partyId: input.partyId, customerName: input.customerName?.trim() || undefined, accountId: input.accountId, description: input.description, lines: input.lines, paid: Math.max(0, input.paid), amount };
-  if (updated.type === "sale") updated.costOfGoods = calculateHistoricalCOGS((await listTransactions()).filter(t => t.id !== id).concat(updated), products).get(id) ?? 0;
+  const allAfter = (await listTransactions()).filter(t => t.id !== id).concat(updated);
+  if (updated.type === "sale") updated.costOfGoods = calculateHistoricalCOGS(allAfter, products).get(id) ?? 0;
+  const cogsBySale = calculateHistoricalCOGS(allAfter, products);
   const entries = await listAccountEntries();
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(["transactions","movements","accountEntries"], "readwrite");
+    const ts = tx.objectStore("transactions");
     const ms = tx.objectStore("movements"); const es = tx.objectStore("accountEntries");
     for (const m of movements.filter(m => m.referenceId === id)) ms.delete(m.id);
     for (const e of entries.filter(e => e.referenceId === id)) es.delete(e.id);
     if (current.accountId && current.paid > 0 && !entries.some(e => e.referenceId === id)) { const expected = current.type === "sale" || current.type === "receipt" ? Math.round(current.paid) : -Math.round(current.paid); const old = entries.find(e => e.accountId === current.accountId && e.date === current.date && e.amount === expected && e.description === current.description); if (old) es.delete(old.id); }
-    tx.objectStore("transactions").put(updated);
+    for (const t of allAfter) {
+      if (t.type === "sale") ts.put({ ...t, costOfGoods: cogsBySale.get(t.id) ?? 0 });
+      else if (t.id === updated.id) ts.put(updated);
+    }
     if (updated.accountId && updated.paid > 0) {
       const entryType = updated.type === "sale" || updated.type === "receipt" ? "deposit" : "withdraw";
       es.put({ id: newId(), accountId: updated.accountId, date: updated.date, type: entryType, amount: entryType === "deposit" ? Math.round(updated.paid) : -Math.round(updated.paid), description: updated.description, referenceId: updated.id } satisfies AccountEntry);
@@ -323,19 +329,32 @@ export async function updateTransaction(id: string, input: {
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
-  const current = (await listTransactions()).find(t => t.id === id);
+  const transactions = await listTransactions();
+  const current = transactions.find(t => t.id === id);
   if (!current) throw new Error("تراکنش پیدا نشد");
+  const remaining = transactions.filter(t => t.id !== id);
+  const products = await listProducts();
+  const cogsBySale = calculateHistoricalCOGS(remaining, products);
   const db = await openDb();
-  const [movements, entries] = await Promise.all([listMovements(), listAccountEntries()]);
+  const [movements, entries, orders] = await Promise.all([listMovements(), listAccountEntries(), listOrders()]);
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(["transactions","movements","accountEntries"], "readwrite");
-    tx.objectStore("transactions").delete(id);
+    const tx = db.transaction(["transactions","movements","accountEntries","orders"], "readwrite");
+    const ts = tx.objectStore("transactions");
     const ms = tx.objectStore("movements");
-    for (const m of movements.filter(m => m.referenceId === id)) ms.delete(m.id);
     const es = tx.objectStore("accountEntries");
+    const os = tx.objectStore("orders");
+    ts.delete(id);
+    for (const t of remaining) {
+      if (t.type === "sale") ts.put({ ...t, costOfGoods: cogsBySale.get(t.id) ?? 0 });
+    }
+    for (const m of movements.filter(m => m.referenceId === id)) ms.delete(m.id);
     for (const e of entries.filter(e => e.referenceId === id)) es.delete(e.id);
+    for (const order of orders.filter(o => o.saleTransactionId === id)) {
+      os.put({ ...order, status: "pending", saleTransactionId: undefined });
+    }
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    tx.onerror = () => reject(tx.error ?? new Error("حذف تراکنش ناموفق بود"));
+    tx.onabort = () => reject(tx.error ?? new Error("حذف تراکنش ناموفق بود"));
   });
 }
 
