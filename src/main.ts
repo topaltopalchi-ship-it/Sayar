@@ -1450,7 +1450,8 @@ async function render(): Promise<void> {
     const tx = (await listTransactions()).filter(t => t.type === "purchase");
     content = pageHead("خرید", "دفتر خرید", "خریدها و افزایش خودکار موجودی.", `<button class="primary-button" id="new-purchase">＋ ثبت خرید</button>`) +
       `<section class="panel">${tx.length ? tx.map(t => `<div class="transaction-actions-row"><div class="transaction-row">${transactionRow(t)}</div><button class="secondary-button" data-purchase-edit="${t.id}">ویرایش</button><button class="secondary-button" data-purchase-delete="${t.id}">حذف</button></div>`).join("") : `<div class="empty-inline"><span>↙</span><p>هنوز خریدی ثبت نشده است.</p></div>`}</section>`;
-  } else if (activeTab === "inventory") content = await inventoryView();
+  } else if (activeTab === "orders") content = await ordersView();
+  else if (activeTab === "inventory") content = await inventoryView();
   else if (activeTab === "people") { parties = await listParties(); content = await peopleView(); }
   else if (activeTab === "reports") content = await reportsView(await listTransactions());
   else if (activeTab === "more") content = await accountsView();
