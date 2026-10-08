@@ -249,6 +249,10 @@ function invoiceModal(t: Transaction, productMap: Map<string, Product>, partyMap
         <div><span>پرداخت‌شده</span><b>${rial(t.paid)}</b></div>
         <div class="invoice-balance"><span>مانده</span><b>${rial(Math.max(0, t.amount - t.paid))}</b></div>
       </div>
+      <div class="invoice-signatures">
+        <div class="invoice-signature-slot">${branding.showSignature && branding.signature ? '<img class="invoice-signature" src="' + branding.signature + '" alt="امضا">' : '<span>امضا</span>'}</div>
+        <div class="invoice-stamp-slot">${branding.showStamp && branding.stamp ? '<img class="invoice-stamp" src="' + branding.stamp + '" alt="مهر">' : '<span>مهر</span>'}</div>
+      </div>
       <div class="invoice-branding no-print">
         <button class="secondary-button" id="invoice-branding-settings">⚙ امضا، مهر و شعار</button>
       </div>
