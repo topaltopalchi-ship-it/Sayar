@@ -317,6 +317,7 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
       // This avoids Android WebView repainting over an invoice that was mounted
       // while the underlying #app tree was still being replaced.
       await render();
+      await new Promise<void>(resolve => window.setTimeout(resolve, 80));
       try {
         await openInvoice(savedSale);
       } catch (error) {
@@ -440,23 +441,14 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const label = range==="today"?"امروز":range==="week"?"۷ روز اخیر":range==="all"?"همه":range==="custom"?"بازه انتخابی":"ماه جاری";
   const defaultFrom = formatJalaliInput(localStorage.getItem("sai-sai-report-from") || todayJalaliInput());
   const defaultTo = formatJalaliInput(localStorage.getItem("sai-sai-report-to") || todayJalaliInput());
-  const splitJalali = (value: string) => {
-    const raw = value.replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[^0-9]/g, "").slice(0, 8).padEnd(8, "0");
-    return { year: raw.slice(0, 4), month: raw.slice(4, 6), day: raw.slice(6, 8) };
-  };
-  const fromParts = splitJalali(defaultFrom);
-  const toParts = splitJalali(defaultTo);
-  const dateField = (prefix: "from" | "to", parts: { year: string; month: string; day: string }) => `
-    <div class="report-date-parts" dir="ltr" aria-label="${prefix === "from" ? "تاریخ شروع" : "تاریخ پایان"}">
-      <input id="report-${prefix}-year" data-report-date-part type="tel" inputmode="numeric" maxlength="4" value="${parts.year}" aria-label="سال">
-      <span class="report-date-separator" aria-hidden="true">/</span>
-      <input id="report-${prefix}-month" data-report-date-part type="tel" inputmode="numeric" maxlength="2" value="${parts.month}" aria-label="ماه">
-      <span class="report-date-separator" aria-hidden="true">/</span>
-      <input id="report-${prefix}-day" data-report-date-part type="tel" inputmode="numeric" maxlength="2" value="${parts.day}" aria-label="روز">
-    </div>`;
+  const dateField = (prefix: "from" | "to", value: string) => `
+    <label class="field report-date">
+      <span>${prefix === "from" ? "از تاریخ شمسی" : "تا تاریخ شمسی"}</span>
+      <input id="report-${prefix}-date" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" value="${value}" placeholder="۱۴۰۵/۰۷/۱۶" aria-label="${prefix === "from" ? "تاریخ شروع" : "تاریخ پایان"}">
+    </label>`;
   const summary = `<section class="panel report-list"><div class="report-range" role="group" aria-label="بازه گزارش"><button type="button" class="report-range-item" data-report-range="today">امروز</button><button type="button" class="report-range-item" data-report-range="week">۷ روز</button><button type="button" class="report-range-item" data-report-range="month">ماه جاری</button><button type="button" class="report-range-item" data-report-range="all">همه</button></div><form id="report-range-form" class="report-custom-range">
-  <label class="field"><span>از تاریخ شمسی</span>${dateField("from", fromParts)}</label>
-  <label class="field"><span>تا تاریخ شمسی</span>${dateField("to", toParts)}</label>
+  ${dateField("from", defaultFrom)}
+  ${dateField("to", defaultTo)}
   <button type="submit" class="primary-button wide" id="report-apply-range">اعمال بازه</button>
 </form><p class="muted">بازه فعال: ${label}</p></section>`;
   const stats = `<section class="stats-grid">${stat("فروش",rial(sales),"primary")}${stat("بهای تمام‌شده",rial(cost),"warning")}${stat("سود ناخالص",rial(gross),"success")}${stat("سود خالص",rial(net),"success")}</section>`;
@@ -637,24 +629,10 @@ function enforceReportDateFormat(input: HTMLInputElement): void {
 
 async function applyReportRange(): Promise<void> {
   const readDateValue = (prefix: "from" | "to"): string => {
-    const clean = (value: string) => value
-      .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
-      .replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
-      .replace(/[^0-9]/g, "");
-
-    // Current UI uses three native text fields (year/month/day) separated by
-    // visible slash characters. Also accept the older single-field format so
-    // existing local data and older rendered screens remain compatible.
-    const year = clean(document.querySelector<HTMLInputElement>(`#report-${prefix}-year`)?.value ?? "");
-    const month = clean(document.querySelector<HTMLInputElement>(`#report-${prefix}-month`)?.value ?? "");
-    const day = clean(document.querySelector<HTMLInputElement>(`#report-${prefix}-day`)?.value ?? "");
-    if (year.length === 4 && month.length === 2 && day.length === 2) {
-      return `${year}/${month}/${day}`;
-    }
-
-    const legacy = clean(document.querySelector<HTMLInputElement>(`#report-${prefix}-date`)?.value ?? "");
-    if (legacy.length === 8) return `${legacy.slice(0, 4)}/${legacy.slice(4, 6)}/${legacy.slice(6, 8)}`;
-    return "";
+    const input = document.querySelector<HTMLInputElement>(`#report-${prefix}-date`);
+    if (!input) return "";
+    formatReportDateInput(input);
+    return input.value;
   };
 
   const fromValue = readDateValue("from");
@@ -734,29 +712,13 @@ async function bindActions(): Promise<void> {
 function bindReportControls(): void {
   if (activeTab !== "reports") return;
 
-  document.querySelectorAll<HTMLInputElement>("[data-report-date-part]").forEach(input => {
-    const normalize = () => {
-      input.value = input.value
-        .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
-        .replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
-        .replace(/[^0-9]/g, "")
-        .slice(0, Number(input.maxLength) || 2);
-    };
-
-    input.addEventListener("input", normalize);
-    input.addEventListener("change", normalize);
-    input.addEventListener("blur", normalize);
+  document.querySelectorAll<HTMLInputElement>("[data-jalali-input]").forEach(input => {
+    const normalize = () => formatReportDateInput(input);
+    ["input", "change", "blur", "focus", "click"].forEach(eventName => input.addEventListener(eventName, normalize));
+    input.addEventListener("paste", () => window.setTimeout(normalize, 0));
     normalize();
-
-    input.addEventListener("input", () => {
-      if (input.value.length < Number(input.maxLength)) return;
-      const nextId = input.id.includes("year")
-        ? input.id.replace("year", "month")
-        : input.id.includes("month")
-          ? input.id.replace("month", "day")
-          : "";
-      if (nextId) document.getElementById(nextId)?.focus();
-    });
+    window.requestAnimationFrame(normalize);
+    window.setTimeout(normalize, 0);
   });
 
   document.querySelectorAll<HTMLButtonElement>("[data-report-range]").forEach(button => {
