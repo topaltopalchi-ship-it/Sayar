@@ -1292,20 +1292,20 @@ async function render(): Promise<void> {
 
   const q = question.replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/ة/g, "ه").replace(/[أإ]/g, "ا").replace(/[؟?!]+/g, "").replace(/\s+/g, " ").trim();
     const compact = q.replace(/\s+/g, "");
-    const commandAmountMatch = q.match(/(?:دریافت|وصول|گرفتم|پرداخت|پرداختم|دادم)[^۰-۹٠-٩\d]*(?:از|به|برای)?[^۰-۹٠-٩\d]*(?:[۰-۹٠-٩\d][۰-۹٠-٩\d٬,\.]*\s*(?:هزار|هزارتا|میلیون|میلیونی|میلیارد|میلیاردی)?|(?:یک|دو|سه|چهار|پنج|شش|هفت|هشت|نه|ده|بیست)\s*(?:هزار|هزارتا|میلیون|میلیونی|میلیارد|میلیاردی)?)/);
+  const [dashboard, transactions, products, parties, balances] = await Promise.all([getDashboard(), listTransactions(), listProducts(), listParties(), getPartyBalances()]);
+const commandAmountMatch = q.match(/(?:دریافت|وصول|گرفتم|پرداخت|پرداختم|دادم)[^۰-۹٠-٩\d]*(?:از|به|برای)?[^۰-۹٠-٩\d]*(?:[۰-۹٠-٩\d][۰-۹٠-٩\d٬,\.]*\s*(?:هزار|هزارتا|میلیون|میلیونی|میلیارد|میلیاردی)?|(?:یک|دو|سه|چهار|پنج|شش|هفت|هشت|نه|ده|بیست)\s*(?:هزار|هزارتا|میلیون|میلیونی|میلیارد|میلیاردی)?)/);
   const commandAmount = commandAmountMatch ? parseVoiceMoney(commandAmountMatch[0]) : 0;
   const receiptCommand = /^(?:سای‌?سای[، ]*)?(?:ثبت\s*)?(?:دریافت|وصول|گرفتم)\b/.test(q) && commandAmount > 0;
   const paymentCommand = /^(?:سای‌?سای[، ]*)?(?:ثبت\s*)?(?:پرداخت|پرداختم|دادم)\b/.test(q) && commandAmount > 0;
   if (receiptCommand || paymentCommand) {
-    const commandParty = parties.map(p => ({ p, n: normalized(p.name) }))
-      .filter(x => x.n && (q.includes(x.n) || x.n.split(/\s+/).some(part => part.length >= 3 && q.includes(part))))
-      .sort((a,b) => b.n.length-a.n.length)[0]?.p;
-    if (!commandParty) return "نام مشتری یا تأمین‌کننده را در دستور دریافت یا پرداخت بگویید.";
-    await addSettlement({ type: receiptCommand ? "receipt" : "payment", date: Date.now(), partyId: commandParty.id, amount: commandAmount, description: receiptCommand ? "دریافت صوتی" : "پرداخت صوتی" });
-    return receiptCommand ? ("دریافت " + rial(commandAmount) + " از " + commandParty.name + " ثبت شد.") : ("پرداخت " + rial(commandAmount) + " به " + commandParty.name + " ثبت شد.");
+const commandParty = parties.map(p => ({ p, n: normalized(p.name) }))
+  .filter(x => x.n && (q.includes(x.n) || x.n.split(/\s+/).some(part => part.length >= 3 && q.includes(part))))
+  .sort((a,b) => b.n.length-a.n.length)[0]?.p;
+if (!commandParty) return "نام مشتری یا تأمین‌کننده را در دستور دریافت یا پرداخت بگویید.";
+await addSettlement({ type: receiptCommand ? "receipt" : "payment", date: Date.now(), partyId: commandParty.id, amount: commandAmount, description: receiptCommand ? "دریافت صوتی" : "پرداخت صوتی" });
+return receiptCommand ? ("دریافت " + rial(commandAmount) + " از " + commandParty.name + " ثبت شد.") : ("پرداخت " + rial(commandAmount) + " به " + commandParty.name + " ثبت شد.");
   }
 
-  const [dashboard, transactions, products, parties, balances] = await Promise.all([getDashboard(), listTransactions(), listProducts(), listParties(), getPartyBalances()]);
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
     const monthSales = transactions.filter(t => t.type === "sale" && t.date >= monthStart).reduce((s, t) => s + t.amount, 0);
