@@ -260,7 +260,9 @@ async function openInvoice(t: Transaction): Promise<void> {
       "مانده: " + rial(balance)
     ].join("\n");
     try {
-      if (navigator.share) {
+      if (nativeApp()) {
+        await Share.share({ title: title + " سای‌سای", text, dialogTitle: "ارسال فاکتور" });
+      } else if (navigator.share) {
         await navigator.share({ title: title + " سای‌سای", text });
       } else if (navigator.clipboard) {
         await navigator.clipboard.writeText(text);
@@ -268,8 +270,9 @@ async function openInvoice(t: Transaction): Promise<void> {
       } else {
         showToast("اشتراک‌گذاری در این دستگاه در دسترس نیست");
       }
-    } catch {
-      // لغو اشتراک‌گذاری توسط کاربر، خطا محسوب نمی‌شود.
+    } catch (error) {
+      if (error instanceof Error && /cancel|abort/i.test(error.name + error.message)) return;
+      showToast("ارسال فاکتور ناموفق بود");
     }
   });
   document.querySelector("#invoice-branding-settings")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", invoiceBrandingModal()); bindInvoiceBrandingModal(); });
@@ -324,16 +327,14 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
         : await addSale({ date: Date.now(), partyId: modal.querySelector<HTMLSelectElement>("#sale-party")!.value || undefined, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${p.name}`, lines: [line], paid: paidValue });
       modal.remove();
 
-      // Finish the screen render first, then mount the invoice overlay.
-      // This avoids Android WebView repainting over an invoice that was mounted
-      // while the underlying #app tree was still being replaced.
-      await render();
-      await new Promise<void>(resolve => window.setTimeout(resolve, 80));
+      // The invoice is mounted on <body>, outside #app. Open it immediately
+      // so a render of the underlying screen cannot race with the invoice UI.
       try {
         await openInvoice(savedSale);
       } catch (error) {
         showToast(error instanceof Error ? `فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود: ${error.message}` : "فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود");
       }
+      await render();
       showToast(`${existing ? "فاکتور ویرایش شد" : "فروش ثبت شد"}؛ مانده ${rial(amount - paidValue)}`);
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت فروش ناموفق بود"); }
   });
@@ -450,12 +451,14 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const cost = salesTx.reduce((s,t)=>s+(cogs.get(t.id) ?? t.costOfGoods ?? 0),0);
   const gross = sales-cost, net=gross-expenseTotal;
   const label = range==="today"?"امروز":range==="week"?"۷ روز اخیر":range==="all"?"همه":range==="custom"?"بازه انتخابی":"ماه جاری";
-  const defaultFrom = compactJalaliInput(localStorage.getItem("sai-sai-report-from") || todayJalaliInput());
-  const defaultTo = compactJalaliInput(localStorage.getItem("sai-sai-report-to") || todayJalaliInput());
+  // Keep the visible value in yyyy/mm/dd form. The parser accepts both
+  // formatted and compact values, but the UI should always show separators.
+  const defaultFrom = formatJalaliInput(localStorage.getItem("sai-sai-report-from") || todayJalaliInput());
+  const defaultTo = formatJalaliInput(localStorage.getItem("sai-sai-report-to") || todayJalaliInput());
   const dateField = (prefix: "from" | "to", value: string) => `
     <label class="field report-date">
       <span>${prefix === "from" ? "از تاریخ شمسی" : "تا تاریخ شمسی"}</span>
-      <input id="report-${prefix}-date" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="8" value="${value}" placeholder="۱۴۰۵۰۷۱۶" aria-label="${prefix === "from" ? "تاریخ شروع" : "تاریخ پایان"}">
+      <input id="report-${prefix}-date" data-jalali-input type="text" inputmode="numeric" dir="ltr" autocomplete="off" maxlength="10" value="${formatJalaliInput(value)}" placeholder="۱۴۰۵/۰۷/۱۶" aria-label="${prefix === "from" ? "تاریخ شروع" : "تاریخ پایان"}">
     </label>`;
   const summary = `<section class="panel report-list"><div class="report-range" role="group" aria-label="بازه گزارش"><button type="button" class="report-range-item" data-report-range="today">امروز</button><button type="button" class="report-range-item" data-report-range="week">۷ روز</button><button type="button" class="report-range-item" data-report-range="month">ماه جاری</button><button type="button" class="report-range-item" data-report-range="all">همه</button></div><form id="report-range-form" class="report-custom-range">
   ${dateField("from", defaultFrom)}
@@ -696,13 +699,18 @@ async function bindActions(): Promise<void> {
 
   root.addEventListener("input", event => {
     const target = event.target as HTMLInputElement;
-    if (target.matches("[data-jalali-input]")) target.value = compactJalaliInput(target.value);
+    if (target.matches("[data-jalali-input]")) target.value = formatJalaliInput(target.value);
   });
 
   root.addEventListener("change", event => {
     const target = event.target as HTMLInputElement;
-    if (target.matches("[data-jalali-input]")) target.value = compactJalaliInput(target.value);
+    if (target.matches("[data-jalali-input]")) target.value = formatJalaliInput(target.value);
   });
+
+  root.addEventListener("blur", event => {
+    const target = event.target as HTMLInputElement;
+    if (target.matches("[data-jalali-input]")) target.value = formatJalaliInput(target.value);
+  }, true);
 
   root.addEventListener("click", async event => {
     const target = event.target as HTMLElement;
@@ -751,12 +759,7 @@ async function bindActions(): Promise<void> {
     }
   });
 
-  root.addEventListener("submit", async event => {
-    const form = event.target as HTMLFormElement;
-    if (form?.id !== "report-range-form") return;
-    event.preventDefault();
-    await applyReportRange();
-  });
+
 }
 
 function bindReportControls(): void {
@@ -765,6 +768,23 @@ function bindReportControls(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-report-range]").forEach(button => {
     button.setAttribute("aria-pressed", (button.dataset.reportRange || "month") === activeRange ? "true" : "false");
   });
+
+  const form = document.querySelector<HTMLFormElement>("#report-range-form");
+  if (form) {
+    const normalize = (input: HTMLInputElement) => {
+      input.value = formatJalaliInput(input.value);
+    };
+    form.querySelectorAll<HTMLInputElement>("[data-jalali-input]").forEach(input => {
+      normalize(input);
+      input.addEventListener("input", () => normalize(input));
+      input.addEventListener("change", () => normalize(input));
+      input.addEventListener("blur", () => normalize(input));
+    });
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      void applyReportRange();
+    });
+  }
 }
 
 async function render(): Promise<void> {
