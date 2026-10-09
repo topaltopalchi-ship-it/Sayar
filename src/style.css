@@ -643,3 +643,12 @@ body{
   .debtor-search-item{grid-template-columns:auto minmax(0,1fr);align-items:start}
   .debtor-search-item .debtor-open-invoice{grid-column:2;justify-self:start}
 }
+
+
+/* Voice-triggered calculator */
+.calculator-modal { max-width: 420px; }
+.calculator-result { min-height: 2.5rem; display: flex; align-items: center; justify-content: flex-end; padding: 14px 16px; margin: 12px 0 16px; border: 1px solid var(--border, rgba(148,163,184,.25)); border-radius: 14px; background: rgba(15,23,42,.72); font-size: 1.35rem; font-weight: 800; overflow-wrap: anywhere; }
+.calculator-keys { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.calculator-keys button { min-height: 48px; border: 1px solid var(--border, rgba(148,163,184,.22)); border-radius: 12px; background: rgba(148,163,184,.10); color: inherit; font: inherit; font-size: 1.05rem; font-weight: 700; cursor: pointer; }
+.calculator-keys button:active { transform: scale(.97); }
+.calculator-keys button[data-calc-key="/"], .calculator-keys button[data-calc-key="*"], .calculator-keys button[data-calc-key="-"], .calculator-keys button[data-calc-key="+"] { background: rgba(45,212,191,.15); }
