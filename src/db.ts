@@ -632,6 +632,35 @@ export async function addStockAdjustment(input: {
 }
 
 
+export interface CloudBackupSnapshot {
+  schemaVersion: 1;
+  exportedAt: number;
+  data: {
+    products: Product[];
+    parties: Party[];
+    transactions: Transaction[];
+    expenses: Expense[];
+    accounts: Account[];
+    accountEntries: AccountEntry[];
+    checks: Check[];
+    movements: StockMovement[];
+    orders: Order[];
+  };
+}
+
+/** Capture every business-data store for portable and cloud backups. */
+export async function createBackupSnapshot(): Promise<CloudBackupSnapshot> {
+  const [products, parties, transactions, expenses, accounts, accountEntries, checks, movements, orders] = await Promise.all([
+    listProducts(), listParties(), listTransactions(), listExpenses(), listAccounts(),
+    listAccountEntries(), listChecks(), listMovements(), listOrders(),
+  ]);
+  return {
+    schemaVersion: 1,
+    exportedAt: Date.now(),
+    data: { products, parties, transactions, expenses, accounts, accountEntries, checks, movements, orders },
+  };
+}
+
 export async function restoreBackup(data: {
   products: Product[]; parties: Party[]; transactions: Transaction[]; expenses?: Expense[];
   accounts?: Account[]; accountEntries?: AccountEntry[]; checks?: Check[]; movements?: StockMovement[]; orders?: Order[];
