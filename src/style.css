@@ -625,3 +625,21 @@ body{
 @media(prefers-reduced-motion:reduce){
   *,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
 }
+
+/* Debtor account lookup and invoice actions */
+.debtor-search-field{margin:16px 0 7px}
+.debtor-search-field input{min-height:48px;border-radius:15px;background:var(--surface-2,#172238);border:1px solid var(--border,#2b3a55);color:var(--text,#eef4ff);font-size:14px;padding:13px 15px}
+.debtor-search-field input::placeholder{color:var(--muted,#9eacc2)}
+.debtor-search-field input:focus{outline:none;border-color:#60a5fa;box-shadow:0 0 0 3px #3b82f624}
+.debtor-search-count{font-size:11px;margin:4px 0 10px}
+.debtor-search-item{grid-template-columns:auto minmax(0,1fr) auto;gap:12px}
+.debtor-search-item[hidden],#debtor-search-empty[hidden]{display:none!important}
+.debtor-person-info{display:grid;gap:5px;min-width:0}
+.debtor-person-info strong{font-size:13px;overflow-wrap:anywhere}
+.debtor-person-info small{font-size:10px;line-height:1.9;color:var(--muted,#9eacc2)}
+.debtor-person-info .debt-amount{font-size:11px;color:#fda4af}
+.debtor-open-invoice{white-space:nowrap;font-size:11px;padding:9px 11px}
+@media(max-width:560px){
+  .debtor-search-item{grid-template-columns:auto minmax(0,1fr);align-items:start}
+  .debtor-search-item .debtor-open-invoice{grid-column:2;justify-self:start}
+}
