@@ -2,7 +2,7 @@ name: Sayar CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/whatsapp-support-health-check]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -48,7 +48,7 @@ jobs:
           java-version: "21"
 
   android:
-    if: github.event_name == 'workflow_dispatch' && inputs.build_android == true
+    if: (github.event_name == 'workflow_dispatch' && inputs.build_android == true) || (github.event_name == 'push' && github.ref == 'refs/heads/feature/whatsapp-support-health-check')
     runs-on: ubuntu-latest
     needs: build
     steps:
