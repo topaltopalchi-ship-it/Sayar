@@ -326,3 +326,46 @@ body{background:radial-gradient(circle at 12% 0,#223657 0,#10182a 34%,#090e1b 78
 
 .invoice-customer-name{display:block;font-size:18px!important;font-weight:900;color:#0f274d!important;margin-top:4px}.invoice-party span{display:block;font-size:10px;color:#64748b;margin-bottom:3px}.invoice-party small{display:block;margin-top:4px}
 @media(max-width:520px){.bottom-nav{padding:6px}.nav-item{padding:6px 1px}.nav-item span{font-size:17px}.nav-item small{font-size:8px}}
+
+
+/* Mobile fix: keep the long add/edit product form scrollable above Android system bars. */
+#product-modal.modal-backdrop {
+  display: block;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: max(12px, env(safe-area-inset-top, 0px)) 12px
+    max(16px, env(safe-area-inset-bottom, 0px));
+  height: 100vh;
+  height: 100dvh;
+}
+
+#product-modal .modal {
+  width: min(100%, 430px);
+  max-height: calc(100vh - 28px);
+  max-height: calc(100dvh - max(28px, env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px)));
+  margin: 0 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+}
+
+#product-modal #product-submit {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  box-shadow: 0 -8px 18px #0d1421aa;
+}
+
+@media (max-width: 480px) {
+  #product-modal.modal-backdrop {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  #product-modal .modal {
+    border-radius: 20px;
+    padding: 20px 16px max(20px, env(safe-area-inset-bottom, 0px));
+  }
+}
