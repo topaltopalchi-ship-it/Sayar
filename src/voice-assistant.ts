@@ -388,7 +388,7 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
     if (isProcessing) return;
     const available = await SpeechRecognition.available().catch(() => ({ available: false }));
     if (!available.available) {
-      openOfflineQuestionPrompt(onAnswer, notify);
+      notify("تشخیص گفتار روی این دستگاه در دسترس نیست. سرویس تشخیص گفتار فارسی گوشی را فعال کنید.");
       return;
     }
     const permission = await SpeechRecognition.requestPermissions().catch(() => null);
@@ -416,10 +416,10 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
           }
           const result = await SpeechRecognition.start({
             language: "fa-IR",
-            maxResults: 3,
-            partialResults: false,
+            maxResults: 5,
+            partialResults: true,
             popup: false,
-            prompt: attempt === 0 ? "سؤال خود را واضح و به فارسی از سای‌سای بپرسید" : "دوباره گوش می‌دهم؛ سؤال را کوتاه و واضح بگویید"
+            prompt: attempt === 0 ? "سؤال خود را نزدیک میکروفون و به فارسی بگویید" : "دوباره گوش می‌دهم؛ واضح‌تر و کمی بلندتر صحبت کنید"
           });
           if (!isListening) return;
           question = result.matches?.find(item => item.trim().length > 0)?.trim() || "";
@@ -447,8 +447,7 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
       notify(spoken ? answer : answer + "\n\nبرای شنیدن پاسخ، موتور تبدیل متن به گفتار فارسی را در تنظیمات گوشی فعال کنید.");
     } catch (error) {
       if (!/cancel|abort/i.test(error instanceof Error ? error.name + error.message : String(error))) {
-        notify("تشخیص صوتی در دسترس نبود؛ می‌توانید سؤال را به‌صورت متنی و آفلاین بپرسید.");
-        openOfflineQuestionPrompt(onAnswer, notify);
+        notify("تشخیص صوتی ناموفق بود. اینترنت و سرویس تشخیص گفتار فارسی گوشی را بررسی کنید و دوباره تلاش کنید.");
       }
     } finally {
       isProcessing = false;
