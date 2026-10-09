@@ -107,7 +107,7 @@ jobs:
           if "signingConfigs.release" in text:
               raise SystemExit("Release signing appears to be configured already; refusing to duplicate it.")
 
-          build_types = re.search(r"(?m)^([ \\t]*)buildTypes\s*\\{", text)
+          build_types = re.search(r"(?m)^([ ]*)buildTypes[ ]*[{]", text)
           if not build_types:
               raise SystemExit("Could not find buildTypes block in android/app/build.gradle")
           indent = build_types.group(1)
@@ -123,7 +123,7 @@ jobs:
           )
           text = text[:build_types.start()] + signing + text[build_types.start():]
 
-          build_types = re.search(r"(?m)^([ \\t]*)buildTypes\s*\\{", text)
+          build_types = re.search(r"(?m)^([ ]*)buildTypes[ ]*[{]", text)
           start = build_types.end()
           depth = 1
           i = start
@@ -134,7 +134,7 @@ jobs:
                   depth -= 1
               i += 1
           block = text[build_types.start():i]
-          release = re.search(r"(?m)^([ \\t]*)release\s*\\{", block)
+          release = re.search(r"(?m)^([ ]*)release[ ]*[{]", block)
           if not release:
               raise SystemExit("Could not find release block inside buildTypes")
           release_indent = release.group(1)
