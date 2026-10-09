@@ -102,23 +102,23 @@ jobs:
           if "signingConfigs.release" in text:
               raise SystemExit("Release signing appears to be configured already; refusing to duplicate it.")
 
-          build_types = re.search(r"(?m)^([ \\t]*)buildTypes\\s*\\{", text)
+          build_types = re.search(r"(?m)^([ \t]*)buildTypes\s*\{", text)
           if not build_types:
               raise SystemExit("Could not find buildTypes block in android/app/build.gradle")
           indent = build_types.group(1)
           signing = (
-              f"{indent}signingConfigs {{\\n"
-              f"{indent}    release {{\\n"
-              f"{indent}        storeFile file(System.getenv('RUNNER_TEMP') + '/release-key.jks')\\n"
-              f"{indent}        storePassword System.getenv('KEYSTORE_PASSWORD')\\n"
-              f"{indent}        keyAlias System.getenv('KEY_ALIAS')\\n"
-              f"{indent}        keyPassword System.getenv('KEY_PASSWORD')\\n"
-              f"{indent}    }}\\n"
-              f"{indent}}}\\n\\n"
+              f"{indent}signingConfigs {{\n"
+              f"{indent}    release {{\n"
+              f"{indent}        storeFile file(System.getenv('RUNNER_TEMP') + '/release-key.jks')\n"
+              f"{indent}        storePassword System.getenv('KEYSTORE_PASSWORD')\n"
+              f"{indent}        keyAlias System.getenv('KEY_ALIAS')\n"
+              f"{indent}        keyPassword System.getenv('KEY_PASSWORD')\n"
+              f"{indent}    }}\n"
+              f"{indent}}}\n\n"
           )
           text = text[:build_types.start()] + signing + text[build_types.start():]
 
-          build_types = re.search(r"(?m)^([ \\t]*)buildTypes\\s*\\{", text)
+          build_types = re.search(r"(?m)^([ \t]*)buildTypes\s*\{", text)
           start = build_types.end()
           depth = 1
           i = start
@@ -129,12 +129,12 @@ jobs:
                   depth -= 1
               i += 1
           block = text[build_types.start():i]
-          release = re.search(r"(?m)^([ \\t]*)release\\s*\\{", block)
+          release = re.search(r"(?m)^([ \t]*)release\s*\{", block)
           if not release:
               raise SystemExit("Could not find release block inside buildTypes")
           release_indent = release.group(1)
           insert_at = release.end()
-          block = block[:insert_at] + f"\\n{release_indent}    signingConfig signingConfigs.release" + block[insert_at:]
+          block = block[:insert_at] + f"\n{release_indent}    signingConfig signingConfigs.release" + block[insert_at:]
           text = text[:build_types.start()] + block + text[i:]
           gradle.write_text(text)
           PY
