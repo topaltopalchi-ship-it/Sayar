@@ -787,6 +787,11 @@ function bindOrderModal(existing?: Order): void {
     if (p) price.value = String(p.salePrice);
   };
   product.addEventListener("change", syncPrice);
+  modal.querySelectorAll<HTMLButtonElement>(".jalali-calendar-open").forEach(button => button.addEventListener("click", () => {
+    const target = button.dataset.calendarTarget || "";
+    const input = document.getElementById(target) as HTMLInputElement | null;
+    if (input) openJalaliCalendar(target, input.value);
+  }));
   modal.querySelector("#order-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#order-submit")?.addEventListener("click", async () => {
     try {
