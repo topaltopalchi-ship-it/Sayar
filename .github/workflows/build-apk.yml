@@ -38,6 +38,9 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      - name: Install Android icon rendering dependencies
+        run: python3 -m pip install --break-system-packages cairosvg Pillow
+
       - name: Restore Sai Sai launcher logo
         run: python3 scripts/restore-android-icon.py
 
