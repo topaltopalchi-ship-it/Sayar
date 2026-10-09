@@ -83,7 +83,7 @@ jobs:
         run: |
           set -euo pipefail
           STORE_PASSWORD="$(openssl rand -hex 24)"
-          KEY_PASSWORD="$(openssl rand -hex 24)"
+          KEY_PASSWORD="$STORE_PASSWORD"
           KEY_ALIAS="saysay-release"
           keytool -genkeypair -v \
             -keystore "$RUNNER_TEMP/release-key.jks" \
