@@ -329,6 +329,40 @@ export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise
   });
 }
 
+function openOfflineQuestionPrompt(onAnswer: (question: string) => Promise<string>, notify: (message: string) => void): void {
+  document.querySelector("#offline-question-modal")?.remove();
+  const modal = document.createElement("div");
+  modal.className = "modal-backdrop";
+  modal.id = "offline-question-modal";
+  modal.innerHTML = '<section class="modal" role="dialog" aria-modal="true"><button class="modal-close" id="offline-question-close" type="button">×</button><span class="eyebrow">دستیار آفلاین سای‌سای</span><h2>درباره موجودی و فروش بپرسید</h2><p class="muted">پاسخ با اطلاعات ذخیره‌شده روی همین دستگاه محاسبه می‌شود و برای سؤال متنی به اینترنت نیاز ندارد.</p><label class="field"><span>سؤال شما</span><input id="offline-question-input" type="text" autocomplete="off" placeholder="مثلاً موجودی دیفوزر چقدر است؟"></label><div class="form-actions"><button class="secondary-button" id="offline-question-cancel" type="button">بستن</button><button class="primary-button" id="offline-question-submit" type="button">پاسخ بده</button></div><p class="muted" id="offline-question-status"></p></section>';
+  document.body.appendChild(modal);
+  const input = modal.querySelector<HTMLInputElement>("#offline-question-input")!;
+  const submit = modal.querySelector<HTMLButtonElement>("#offline-question-submit")!;
+  const status = modal.querySelector<HTMLElement>("#offline-question-status")!;
+  const close = () => modal.remove();
+  modal.querySelector("#offline-question-close")?.addEventListener("click", close);
+  modal.querySelector("#offline-question-cancel")?.addEventListener("click", close);
+  const ask = async () => {
+    const question = input.value.trim();
+    if (!question) { status.textContent = "لطفاً سؤال را بنویسید."; input.focus(); return; }
+    submit.disabled = true;
+    status.textContent = "در حال بررسی اطلاعات محلی…";
+    try {
+      const answer = await onAnswer(question);
+      status.textContent = answer;
+      const spoken = await speakSaiSai(answer);
+      notify(spoken ? answer : answer + "\n\nپاسخ متنی آماده است؛ برای پاسخ صوتی، موتور گفتار فارسی گوشی را فعال کنید.");
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : "پاسخ‌گویی انجام نشد.";
+    } finally {
+      submit.disabled = false;
+    }
+  };
+  submit.addEventListener("click", () => void ask());
+  input.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); void ask(); } });
+  input.focus();
+}
+
 export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promise<string>, notify: (message: string) => void): void {
   const button = document.querySelector<HTMLButtonElement>("#voice-query");
   if (!button) return;
@@ -354,7 +388,7 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
     if (isProcessing) return;
     const available = await SpeechRecognition.available().catch(() => ({ available: false }));
     if (!available.available) {
-      notify("تشخیص صدا در این دستگاه در دسترس نیست");
+      openOfflineQuestionPrompt(onAnswer, notify);
       return;
     }
     const permission = await SpeechRecognition.requestPermissions().catch(() => null);
@@ -413,7 +447,8 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
       notify(spoken ? answer : answer + "\n\nبرای شنیدن پاسخ، موتور تبدیل متن به گفتار فارسی را در تنظیمات گوشی فعال کنید.");
     } catch (error) {
       if (!/cancel|abort/i.test(error instanceof Error ? error.name + error.message : String(error))) {
-        notify(error instanceof Error ? error.message : "پاسخ‌گویی ناموفق بود");
+        notify("تشخیص صوتی در دسترس نبود؛ می‌توانید سؤال را به‌صورت متنی و آفلاین بپرسید.");
+        openOfflineQuestionPrompt(onAnswer, notify);
       }
     } finally {
       isProcessing = false;
