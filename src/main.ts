@@ -23,6 +23,7 @@ import { bindVoiceAssistant, bindVoiceQuestionAssistant, bindVoiceProductAssista
 import { getCustomerTier, getMarketSettings, setMarketSettings, recommendPrice, tierLabel } from "./pricing";
 import { buildBusinessInsights, dailyBrief, customerScore, type BusinessInsight } from "./intelligence";
 import { analyzeProductPhoto } from "./product-vision";
+import { getEconomicBrief } from "./economic-news";
 
 type Tab = "dashboard" | "sales" | "purchases" | "orders" | "inventory" | "people" | "reports" | "more" | "checks";
 
@@ -283,6 +284,10 @@ function layout(content: string, subscription: Subscription): void {
   document.querySelectorAll<HTMLButtonElement>("[data-subscribe]").forEach(b => b.addEventListener("click", subscribe));
 }
 
+function escapeNewsHtml(value: string): string {
+  return value.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] || char));
+}
+
 function stat(label: string, value: string, tone: string): string {
   return `<article class="stat-card ${tone}"><span>${label}</span><strong>${value}</strong></article>`;
 }
@@ -293,19 +298,25 @@ function pageHead(eyebrow: string, title: string, text: string, action = ""): st
 
 async function dashboardView(subscription: Subscription): Promise<string> {
   const d = await getDashboard();
-  const [lowStock, supplierParties, tx, allProducts, allParties, expenses] = await Promise.all([
-    getLowStockItems(), listParties(), listTransactions(), listProducts(), listParties(), listExpenses()
+  const [lowStock, supplierParties, tx, allProducts, allParties, expenses, economicBrief] = await Promise.all([
+    getLowStockItems(), listParties(), listTransactions(), listProducts(), listParties(), listExpenses(), getEconomicBrief()
   ]);
   const insights = await buildBusinessInsights(allProducts, allParties, tx, expenses);
   const brief = dailyBrief(insights);
   const insightHtml = insights.slice(0, 6).map((x: BusinessInsight) =>
     '<div class="transaction-row"><div class="transaction-icon">' + (x.tone === "danger" ? "!" : x.tone === "warning" ? "⚠" : x.tone === "success" ? "↑" : "💡") + '</div><div class="transaction-main"><strong>' + x.title + '</strong><small>' + x.text + '</small></div>' + (x.action ? '<button type="button" class="secondary-button insight-action" data-insight-id="' + x.id + '">' + x.action + '</button>' : '') + '</div>'
   ).join("");
+  const economicNewsHtml = '<section class="panel economic-brief"><div class="section-head"><div><h3>📰 نبض کوتاه اقتصاد</h3><span class="muted">' +
+    (economicBrief.updatedAt ? 'به‌روزرسانی ' + escapeNewsHtml(new Date(economicBrief.updatedAt).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" })) + (economicBrief.stale ? ' · آخرین داده ذخیره‌شده' : '') : 'خبر زنده فعلاً در دسترس نیست') +
+    '</span></div><a class="economic-source" href="https://news.google.com/search?q=%D8%A7%D9%82%D8%AA%D8%B5%D8%A7%D8%AF%20%D8%A7%DB%8C%D8%B1%D8%A7%D9%86&hl=fa&gl=IR&ceid=IR%3Afa" target="_blank" rel="noopener noreferrer">منبع خبرها ↗</a></div>' +
+    (economicBrief.items.length ? '<ul class="economic-headlines">' + economicBrief.items.map(item => '<li><a href="' + escapeNewsHtml(item.link) + '" target="_blank" rel="noopener noreferrer">' + escapeNewsHtml(item.title) + '</a></li>').join('') + '</ul>' : '<p class="muted economic-unavailable">برای دریافت تیترهای تازه اتصال برقرار نشد؛ برای دیدن خبرهای روز منبع را باز کنید.</p>') +
+    '<div class="economic-tips"><p><strong>برای فروشنده:</strong> ' + escapeNewsHtml(economicBrief.sellerAdvice) + '</p><p><strong>برای مدیر شرکت:</strong> ' + escapeNewsHtml(economicBrief.ownerAdvice) + '</p></div></section>';
   const lowStockHtml = lowStock.length ? '<section class="panel low-stock-alert-panel"><div class="section-head"><div><h3>⚠️ کالاهای نیازمند تأمین</h3><span class="muted">موجودی به حد هشدار رسیده است</span></div><strong>' + money.format(lowStock.length) + ' کالا</strong></div>' +
     lowStock.map(x => '<div class="person-row"><div class="person-avatar">!</div><div><strong>' + x.product.name + '</strong><small>حد هشدار: ' + money.format(x.product.lowStock) + ' ' + x.product.unit + (x.product.supplierId ? ' · تأمین‌کننده: ' + (supplierParties.find(p => p.id === x.product.supplierId)?.name || 'ثبت نشده') : '') + '</small></div><b class="debt-amount">' + money.format(x.stock) + ' ' + x.product.unit + '</b><span class="account-actions"><button type="button" class="secondary-button supply-item" data-supply-product="' + x.product.id + '">تأمین کالا</button>' + ((supplierParties.find(p => p.id === x.product.supplierId)?.phone || "").trim() ? '<a class="secondary-button" href="tel:' + (supplierParties.find(p => p.id === x.product.supplierId)?.phone || "").trim() + '">📞 تماس</a>' : '') + '</span></div>').join("") + '</section>' : "";
   const recent = d.recent.length ? d.recent.map(t => transactionRow(t)).join("") : '<div class="empty-inline"><span>◌</span><p>هنوز تراکنشی ثبت نشده است.</p></div>';
   return '<section class="hero"><div><p class="hero-kicker">داشبورد مدیریت هوشمند</p><h2>سای‌سای مراقب کسب‌وکار شماست</h2><p class="muted">' + brief + '</p></div><div class="hero-mark"><img src="/saysay-ai.svg" alt="سای‌سای؛ مدیر فروش و هوش مصنوعی" /></div></section>' +
     (subscription.status !== "active" ? '<section class="subscription-card"><div><span class="eyebrow">اشتراک سای‌سای</span><h3>برای استفاده از نسخه کامل، اشتراک ماهانه فعال کنید.</h3><p class="muted">بعد از تأیید موفق پرداخت، دسترسی از سمت سرور فعال می‌شود.</p></div><button class="primary-button" data-subscribe>خرید اشتراک ماهانه</button></section>' : "") +
+    economicNewsHtml +
     lowStockHtml +
     '<section class="stats-grid">' + stat("فروش امروز", rial(d.salesToday), "primary") + stat("دریافت امروز", rial(d.receiptsToday), "success") +
     (isProfessionalMode() ? stat("مطالبات", rial(d.receivables), "warning") + stat("موجودی کم", money.format(d.lowStock) + " کالا", "danger") : "") + '</section>' +
