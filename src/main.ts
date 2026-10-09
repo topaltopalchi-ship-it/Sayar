@@ -1092,12 +1092,17 @@ async function peopleView(): Promise<string> {
     .sort((a, b) => b.debt - a.debt);
   const totalDebt = debtors.reduce((sum, x) => sum + x.debt, 0);
   const debtorSection = `<section class="panel debtor-panel">
-      <div class="section-head"><div><h3>لیست بدهکاران</h3><span class="muted">فقط فاکتورهای فروش تسویه‌نشده</span></div><strong>${rial(totalDebt)}</strong></div>
-      ${debtors.length ? debtors.map(({transaction:t,name,debt}) => `<div class="person-row debtor-row">
+      <div class="section-head"><div><h3>جست‌وجوی حساب بدهکاران</h3><span class="muted">نام مشتری را بنویس؛ فاکتور و مانده حساب را مستقیم باز کن.</span></div><strong>${rial(totalDebt)}</strong></div>
+      <label class="field debtor-search-field"><span>نام مشتری یا عبارت‌هایی مثل «حساب آقای احمدزاده»</span><input id="debtor-search" type="search" placeholder="مثلاً احمدزاده…" autocomplete="off" aria-label="جست‌وجوی حساب بدهکار"></label>
+      <div id="debtor-search-count" class="muted debtor-search-count">${debtors.length ? money.format(debtors.length) + " فاکتور بدهکار" : "بدون فاکتور بدهکار"}</div>
+      <div id="debtor-search-results">
+      ${debtors.length ? debtors.map(({transaction:t,name,debt}) => `<div class="person-row debtor-row debtor-search-item" data-debtor-search="${(name + " " + (t.invoiceNumber || "")).toLocaleLowerCase().replace(/"/g, "&quot;")}">
         <div class="person-avatar">₺</div>
-        <div><strong>${name}</strong><small>${t.invoiceNumber ? "فاکتور " + t.invoiceNumber + " · " : ""}${dateLabel(t.date)} · مبلغ فاکتور ${rial(t.amount)} · پرداخت‌شده ${rial(t.paid)}</small></div>
-        <b class="debt-amount">${rial(debt)}</b>
+        <div class="debtor-person-info"><strong>${name}</strong><small>${t.invoiceNumber ? "فاکتور " + t.invoiceNumber + " · " : ""}${dateLabel(t.date)} · مبلغ فاکتور ${rial(t.amount)} · پرداخت‌شده ${rial(t.paid)}</small><b class="debt-amount">مانده: ${rial(debt)}</b></div>
+        <button type="button" class="secondary-button debtor-open-invoice" data-invoice-id="${t.id}">مشاهده فاکتور</button>
       </div>`).join("") : `<div class="empty-inline"><span>✓</span><p>هیچ فاکتور تسویه‌نشده‌ای وجود ندارد.</p></div>`}
+      </div>
+      <div id="debtor-search-empty" class="empty-inline" hidden><span>⌕</span><p>موردی پیدا نشد؛ نام را کوتاه‌تر یا بدون عنوان وارد کن.</p></div>
     </section>`;
   return pageHead("دفتر اشخاص", "مشتریان و تأمین‌کنندگان", `${money.format(customerCount)} مشتری · ${money.format(supplierCount)} تأمین‌کننده`, `<button class="primary-button" id="new-party">＋ افزودن شخص</button>`) +
     debtorSection +
@@ -1410,6 +1415,25 @@ async function bindActions(): Promise<void> {
   root.addEventListener("input", event => {
     const target = event.target as HTMLInputElement;
     if (target.matches("[data-jalali-input]")) target.value = formatJalaliInput(target.value);
+    if (target.matches("#debtor-search")) {
+      const normalize = (value: string) => value.toLocaleLowerCase()
+        .replace(/ي/g, "ی").replace(/ك/g, "ک")
+        .replace(/(?:حساب|بدهی|بدهکار|فاکتور|آقای|اقای|خانم|جناب|سرکار|آقا|خانم)/g, " ")
+        .replace(/[\u200c\s]+/g, " ").trim();
+      const query = normalize(target.value);
+      const rows = Array.from(root.querySelectorAll<HTMLElement>(".debtor-search-item"));
+      let visible = 0;
+      for (const row of rows) {
+        const haystack = normalize(row.dataset.debtorSearch || row.textContent || "");
+        const matches = !query || query.split(" ").filter(Boolean).every(word => haystack.includes(word));
+        row.hidden = !matches;
+        if (matches) visible++;
+      }
+      const count = root.querySelector<HTMLElement>("#debtor-search-count");
+      const empty = root.querySelector<HTMLElement>("#debtor-search-empty");
+      if (count) count.textContent = visible ? money.format(visible) + " فاکتور در نتیجه جست‌وجو" : "نتیجه‌ای وجود ندارد";
+      if (empty) empty.hidden = visible > 0;
+    }
   });
 
   root.addEventListener("change", event => {
