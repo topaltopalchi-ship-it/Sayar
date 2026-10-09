@@ -1452,11 +1452,17 @@ function bindReportControls(): void {
   const activeRange = localStorage.getItem("sai-sai-report-range") || "month";
   document.querySelectorAll<HTMLButtonElement>("[data-report-range]").forEach(button => {
     button.setAttribute("aria-pressed", (button.dataset.reportRange || "month") === activeRange ? "true" : "false");
-    button.addEventListener("click", async () => {
-      const range = button.dataset.reportRange || "month";
-      localStorage.setItem("sai-sai-report-range", range);
-      await render();
-    });
+  });
+
+  // Preset buttons are rendered after bindReportControls runs; delegate clicks
+  // from the persistent app root so every preset works after navigation/rerender.
+  root.addEventListener("click", event => {
+    const target = event.target as HTMLElement;
+    const button = target.closest<HTMLButtonElement>("[data-report-range]");
+    if (!button) return;
+    const range = button.dataset.reportRange || "month";
+    localStorage.setItem("sai-sai-report-range", range);
+    void render();
   });
 
   const normalizeDateInput = (input: HTMLInputElement): void => {
@@ -1509,10 +1515,11 @@ function bindReportControls(): void {
   root.addEventListener("click", event => {
     const target = event.target as HTMLElement;
     const button = target.closest<HTMLButtonElement>(".jalali-calendar-open");
-    if (!button) return;
-    const targetId = button.dataset.calendarTarget || "";
-    const input = document.getElementById(targetId) as HTMLInputElement | null;
-    if (input) openJalaliCalendar(targetId, input.value);
+    const input = target.closest<HTMLInputElement>("[data-report-date-input]");
+    const targetId = button?.dataset.calendarTarget || input?.id || "";
+    if (!targetId || (!button && !input)) return;
+    const dateInput = document.getElementById(targetId) as HTMLInputElement | null;
+    if (dateInput) openJalaliCalendar(targetId, dateInput.value);
   });
 
   root.addEventListener("submit", event => {
