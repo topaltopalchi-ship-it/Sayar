@@ -1061,18 +1061,25 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const settlements = [...receiptTx,...paymentTx].sort((a,b)=>b.date-a.date).map(t => `<div class="transaction-row"><div class="transaction-icon">${t.type==="receipt"?"↓":"↑"}</div><div class="transaction-main"><strong>${t.type==="receipt"?"دریافت":"پرداخت"}</strong><small>${dateLabel(t.date)} · ${t.description || ""}</small></div><b>${rial(t.amount)}</b><button class="secondary-button" data-settlement-edit="${t.id}">ویرایش</button><button class="secondary-button" data-settlement-delete="${t.id}">حذف</button></div>`).join("");
   const settlementSection = `<section class="panel"><div class="section-head"><h3>دریافت و پرداخت‌ها</h3><span class="muted">قابل ویرایش</span></div>${settlements}</section>`;
   const partyNames = new Map(parties.map(p => [p.id, p.name]));
-  const debtorTotals = new Map<string, number>();
+  // A sale can be saved with a customer name but without a linked partyId.
+  // The People screen still shows such invoices, so the report must include them too.
+  const debtorTotals = new Map<string, { balance: number; name: string; sales: Transaction[] }>();
   for (const t of transactions) {
-    if (t.type !== "sale" || !t.partyId) continue;
+    if (t.type !== "sale") continue;
     const balance = Math.max(0, t.amount - t.paid);
-    if (balance > 0) debtorTotals.set(t.partyId, (debtorTotals.get(t.partyId) || 0) + balance);
+    if (balance <= 0) continue;
+    const name = t.customerName?.trim() || (t.partyId ? partyNames.get(t.partyId) : undefined) || "مشتری ثبت نشده";
+    const key = t.partyId ? `party:${t.partyId}` : `name:${name.toLocaleLowerCase("fa-IR")}`;
+    const current = debtorTotals.get(key) || { balance: 0, name, sales: [] };
+    current.balance += balance;
+    current.sales.push(t);
+    debtorTotals.set(key, current);
   }
   const debtorRows = [...debtorTotals.entries()]
-    .sort((a,b) => b[1] - a[1])
-    .map(([partyId, balance]) => {
-      const partySales = transactions.filter(t => t.type === "sale" && t.partyId === partyId && Math.max(0, t.amount - t.paid) > 0);
-      const invoiceButtons = partySales.map(t => `<button class="secondary-button debtor-invoice" data-invoice-id="${t.id}">${t.invoiceNumber || "فاکتور"}</button>`).join("");
-      return `<div class="transaction-row debtor-row"><div class="transaction-icon debtor-icon">!</div><div class="transaction-main"><strong>${partyNames.get(partyId) || "طرف حساب حذف‌شده"}</strong><small>${partySales.length} فاکتور تسویه‌نشده</small></div><b class="debtor-amount">${rial(balance)}</b><div class="debtor-invoices">${invoiceButtons}</div></div>`;
+    .sort((a,b) => b[1].balance - a[1].balance)
+    .map(([, debtor]) => {
+      const invoiceButtons = debtor.sales.map(t => `<button class="secondary-button debtor-invoice" data-invoice-id="${t.id}">${t.invoiceNumber || "فاکتور"}</button>`).join("");
+      return `<div class="transaction-row debtor-row"><div class="transaction-icon debtor-icon">!</div><div class="transaction-main"><strong>${debtor.name}</strong><small>${debtor.sales.length} فاکتور تسویه‌نشده</small></div><b class="debtor-amount">${rial(debtor.balance)}</b><div class="debtor-invoices">${invoiceButtons}</div></div>`;
     }).join("");
   const debtorSection = `<section class="panel"><div class="section-head"><h3>بدهکاران</h3><span class="muted">${money.format(debtorTotals.size)} نفر</span></div>${debtorRows || '<div class="empty-inline"><p>در حال حاضر فاکتور بدهکار و تسویه‌نشده‌ای وجود ندارد.</p></div>'}</section>`;
   return pageHead("تحلیل مالی", "گزارش سود و زیان", "گزارش بر اساس بازه انتخابی و بهای تمام‌شده FIFO.") + summary + stats + cash + debtorSection + expenseSection + settlementSection + reportExportButtons();
@@ -1445,11 +1452,17 @@ function bindReportControls(): void {
   const activeRange = localStorage.getItem("sai-sai-report-range") || "month";
   document.querySelectorAll<HTMLButtonElement>("[data-report-range]").forEach(button => {
     button.setAttribute("aria-pressed", (button.dataset.reportRange || "month") === activeRange ? "true" : "false");
-    button.addEventListener("click", async () => {
-      const range = button.dataset.reportRange || "month";
-      localStorage.setItem("sai-sai-report-range", range);
-      await render();
-    });
+  });
+
+  // Preset buttons are rendered after bindReportControls runs; delegate clicks
+  // from the persistent app root so every preset works after navigation/rerender.
+  root.addEventListener("click", event => {
+    const target = event.target as HTMLElement;
+    const button = target.closest<HTMLButtonElement>("[data-report-range]");
+    if (!button) return;
+    const range = button.dataset.reportRange || "month";
+    localStorage.setItem("sai-sai-report-range", range);
+    void render();
   });
 
   const normalizeDateInput = (input: HTMLInputElement): void => {
@@ -1461,10 +1474,16 @@ function bindReportControls(): void {
     input.value = formatJalaliInput(digits);
   };
 
-  document.querySelectorAll<HTMLInputElement>("[data-report-date-input]").forEach(input => {
-    input.addEventListener("input", () => normalizeDateInput(input));
-    input.addEventListener("blur", () => normalizeDateInput(input));
+  // Report controls are rendered dynamically when the user opens the Reports tab.
+  // Delegate events from the persistent app root so they work on every render.
+  root.addEventListener("input", event => {
+    const target = event.target as HTMLInputElement;
+    if (target.matches("[data-report-date-input]")) normalizeDateInput(target);
   });
+  root.addEventListener("blur", event => {
+    const target = event.target as HTMLInputElement;
+    if (target.matches("[data-report-date-input]")) normalizeDateInput(target);
+  }, true);
 
   const applyReportRange = async (): Promise<void> => {
     const readDate = (prefix: "from" | "to"): string => {
@@ -1493,14 +1512,22 @@ function bindReportControls(): void {
     showToast("بازه گزارش اعمال شد");
   };
 
-  document.querySelectorAll<HTMLButtonElement>(".jalali-calendar-open").forEach(button => button.addEventListener("click", () => {
-    const target = button.dataset.calendarTarget || "";
-    const input = document.getElementById(target) as HTMLInputElement | null;
-    if (input) openJalaliCalendar(target, input.value);
-  }));
-  document.querySelector("#report-range-form")?.addEventListener("submit", event => {
-    event.preventDefault();
-    void applyReportRange();
+  root.addEventListener("click", event => {
+    const target = event.target as HTMLElement;
+    const button = target.closest<HTMLButtonElement>(".jalali-calendar-open");
+    const input = target.closest<HTMLInputElement>("[data-report-date-input]");
+    const targetId = button?.dataset.calendarTarget || input?.id || "";
+    if (!targetId || (!button && !input)) return;
+    const dateInput = document.getElementById(targetId) as HTMLInputElement | null;
+    if (dateInput) openJalaliCalendar(targetId, dateInput.value);
+  });
+
+  root.addEventListener("submit", event => {
+    const target = event.target as HTMLElement;
+    if (target.matches("#report-range-form")) {
+      event.preventDefault();
+      void applyReportRange();
+    }
   });
 }
 
