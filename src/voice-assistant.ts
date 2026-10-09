@@ -216,28 +216,44 @@ export function bindVoiceProductAssistant(onConfirm: (draft: VoiceProductDraft) 
   });
 }
 
-export function speakSaiSai(message: string): void {
-  if (!message.trim()) return;
-  void (async () => {
-    if (Capacitor.isNativePlatform()) {
+export async function speakSaiSai(message: string): Promise<boolean> {
+  const text = message.trim();
+  if (!text) return false;
+
+  // Try Android's native speech engine with both common Persian locale tags.
+  if (Capacitor.isNativePlatform()) {
+    for (const lang of ["fa-IR", "fa"]) {
       try {
-        const supported = await TextToSpeech.isLanguageSupported({ lang: "fa-IR" }).catch(() => ({ supported: false }));
-        const lang = supported.supported ? "fa-IR" : "fa";
         await TextToSpeech.stop().catch(() => undefined);
-        await TextToSpeech.speak({ text: message, lang, rate: 0.92, pitch: 1, volume: 1, queueStrategy: 0 });
-        return;
-      } catch { /* fall back to WebView TTS below */ }
+        await TextToSpeech.speak({
+          text,
+          lang,
+          rate: 0.88,
+          pitch: 1,
+          volume: 1,
+          queueStrategy: 0
+        });
+        return true;
+      } catch {
+        // Try another locale, then the WebView speech engine.
+      }
     }
-    if (!("speechSynthesis" in window)) return;
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(message);
-      utterance.lang = "fa-IR";
-      utterance.rate = 0.92;
-      utterance.pitch = 1;
-      window.speechSynthesis.speak(utterance);
-    } catch { /* speech output is optional */ }
-  })();
+  }
+
+  if (!("speechSynthesis" in window)) return false;
+  try {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "fa-IR";
+    utterance.rate = 0.88;
+    utterance.pitch = 1;
+    const voice = window.speechSynthesis.getVoices().find(item => /^fa(-|$)/i.test(item.lang));
+    if (voice) utterance.voice = voice;
+    window.speechSynthesis.speak(utterance);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function showVoiceModal(html: string): HTMLElement {
@@ -366,8 +382,8 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
         throw new Error("سؤالی تشخیص داده نشد؛ لطفاً دوباره تلاش کنید.");
       }
       const answer = await onAnswer(question);
-      speakSaiSai(answer);
-      notify(answer);
+      const spoken = await speakSaiSai(answer);
+      notify(spoken ? answer : answer + "\n\nبرای شنیدن پاسخ، موتور تبدیل متن به گفتار فارسی را در تنظیمات گوشی فعال کنید.");
     } catch (error) {
       if (!/cancel|abort/i.test(error instanceof Error ? error.name + error.message : String(error))) {
         notify(error instanceof Error ? error.message : "پاسخ‌گویی ناموفق بود");
