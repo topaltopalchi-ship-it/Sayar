@@ -1468,10 +1468,16 @@ function bindReportControls(): void {
     input.value = formatJalaliInput(digits);
   };
 
-  document.querySelectorAll<HTMLInputElement>("[data-report-date-input]").forEach(input => {
-    input.addEventListener("input", () => normalizeDateInput(input));
-    input.addEventListener("blur", () => normalizeDateInput(input));
+  // Report controls are rendered dynamically when the user opens the Reports tab.
+  // Delegate events from the persistent app root so they work on every render.
+  root.addEventListener("input", event => {
+    const target = event.target as HTMLInputElement;
+    if (target.matches("[data-report-date-input]")) normalizeDateInput(target);
   });
+  root.addEventListener("blur", event => {
+    const target = event.target as HTMLInputElement;
+    if (target.matches("[data-report-date-input]")) normalizeDateInput(target);
+  }, true);
 
   const applyReportRange = async (): Promise<void> => {
     const readDate = (prefix: "from" | "to"): string => {
@@ -1500,14 +1506,21 @@ function bindReportControls(): void {
     showToast("بازه گزارش اعمال شد");
   };
 
-  document.querySelectorAll<HTMLButtonElement>(".jalali-calendar-open").forEach(button => button.addEventListener("click", () => {
-    const target = button.dataset.calendarTarget || "";
-    const input = document.getElementById(target) as HTMLInputElement | null;
-    if (input) openJalaliCalendar(target, input.value);
-  }));
-  document.querySelector("#report-range-form")?.addEventListener("submit", event => {
-    event.preventDefault();
-    void applyReportRange();
+  root.addEventListener("click", event => {
+    const target = event.target as HTMLElement;
+    const button = target.closest<HTMLButtonElement>(".jalali-calendar-open");
+    if (!button) return;
+    const targetId = button.dataset.calendarTarget || "";
+    const input = document.getElementById(targetId) as HTMLInputElement | null;
+    if (input) openJalaliCalendar(targetId, input.value);
+  });
+
+  root.addEventListener("submit", event => {
+    const target = event.target as HTMLElement;
+    if (target.matches("#report-range-form")) {
+      event.preventDefault();
+      void applyReportRange();
+    }
   });
 }
 
