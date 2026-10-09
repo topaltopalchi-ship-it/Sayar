@@ -885,42 +885,68 @@ async function saveVoiceProduct(draft: VoiceProductDraft): Promise<void> {
   } catch (e) { showToast(e instanceof Error ? e.message : "ثبت کالای صوتی ناموفق بود"); }
 }
 
-function bindProductModal(): void {
-  const modal = document.querySelector<HTMLDivElement>("#product-modal")!;
-  modal.querySelector("#product-close")?.addEventListener("click", () => modal.remove());
-  modal.querySelector("#photo-product")?.addEventListener("click", () => {
+function pickProductPhoto(): Promise<File | null> {
+  return new Promise(resolve => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
-    input.capture = "environment";
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const button = modal.querySelector<HTMLButtonElement>("#photo-product");
-      if (button) {
-        button.disabled = true;
-        button.textContent = "📷 در حال تحلیل تصویر…";
-      }
-      try {
-        const result = await analyzeProductPhoto(file);
-        if (!result.name) throw new Error("نام کالا از تصویر تشخیص داده نشد");
-        const name = modal.querySelector<HTMLInputElement>("#p-name");
-        const sku = modal.querySelector<HTMLInputElement>("#p-sku");
-        const unit = modal.querySelector<HTMLSelectElement>("#p-unit");
-        if (name) name.value = result.name;
-        if (sku && result.sku) sku.value = result.sku;
-        if (unit) unit.value = result.unit;
-        showToast("نام کالا از روی عکس تشخیص داده شد؛ لطفاً بررسی کنید");
-      } catch (e) {
-        showToast(e instanceof Error ? e.message : "تشخیص تصویر ناموفق بود");
-      } finally {
-        if (button) {
-          button.disabled = false;
-          button.textContent = "📷 شناسایی کالا از روی عکس";
-        }
-      }
+    input.setAttribute("capture", "environment");
+    input.setAttribute("aria-label", "انتخاب یا عکس‌گرفتن از کالا");
+    // Some Android WebViews ignore click/change on detached file inputs.
+    input.style.position = "fixed";
+    input.style.left = "-10000px";
+    input.style.top = "0";
+    document.body.appendChild(input);
+    let settled = false;
+    const finish = (file: File | null) => {
+      if (settled) return;
+      settled = true;
+      input.removeEventListener("change", onChange);
+      input.removeEventListener("cancel", onCancel);
+      input.remove();
+      resolve(file);
     };
+    const onChange = () => finish(input.files?.item(0) ?? null);
+    const onCancel = () => finish(null);
+    input.addEventListener("change", onChange, { once: true });
+    input.addEventListener("cancel", onCancel, { once: true });
     input.click();
+  });
+}
+
+function bindProductModal(): void {
+  const modal = document.querySelector<HTMLDivElement>("#product-modal")!;
+  modal.querySelector("#product-close")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#photo-product")?.addEventListener("click", async () => {
+    const button = modal.querySelector<HTMLButtonElement>("#photo-product");
+    if (button) {
+      button.disabled = true;
+      button.textContent = "📷 در حال بازکردن دوربین…";
+    }
+    try {
+      const file = await pickProductPhoto();
+      if (!file) {
+        showToast("عکسی انتخاب نشد؛ دوباره تلاش کنید یا از گالری انتخاب کنید");
+        return;
+      }
+      if (button) button.textContent = "📷 در حال خواندن نوشته‌های عکس…";
+      const result = await analyzeProductPhoto(file);
+      if (!result.name) throw new Error("نام کالا از تصویر تشخیص داده نشد");
+      const name = modal.querySelector<HTMLInputElement>("#p-name");
+      const sku = modal.querySelector<HTMLInputElement>("#p-sku");
+      const unit = modal.querySelector<HTMLSelectElement>("#p-unit");
+      if (name) name.value = result.name;
+      if (sku && result.sku) sku.value = result.sku;
+      if (unit) unit.value = result.unit;
+      showToast("نام کالا از روی عکس تشخیص داده شد؛ لطفاً بررسی کنید");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "تشخیص تصویر ناموفق بود");
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = "📷 شناسایی کالا از روی عکس";
+      }
+    }
   });
   const voicePhotoButton = modal.querySelector<HTMLButtonElement>("#voice-photo-product");
   if (voicePhotoButton && !modal.dataset.editId) {
