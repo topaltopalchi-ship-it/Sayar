@@ -1010,7 +1010,7 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const range = localStorage.getItem("sai-sai-report-range") || "month";
   const now = new Date(); now.setHours(23,59,59,999);
   const start = new Date(now); start.setHours(0,0,0,0);
-  if (range === "week") start.setDate(start.getDate() - 6);
+  if (range === "week") { const day = start.getDay(); start.setDate(start.getDate() - ((day + 6) % 7)); }
   else if (range === "month") start.setDate(1);
   else if (range === "lastmonth") { start.setMonth(start.getMonth() - 1, 1); const last = new Date(now.getFullYear(), now.getMonth(), 0); now.setTime(last.getTime()); now.setHours(23,59,59,999); }
   else if (range === "year") start.setMonth(0, 1);
