@@ -480,3 +480,11 @@ body{background:radial-gradient(circle at 12% 0,#223657 0,#10182a 34%,#090e1b 78
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+
+/* Mobile order dialog: keep submit/reminder controls above Android navigation and app tabs. */
+#order-modal{align-items:flex-start!important;justify-content:center!important;padding:12px 12px calc(104px + env(safe-area-inset-bottom))!important;overflow-y:auto!important}
+#order-modal>.modal{width:min(100%,560px)!important;max-height:calc(100dvh - 132px - env(safe-area-inset-bottom))!important;overflow-y:auto!important;overscroll-behavior:contain;padding-bottom:18px!important}
+#order-modal #order-submit{position:sticky;bottom:0;z-index:4;margin-top:12px;box-shadow:0 -8px 16px #0b1220aa}
+#order-delivery{direction:ltr;text-align:right}
+@media(max-width:600px){#order-modal{padding-left:10px!important;padding-right:10px!important}#order-modal>.modal{max-height:calc(100dvh - 116px - env(safe-area-inset-bottom))!important}}
