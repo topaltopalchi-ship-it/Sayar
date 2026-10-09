@@ -329,6 +329,7 @@ async function dashboardView(subscription: Subscription): Promise<string> {
     '<button class="quick-card" data-action="receipt"><b>↙</b><span>دریافت وجه</span><small>پیگیری مطالبات</small></button>' +
     '<button class="quick-card voice-quick-card" id="voice-sale"><b>🎙</b><span>ثبت فروش با صدا</span><small>فارسی صحبت کنید</small></button>' +
     '<button class="quick-card voice-quick-card" id="voice-query"><b>🔊</b><span>از سای‌سای بپرس</span><small>فروش، قیمت، موجودی</small></button>' +
+    '<button class="quick-card" id="photo-price-lookup"><b>📷</b><span>قیمت از روی عکس</span><small>عکس بگیر و قیمت را بشنو</small></button>' +
     '</div></section>' +
     '<section class="section panel"><div class="section-head"><h3>آخرین تراکنش‌ها</h3><span class="muted">۵ مورد اخیر</span></div>' + recent + '</section>';
 }
@@ -922,6 +923,72 @@ function pickProductPhoto(): Promise<File | null> {
     input.addEventListener("change", onChange, { once: true });
     input.addEventListener("cancel", onCancel, { once: true });
     input.click();
+  });
+}
+
+
+async function openPhotoPriceLookup(): Promise<void> {
+  const products = await listProducts();
+  if (!products.length) { showToast("ابتدا کالاها و قیمت فروش آن‌ها را در بخش موجودی ثبت کنید"); return; }
+  document.querySelector("#photo-price-modal")?.remove();
+  const modal = document.createElement("div");
+  modal.className = "modal-backdrop";
+  modal.id = "photo-price-modal";
+  modal.innerHTML = '<section class="modal photo-price-modal" role="dialog" aria-modal="true"><button class="modal-close" id="photo-price-close" type="button">×</button><span class="eyebrow">قیمت‌یاب تصویری سای‌سای</span><h2>قیمت کالا از روی عکس</h2><p class="muted">از بسته‌بندی کالا عکس بگیر؛ سای‌سای نوشته‌ها را می‌خواند و با کالاهای ثبت‌شده تطبیق می‌دهد.</p><button class="primary-button wide" id="photo-price-camera" type="button">📷 عکس بگیر / انتخاب از گالری</button><label class="field"><span>یا نام یا کد کالا را جست‌وجو کن</span><input id="photo-price-search" placeholder="نام کالا یا کد کالا…" autocomplete="off"></label><div id="photo-price-status" class="muted" aria-live="polite"></div><div id="photo-price-results" class="photo-price-results"></div><p class="muted">قیمت از فهرست کالاهای ثبت‌شده در سای‌سای خوانده می‌شود.</p></section>';
+  document.body.appendChild(modal);
+  const status = modal.querySelector<HTMLElement>("#photo-price-status")!;
+  const results = modal.querySelector<HTMLElement>("#photo-price-results")!;
+  const search = modal.querySelector<HTMLInputElement>("#photo-price-search")!;
+  const close = () => modal.remove();
+  modal.querySelector("#photo-price-close")?.addEventListener("click", close);
+  modal.addEventListener("click", event => { if (event.target === modal) close(); });
+  const normalize = (value: string) => value.toLocaleLowerCase("fa").replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/[\u200c\s\-_/]+/g, "").replace(/[^a-z0-9\u0600-\u06ff]/gi, "");
+  const renderMatches = (query: string, fromPhoto = false) => {
+    const q = normalize(query);
+    const ranked = products.map(product => {
+      const name = normalize(product.name);
+      const sku = normalize(product.sku || "");
+      let score = 0;
+      if (q && name === q) score = 100;
+      else if (q && sku && sku === q) score = 95;
+      else if (q && (name.includes(q) || q.includes(name))) score = 70;
+      else if (q && sku && (sku.includes(q) || q.includes(sku))) score = 60;
+      else if (q) {
+        const tokens = query.toLocaleLowerCase("fa").split(/[\s،,.;:()]+/).map(normalize).filter(token => token.length >= 3);
+        const hits = tokens.filter(token => name.includes(token) || (sku && sku.includes(token)));
+        score = tokens.length ? Math.round(hits.length / tokens.length * 55) : 0;
+      }
+      return { product, score };
+    }).filter(item => item.score > 0).sort((a,b) => b.score-a.score).slice(0, 8);
+    results.innerHTML = ranked.length ? ranked.map(item => '<button type="button" class="photo-price-result" data-photo-price-product="' + item.product.id.replace(/"/g, "&quot;") + '"><span><strong>' + item.product.name.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + '</strong><small>' + (item.product.sku ? 'کد: ' + item.product.sku.replace(/</g,"&lt;") + ' · ' : '') + 'قیمت فروش ثبت‌شده</small></span><b>' + rial(item.product.salePrice) + '</b></button>').join("") : '<div class="empty-inline"><p>' + (fromPhoto ? 'کالای دقیقی پیدا نشد؛ نام کالا را دستی جست‌وجو کن.' : 'کالایی با این عبارت پیدا نشد.') + '</p></div>';
+    results.querySelectorAll<HTMLButtonElement>("[data-photo-price-product]").forEach(button => button.addEventListener("click", () => {
+      const product = products.find(item => item.id === button.dataset.photoPriceProduct);
+      if (!product) return;
+      const message = 'قیمت ثبت‌شدهٔ ' + product.name + '، ' + rial(product.salePrice) + ' برای هر ' + product.unit + ' است.';
+      status.textContent = message;
+      void speakSaiSai(message);
+      showToast(message);
+    }));
+  };
+  renderMatches("");
+  search.addEventListener("input", () => renderMatches(search.value));
+  modal.querySelector("#photo-price-camera")?.addEventListener("click", async event => {
+    const button = event.currentTarget as HTMLButtonElement;
+    button.disabled = true;
+    status.textContent = "در حال خواندن نوشته‌های عکس؛ بار اول ممکن است اینترنت لازم باشد.";
+    try {
+      const file = await pickProductPhoto();
+      if (!file) { status.textContent = "عکسی انتخاب نشد."; return; }
+      const recognized = await analyzeProductPhoto(file);
+      search.value = recognized.name;
+      renderMatches(recognized.name, true);
+      status.textContent = recognized.name ? "متن خوانده‌شده از عکس: " + recognized.name + " — کالای درست را از نتایج انتخاب کن." : "نام کالا از عکس خوانده نشد.";
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : "خواندن تصویر انجام نشد.";
+    } finally {
+      button.disabled = false;
+      button.textContent = "📷 عکس بگیر / انتخاب از گالری";
+    }
   });
 }
 
@@ -1760,6 +1827,8 @@ return receiptCommand ? ("دریافت " + rial(commandAmount) + " از " + comm
     if (/موجودی|انبار|کمبود|رو به اتمام/.test(q)) return `${dashboard.lowStock.toLocaleString("fa-IR")} کالا به حد هشدار موجودی رسیده است.`;
     return "می‌توانم درباره فروش، دریافت، مطالبات، مشتری‌ها و موجودی کالا به شما جواب بدهم.";
   }, showToast);
+
+  document.querySelector("#photo-price-lookup")?.addEventListener("click", () => { void openPhotoPriceLookup(); });
 
   bindReportControls();
 
