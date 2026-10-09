@@ -348,6 +348,12 @@ function openOfflineQuestionPrompt(onAnswer: (question: string) => Promise<strin
     submit.disabled = true;
     status.textContent = "در حال بررسی اطلاعات محلی…";
     try {
+      if (isCalculatorVoiceCommand(question)) {
+        await SpeechRecognition.stop().catch(() => undefined);
+        openSaiSaiCalculator();
+        void speakSaiSai("ماشین حساب را باز کردم");
+        return;
+      }
       const answer = await onAnswer(question);
       status.textContent = answer;
       const spoken = await speakSaiSai(answer);
@@ -361,6 +367,60 @@ function openOfflineQuestionPrompt(onAnswer: (question: string) => Promise<strin
   submit.addEventListener("click", () => void ask());
   input.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); void ask(); } });
   input.focus();
+}
+
+
+function evaluateCalculatorExpression(source: string): number {
+  const input = source.replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+    .replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+    .replace(/×/g, "*").replace(/÷/g, "/").replace(/,/g, "").replace(/٬/g, "").replace(/\s+/g, "");
+  if (!input || !/^[0-9.+*/()\-]+$/.test(input)) throw new Error("عبارت ریاضی معتبر نیست");
+  let i = 0;
+  const parseNumber = (): number => {
+    if (input[i] === "+" || input[i] === "-") { const sign = input[i++] === "-" ? -1 : 1; return sign * parseNumber(); }
+    if (input[i] === "(") { i++; const value = parseSum(); if (input[i++] !== ")") throw new Error("پرانتز بسته نشده است"); return value; }
+    const match = input.slice(i).match(/^\d+(?:\.\d*)?|^\.\d+/);
+    if (!match) throw new Error("عدد نامعتبر است");
+    i += match[0].length;
+    return Number(match[0]);
+  };
+  const parseProduct = (): number => { let value = parseNumber(); while (input[i] === "*" || input[i] === "/") { const op = input[i++]; const rhs = parseNumber(); if (op === "/" && rhs === 0) throw new Error("تقسیم بر صفر ممکن نیست"); value = op === "*" ? value * rhs : value / rhs; } return value; };
+  const parseSum = (): number => { let value = parseProduct(); while (input[i] === "+" || input[i] === "-") { const op = input[i++]; const rhs = parseProduct(); value = op === "+" ? value + rhs : value - rhs; } return value; };
+  const result = parseSum();
+  if (i !== input.length || !Number.isFinite(result)) throw new Error("عبارت ریاضی کامل یا معتبر نیست");
+  return result;
+}
+
+function openSaiSaiCalculator(): void {
+  document.querySelector("#saisai-calculator-modal")?.remove();
+  const modal = document.createElement("div");
+  modal.className = "modal-backdrop";
+  modal.id = "saisai-calculator-modal";
+  modal.innerHTML = '<section class="modal calculator-modal" role="dialog" aria-modal="true" aria-label="ماشین حساب"><button class="modal-close" id="calc-close" type="button">×</button><span class="eyebrow">ابزار سریع سای‌سای</span><h2>ماشین حساب</h2><label class="field"><span>عبارت یا محاسبه</span><input id="calc-expression" inputmode="decimal" autocomplete="off" placeholder="مثلاً ۱۲۵۰۰۰ + ۳۵۰۰۰"></label><p class="calculator-result" id="calc-result" aria-live="polite">نتیجه اینجا نمایش داده می‌شود</p><div class="calculator-keys"><button type="button" data-calc-key="7">۷</button><button type="button" data-calc-key="8">۸</button><button type="button" data-calc-key="9">۹</button><button type="button" data-calc-key="/">÷</button><button type="button" data-calc-key="4">۴</button><button type="button" data-calc-key="5">۵</button><button type="button" data-calc-key="6">۶</button><button type="button" data-calc-key="*">×</button><button type="button" data-calc-key="1">۱</button><button type="button" data-calc-key="2">۲</button><button type="button" data-calc-key="3">۳</button><button type="button" data-calc-key="-">−</button><button type="button" data-calc-key="0">۰</button><button type="button" data-calc-key=".">.</button><button type="button" data-calc-key="clear">پاک</button><button type="button" data-calc-key="+">+</button></div><div class="form-actions"><button class="secondary-button" id="calc-clear" type="button">پاک کردن</button><button class="primary-button" id="calc-equal" type="button">محاسبه =</button></div></section>';
+  document.body.appendChild(modal);
+  const input = modal.querySelector<HTMLInputElement>("#calc-expression")!;
+  const result = modal.querySelector<HTMLElement>("#calc-result")!;
+  const calculate = () => {
+    try { result.textContent = evaluateCalculatorExpression(input.value).toLocaleString("fa-IR", { maximumFractionDigits: 8 }); }
+    catch (error) { result.textContent = error instanceof Error ? error.message : "محاسبه انجام نشد"; }
+  };
+  const close = () => modal.remove();
+  modal.querySelector("#calc-close")?.addEventListener("click", close);
+  modal.addEventListener("click", event => { if (event.target === modal) close(); });
+  modal.querySelector("#calc-equal")?.addEventListener("click", calculate);
+  modal.querySelector("#calc-clear")?.addEventListener("click", () => { input.value = ""; result.textContent = "نتیجه اینجا نمایش داده می‌شود"; input.focus(); });
+  modal.querySelectorAll<HTMLButtonElement>("[data-calc-key]").forEach(button => button.addEventListener("click", () => {
+    const key = button.dataset.calcKey || "";
+    if (key === "clear") input.value = ""; else input.value += key;
+    input.focus();
+  }));
+  input.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); calculate(); } });
+  input.focus();
+}
+
+function isCalculatorVoiceCommand(text: string): boolean {
+  const normalized = text.replace(/[\u200c\s\-ـ]/g, "").replace(/[،,.!?؟]/g, "").toLocaleLowerCase("fa");
+  return /ماشینحساب|حسابگر|ماشینحسابروبیار|ماشینحسابروبازکن/.test(normalized);
 }
 
 export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promise<string>, notify: (message: string) => void): void {
