@@ -24,6 +24,7 @@ import { getCustomerTier, getMarketSettings, setMarketSettings, recommendPrice, 
 import { buildBusinessInsights, dailyBrief, customerScore, type BusinessInsight } from "./intelligence";
 import { analyzeProductPhoto } from "./product-vision";
 import { getEconomicBrief } from "./economic-news";
+import { openAccessControlModal } from "./access-control";
 
 type Tab = "dashboard" | "sales" | "purchases" | "orders" | "inventory" | "people" | "reports" | "more" | "checks";
 
@@ -64,7 +65,7 @@ function setProfessionalMode(value: boolean): void { localStorage.setItem(UI_MOD
 function settingsModal(): string {
   const unit = getCurrencyUnit();
   const professional = isProfessionalMode();
-  return `<div class="modal-backdrop" id="settings-modal"><section class="modal ui-mode-modal"><button class="modal-close" id="settings-close">×</button><span class="eyebrow">تنظیمات سای‌سای</span><h2>تنظیمات پایه</h2><label class="field"><span>واحد نمایش مبلغ</span><select id="currency-unit"><option value="toman" ${unit === "toman" ? "selected" : ""}>تومان</option><option value="rial" ${unit === "rial" ? "selected" : ""}>ریال</option></select></label><label class="professional-toggle"><input id="professional-mode" type="checkbox" ${professional ? "checked" : ""}><span><b>نسخه حرفه‌ای</b><small>گزارش‌ها و ابزارهای مدیریتی پیشرفته نمایش داده شوند.</small></span></label><button class="secondary-button wide" id="pricing-settings">🛡️ قیمت‌گذاری و حفظ سرمایه</button><button class="secondary-button wide" id="vision-settings">📷 تنظیم هوش تصویری کالا</button><button class="secondary-button wide" id="subscription-settings">مدیریت اشتراک</button><button class="primary-button wide" id="settings-save">ذخیره و اعمال</button></section></div>`;
+  return `<div class="modal-backdrop" id="settings-modal"><section class="modal ui-mode-modal"><button class="modal-close" id="settings-close">×</button><span class="eyebrow">تنظیمات سای‌سای</span><h2>تنظیمات پایه</h2><label class="field"><span>واحد نمایش مبلغ</span><select id="currency-unit"><option value="toman" ${unit === "toman" ? "selected" : ""}>تومان</option><option value="rial" ${unit === "rial" ? "selected" : ""}>ریال</option></select></label><label class="professional-toggle"><input id="professional-mode" type="checkbox" ${professional ? "checked" : ""}><span><b>نسخه حرفه‌ای</b><small>گزارش‌ها و ابزارهای مدیریتی پیشرفته نمایش داده شوند.</small></span></label><button class="secondary-button wide" id="pricing-settings">🛡️ قیمت‌گذاری و حفظ سرمایه</button><button class="secondary-button wide" id="vision-settings">📷 تنظیم هوش تصویری کالا</button><button class="secondary-button wide" id="access-control-settings">مدیریت کاربران مجاز (۶ نفر)</button><button class="secondary-button wide" id="subscription-settings">مدیریت اشتراک</button><button class="primary-button wide" id="settings-save">ذخیره و اعمال</button></section></div>`;
 }
 function bindSettingsModal(): void {
   const modal = document.querySelector<HTMLDivElement>("#settings-modal");
@@ -73,6 +74,7 @@ function bindSettingsModal(): void {
   modal.querySelector("#pricing-settings")?.addEventListener("click", async () => { modal.remove(); document.body.insertAdjacentHTML("beforeend", pricingSettingsModal()); bindPricingSettingsModal(); });
   modal.querySelector("#vision-settings")?.addEventListener("click", () => { modal.remove(); document.body.insertAdjacentHTML("beforeend", visionSettingsModal()); bindVisionSettingsModal(); });
   modal.querySelector("#subscription-settings")?.addEventListener("click", async () => { modal.remove(); const subscription = await getSubscription().catch(() => ({ status: "none", plan: "none", expiresAt: null } as Subscription)); showSubscription(subscription); });
+  modal.querySelector("#access-control-settings")?.addEventListener("click", () => { modal.remove(); openAccessControlModal(showToast); });
   modal.querySelector("#settings-save")?.addEventListener("click", async () => {
     const unit = modal.querySelector<HTMLSelectElement>("#currency-unit")?.value === "toman" ? "toman" : "rial";
     setCurrencyUnit(unit);
