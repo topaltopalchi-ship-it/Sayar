@@ -220,37 +220,66 @@ export async function speakSaiSai(message: string): Promise<boolean> {
   const text = message.trim();
   if (!text) return false;
 
-  // Try Android's native speech engine with both common Persian locale tags.
+  // Prefer the native Android engine and verify that Persian is actually supported.
   if (Capacitor.isNativePlatform()) {
-    for (const lang of ["fa-IR", "fa"]) {
-      try {
+    try {
+      const supported = await TextToSpeech.isLanguageSupported({ lang: "fa-IR" }).catch(() => ({ supported: false }));
+      const supportedFa = supported.supported
+        ? "fa-IR"
+        : (await TextToSpeech.isLanguageSupported({ lang: "fa" }).catch(() => ({ supported: false }))).supported
+          ? "fa"
+          : null;
+      if (supportedFa) {
         await TextToSpeech.stop().catch(() => undefined);
         await TextToSpeech.speak({
           text,
-          lang,
+          lang: supportedFa,
           rate: 0.88,
           pitch: 1,
           volume: 1,
           queueStrategy: 0
         });
         return true;
-      } catch {
-        // Try another locale, then the WebView speech engine.
       }
+    } catch {
+      // Fall back to Web Speech API if the native engine fails.
     }
   }
 
-  if (!("speechSynthesis" in window)) return false;
+  if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") return false;
   try {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "fa-IR";
-    utterance.rate = 0.88;
-    utterance.pitch = 1;
-    const voice = window.speechSynthesis.getVoices().find(item => /^fa(-|$)/i.test(item.lang));
-    if (voice) utterance.voice = voice;
-    window.speechSynthesis.speak(utterance);
-    return true;
+    const synth = window.speechSynthesis;
+    synth.cancel();
+    const voices = await new Promise<SpeechSynthesisVoice[]>(resolve => {
+      const current = synth.getVoices();
+      if (current.length) { resolve(current); return; }
+      let finished = false;
+      const done = (items: SpeechSynthesisVoice[]) => {
+        if (finished) return;
+        finished = true;
+        resolve(items);
+      };
+      synth.addEventListener("voiceschanged", () => done(synth.getVoices()), { once: true });
+      window.setTimeout(() => done(synth.getVoices()), 1200);
+    });
+    const persianVoice = voices.find(item => /^fa(-|$)/i.test(item.lang));
+    if (!persianVoice) return false;
+
+    return await new Promise<boolean>(resolve => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = persianVoice.lang || "fa-IR";
+      utterance.voice = persianVoice;
+      utterance.rate = 0.88;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+      utterance.onend = () => resolve(true);
+      utterance.onerror = () => resolve(false);
+      synth.speak(utterance);
+      window.setTimeout(() => {
+        if (synth.speaking || synth.pending) return;
+        resolve(false);
+      }, 1800);
+    });
   } catch {
     return false;
   }
