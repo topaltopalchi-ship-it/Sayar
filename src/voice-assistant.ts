@@ -157,7 +157,7 @@ export function bindVoiceProductFieldAssistant(
       const result = await SpeechRecognition.start({
         language: "fa-IR",
         maxResults: 5,
-        partialResults: true,
+        partialResults: false,
         popup: false,
         prompt: "نام کالا، کد، موجودی، قیمت خرید و فروش را واضح و نزدیک میکروفون بگویید",
       });
@@ -187,7 +187,7 @@ export function bindVoiceProductAssistant(onConfirm: (draft: VoiceProductDraft) 
     button.disabled=true; button.textContent="🎙 در حال شنیدن…";
     try {
       await prepareSpeechRecognition();
-      const result=await SpeechRecognition.start({ language:"fa-IR", maxResults:5, partialResults:true, popup: false, prompt:"نام کالا، موجودی و قیمت‌ها را واضح و نزدیک میکروفون بگویید" });
+      const result=await SpeechRecognition.start({ language:"fa-IR", maxResults:5, partialResults: false, popup: false, prompt:"نام کالا، موجودی و قیمت‌ها را واضح و نزدیک میکروفون بگویید" });
       const transcript=result.matches?.[0]?.trim() || "";
       if (!transcript) throw new Error("مشخصات کالا تشخیص داده نشد");
       const drafts=parseVoiceProducts(transcript);
@@ -288,7 +288,7 @@ export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise
       const result = await SpeechRecognition.start({
         language: "fa-IR",
         maxResults: 5,
-        partialResults: true,
+        partialResults: false,
         popup: false,
         prompt: "نام مشتری، نام کالا، تعداد و قیمت را واضح و نزدیک میکروفون بگویید",
       });
@@ -417,7 +417,7 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
           const result = await SpeechRecognition.start({
             language: "fa-IR",
             maxResults: 5,
-            partialResults: true,
+            partialResults: false,
             popup: false,
             prompt: attempt === 0 ? "سؤال خود را نزدیک میکروفون و به فارسی بگویید" : "دوباره گوش می‌دهم؛ واضح‌تر و کمی بلندتر صحبت کنید"
           });
