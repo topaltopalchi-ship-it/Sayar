@@ -701,7 +701,7 @@ function orderModal(existing?: Order): string {
   const legacyCustomer = existing?.partyId ? parties.find(p => p.id === existing.partyId)?.name || "" : "";
   const productOptions = products.map(p => `<option value="${p.id}" ${existing?.productId === p.id ? "selected" : ""}>${p.name} · ${rial(p.salePrice)}</option>`).join("");
   const delivery = new Date(existing?.deliveryDate ?? Date.now() + 86400000);
-  const dateValue = `${delivery.getFullYear()}-${String(delivery.getMonth()+1).padStart(2,"0")}-${String(delivery.getDate()).padStart(2,"0")}`;
+  const dateValue = existing ? new Intl.DateTimeFormat("fa-IR-u-ca-persian", {year:"numeric",month:"2-digit",day:"2-digit"}).format(delivery).replace(/\u200e/g,"") : todayJalaliInput();
   return `<div class="modal-backdrop" id="order-modal"><section class="modal" role="dialog" aria-modal="true">
     <button class="modal-close" id="order-close">×</button><span class="eyebrow">مدیریت سفارش</span><h2>${existing ? "ویرایش سفارش" : "دریافت سفارش جدید"}</h2>
     <label class="field"><span>مشتری ثبت‌شده</span><select id="order-party"><option value="">بدون انتخاب از اشخاص</option>${parties.filter(p => p.type === "customer" || p.type === "both").map(p => `<option value="${p.id}" ${existing?.partyId === p.id ? "selected" : ""}>${p.name}${p.phone ? " · " + p.phone : ""}</option>`).join("")}</select></label>
@@ -710,7 +710,7 @@ function orderModal(existing?: Order): string {
     <label class="field"><span>کالا</span><select id="order-product">${productOptions}</select></label>
     <div class="form-grid"><label class="field"><span>مقدار</span><input id="order-quantity" type="text" inputmode="decimal" value="${existing?.quantity ?? 1}"></label>
       <label class="field"><span>قیمت واحد</span><input id="order-price" type="text" inputmode="numeric" value="${existing?.unitPrice ?? products.find(p => p.id === (existing?.productId || products[0]?.id))?.salePrice ?? 0}"></label></div>
-    <div class="form-grid"><label class="field"><span>تاریخ تحویل</span><input id="order-delivery" type="date" value="${dateValue}"></label>
+    <div class="form-grid"><label class="field"><span>تاریخ تحویل (شمسی)</span><input id="order-delivery" type="text" inputmode="numeric" placeholder="۱۴۰۵/۰۷/۱۷" maxlength="10" value="${dateValue}"></label>
       <label class="field"><span>ساعت تحویل</span><input id="order-delivery-time" type="time" value="${existing?.deliveryTime || "12:00"}"></label></div>
     <label class="field"><span>یادداشت</span><input id="order-note" placeholder="مثلاً تحویل درب مغازه" value="${existing?.note || ""}"></label>
     <button class="primary-button wide" id="order-submit">${existing ? "ذخیره تغییرات" : "ثبت سفارش و یادآوری"}</button>
@@ -774,7 +774,9 @@ function bindOrderModal(existing?: Order): void {
       const orderType = modal.querySelector<HTMLInputElement>("#order-type")!.value.trim() || "سفارش کالا";
       const dateText = modal.querySelector<HTMLInputElement>("#order-delivery")!.value;
       const deliveryTime = modal.querySelector<HTMLInputElement>("#order-delivery-time")!.value || "12:00";
-      const deliveryDate = dateText ? new Date(dateText + "T" + deliveryTime + ":00").getTime() : 0;
+      const jalaliDelivery = dateText ? jalaliToGregorianDate(compactJalaliInput(dateText)) : null;
+      if (jalaliDelivery) { const [hours, minutes] = deliveryTime.split(":").map(Number); jalaliDelivery.setHours(hours || 0, minutes || 0, 0, 0); }
+      const deliveryDate = jalaliDelivery?.getTime() || 0;
       if (!customerName) throw new Error("نام مشتری الزامی است");
       if (!productId || quantity <= 0 || unitPrice < 0) throw new Error("کالا، مقدار و قیمت سفارش را بررسی کنید");
       if (!deliveryDate || deliveryDate < Date.now() - 86400000) throw new Error("تاریخ تحویل را درست انتخاب کنید");
@@ -1139,7 +1141,7 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
         <input id="report-${prefix}-date" class="report-date-input" data-report-date-input="${prefix}" type="text" inputmode="numeric" maxlength="10" value="${formatted}" placeholder="۱۴۰۵/۰۷/۱۶" aria-label="${prefix === "from" ? "از تاریخ" : "تا تاریخ"}">
       </div>`;
   };
-  const summary = `<button type="button" id="report-change-range" class="report-change-range" aria-label="بازگشت به انتخاب بازه گزارش">↕ تغییر بازه</button><section class="panel report-list" id="report-range-panel"><div class="report-range" role="group" aria-label="بازه گزارش"><button type="button" class="report-range-item" data-report-range="today">امروز</button><button type="button" class="report-range-item" data-report-range="week">۷ روز</button><button type="button" class="report-range-item" data-report-range="month">ماه جاری</button><button type="button" class="report-range-item" data-report-range="all">همه</button></div><form id="report-range-form" class="report-custom-range">
+  const summary = `<section class="panel report-list" id="report-range-panel"><div class="report-range" role="group" aria-label="بازه گزارش"><button type="button" class="report-range-item" data-report-range="today">امروز</button><button type="button" class="report-range-item" data-report-range="week">۷ روز</button><button type="button" class="report-range-item" data-report-range="month">ماه جاری</button><button type="button" class="report-range-item" data-report-range="all">همه</button></div><form id="report-range-form" class="report-custom-range">
   ${dateParts("from", defaultFrom)}
   ${dateParts("to", defaultTo)}
   <button type="submit" class="primary-button wide" id="report-apply-range">اعمال بازه</button>
@@ -1335,7 +1337,7 @@ async function shareBase64File(filename: string, base64: string, title: string):
     return;
   }
   const result = await Filesystem.writeFile({
-    path: `sai-sai/${Date.now()}-${filename}`,
+    path: `${Date.now()}-${filename}`,
     data: base64,
     directory: Directory.Cache,
   });
@@ -1431,12 +1433,6 @@ async function bindActions(): Promise<void> {
       if (confirmed) window.location.href = "tel:" + phone.replace(/[^+0-9]/g, "");
       return;
     }
-    const changeRangeButton = target.closest<HTMLButtonElement>("#report-change-range");
-    if (changeRangeButton) {
-      document.querySelector("#report-range-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-
     const rangeButton = target.closest<HTMLButtonElement>("[data-report-range]");
     if (rangeButton) {
       localStorage.setItem("sai-sai-report-range", rangeButton.dataset.reportRange || "month");
