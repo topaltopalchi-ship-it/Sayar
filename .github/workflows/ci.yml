@@ -2,7 +2,7 @@ name: Sayar CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/whatsapp-support-health-check]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -48,7 +48,7 @@ jobs:
           java-version: "21"
 
   android:
-    if: github.event_name == 'workflow_dispatch' && inputs.build_android == true
+    if: (github.event_name == 'workflow_dispatch' && inputs.build_android == true) || (github.event_name == 'push' && github.ref == 'refs/heads/feature/whatsapp-support-health-check')
     runs-on: ubuntu-latest
     needs: build
     steps:
@@ -79,11 +79,75 @@ jobs:
         run: npx cap add android
       - name: Sync Capacitor
         run: npx cap sync android
-      - name: Build debug APK
+      - name: Generate temporary release signing key
+        run: |
+          set -euo pipefail
+          STORE_PASSWORD="$(openssl rand -hex 24)"
+          KEY_PASSWORD="$STORE_PASSWORD"
+          KEY_ALIAS="saysay-release"
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/release-key.jks" \
+            -storepass "$STORE_PASSWORD" \
+            -keypass "$KEY_PASSWORD" \
+            -alias "$KEY_ALIAS" \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=SaySay Release, OU=Mobile, O=SaySay, L=Unknown, ST=Unknown, C=US"
+          chmod 600 "$RUNNER_TEMP/release-key.jks"
+          {
+            echo "KEYSTORE_PASSWORD=$STORE_PASSWORD"
+            echo "KEY_ALIAS=$KEY_ALIAS"
+            echo "KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          gradle = Path("android/app/build.gradle")
+          text = gradle.read_text()
+          if "signingConfigs.release" in text:
+              raise SystemExit("Release signing appears to be configured already; refusing to duplicate it.")
+
+          build_types = re.search(r"(?m)^([ ]*)buildTypes[ ]*[{]", text)
+          if not build_types:
+              raise SystemExit("Could not find buildTypes block in android/app/build.gradle")
+          indent = build_types.group(1)
+          signing = (
+              f"{indent}signingConfigs {{\n"
+              f"{indent}    release {{\n"
+              f"{indent}        storeFile file(System.getenv('RUNNER_TEMP') + '/release-key.jks')\n"
+              f"{indent}        storePassword System.getenv('KEYSTORE_PASSWORD')\n"
+              f"{indent}        keyAlias System.getenv('KEY_ALIAS')\n"
+              f"{indent}        keyPassword System.getenv('KEY_PASSWORD')\n"
+              f"{indent}    }}\n"
+              f"{indent}}}\n\n"
+          )
+          text = text[:build_types.start()] + signing + text[build_types.start():]
+
+          build_types = re.search(r"(?m)^([ ]*)buildTypes[ ]*[{]", text)
+          start = build_types.end()
+          depth = 1
+          i = start
+          while i < len(text) and depth:
+              if text[i] == "{":
+                  depth += 1
+              elif text[i] == "}":
+                  depth -= 1
+              i += 1
+          block = text[build_types.start():i]
+          release = re.search(r"(?m)^([ ]*)release[ ]*[{]", block)
+          if not release:
+              raise SystemExit("Could not find release block inside buildTypes")
+          release_indent = release.group(1)
+          insert_at = release.end()
+          block = block[:insert_at] + f"\n{release_indent}    signingConfig signingConfigs.release" + block[insert_at:]
+          text = text[:build_types.start()] + block + text[i:]
+          gradle.write_text(text)
+          PY
+      - name: Build signed release APK
         working-directory: android
-        run: ./gradlew assembleDebug
-      - name: Upload debug APK
+        run: ./gradlew assembleRelease
+      - name: Upload signed release APK
         uses: actions/upload-artifact@v4
         with:
-          name: sai-sai-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: sai-sai-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk

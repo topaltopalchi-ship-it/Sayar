@@ -60,12 +60,15 @@ const dateTime = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
 });
 let activeTab: Tab = "dashboard";
 const UI_MODE_KEY = "sai-sai-ui-mode";
+const SUPPORT_PHONE_KEY = "sai-sai-support-whatsapp";
+function getSupportPhone(): string { return (localStorage.getItem(SUPPORT_PHONE_KEY) || "").replace(/\D/g, "").slice(0, 15); }
+function supportWhatsAppUrl(): string { const phone = getSupportPhone(); const message = "سلام، برای برنامه سای‌سای به پشتیبانی نیاز دارم.\n\nموضوع مشکل:\nتوضیحات:\nنسخه برنامه: 0.1.0"; return phone ? "https://wa.me/" + phone + "?text=" + encodeURIComponent(message) : ""; }
 function isProfessionalMode(): boolean { return localStorage.getItem(UI_MODE_KEY) === "professional"; }
 function setProfessionalMode(value: boolean): void { localStorage.setItem(UI_MODE_KEY, value ? "professional" : "simple"); }
 function settingsModal(): string {
   const unit = getCurrencyUnit();
   const professional = isProfessionalMode();
-  return `<div class="modal-backdrop" id="settings-modal"><section class="modal ui-mode-modal"><button class="modal-close" id="settings-close">×</button><span class="eyebrow">تنظیمات سای‌سای</span><h2>تنظیمات پایه</h2><label class="field"><span>واحد نمایش مبلغ</span><select id="currency-unit"><option value="toman" ${unit === "toman" ? "selected" : ""}>تومان</option><option value="rial" ${unit === "rial" ? "selected" : ""}>ریال</option></select></label><label class="professional-toggle"><input id="professional-mode" type="checkbox" ${professional ? "checked" : ""}><span><b>نسخه حرفه‌ای</b><small>گزارش‌ها و ابزارهای مدیریتی پیشرفته نمایش داده شوند.</small></span></label><button class="secondary-button wide" id="pricing-settings">🛡️ قیمت‌گذاری و حفظ سرمایه</button><button class="secondary-button wide" id="vision-settings">📷 تنظیم هوش تصویری کالا</button><button class="secondary-button wide" id="access-control-settings">مدیریت کاربران مجاز (۶ نفر)</button><button class="secondary-button wide" id="subscription-settings">مدیریت اشتراک</button><button class="primary-button wide" id="settings-save">ذخیره و اعمال</button></section></div>`;
+  return `<div class="modal-backdrop" id="settings-modal"><section class="modal ui-mode-modal"><button class="modal-close" id="settings-close">×</button><span class="eyebrow">تنظیمات سای‌سای</span><h2>تنظیمات پایه</h2><label class="field"><span>شماره واتساپ پشتیبانی (با کد کشور، فقط رقم)</span><input id="support-whatsapp-phone" type="tel" inputmode="tel" dir="ltr" maxlength="15" placeholder="989121234567" value="${getSupportPhone()}"></label><p class="muted">شماره را با کد کشور وارد کنید؛ علامت + و فاصله لازم نیست.</p><label class="field"><span>واحد نمایش مبلغ</span><select id="currency-unit"><option value="toman" ${unit === "toman" ? "selected" : ""}>تومان</option><option value="rial" ${unit === "rial" ? "selected" : ""}>ریال</option></select></label><label class="professional-toggle"><input id="professional-mode" type="checkbox" ${professional ? "checked" : ""}><span><b>نسخه حرفه‌ای</b><small>گزارش‌ها و ابزارهای مدیریتی پیشرفته نمایش داده شوند.</small></span></label><button class="secondary-button wide" id="pricing-settings">🛡️ قیمت‌گذاری و حفظ سرمایه</button><button class="secondary-button wide" id="vision-settings">📷 تنظیم هوش تصویری کالا</button><button class="secondary-button wide" id="access-control-settings">مدیریت کاربران مجاز (۶ نفر)</button><button class="secondary-button wide" id="health-check-settings">بررسی سلامت برنامه</button><button class="secondary-button wide" id="subscription-settings">مدیریت اشتراک</button><button class="primary-button wide" id="settings-save">ذخیره و اعمال</button></section></div>`;
 }
 function bindSettingsModal(): void {
   const modal = document.querySelector<HTMLDivElement>("#settings-modal");
@@ -75,15 +78,39 @@ function bindSettingsModal(): void {
   modal.querySelector("#vision-settings")?.addEventListener("click", () => { modal.remove(); document.body.insertAdjacentHTML("beforeend", visionSettingsModal()); bindVisionSettingsModal(); });
   modal.querySelector("#subscription-settings")?.addEventListener("click", async () => { modal.remove(); const subscription = await getSubscription().catch(() => ({ status: "none", plan: "none", expiresAt: null } as Subscription)); showSubscription(subscription); });
   modal.querySelector("#access-control-settings")?.addEventListener("click", () => { modal.remove(); openAccessControlModal(showToast); });
+  modal.querySelector("#health-check-settings")?.addEventListener("click", () => { modal.remove(); document.body.insertAdjacentHTML("beforeend", healthCheckModal()); bindHealthCheckModal(); });
   modal.querySelector("#settings-save")?.addEventListener("click", async () => {
     const unit = modal.querySelector<HTMLSelectElement>("#currency-unit")?.value === "toman" ? "toman" : "rial";
     setCurrencyUnit(unit);
+    const supportInput = modal.querySelector<HTMLInputElement>("#support-whatsapp-phone");
+    const supportPhone = (supportInput?.value || "").replace(/\D/g, "");
+    if (supportPhone && (supportPhone.length < 8 || supportPhone.length > 15)) { showToast("شماره واتساپ باید با کد کشور و بین ۸ تا ۱۵ رقم باشد"); return; }
+    if (supportPhone) localStorage.setItem(SUPPORT_PHONE_KEY, supportPhone); else localStorage.removeItem(SUPPORT_PHONE_KEY);
     setProfessionalMode(modal.querySelector<HTMLInputElement>("#professional-mode")?.checked ?? false);
     modal.remove();
     await render();
     showToast("واحد مبلغ ذخیره شد");
   });
 }
+
+function healthCheckModal(): string {
+  const phoneReady = !!getSupportPhone();
+  const online = typeof navigator !== "undefined" ? navigator.onLine : false;
+  const supabaseConfigured = !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
+  return `<div class="modal-backdrop" id="health-check-modal"><section class="modal"><button class="modal-close" id="health-check-close">×</button><span class="eyebrow">ابزار عیب‌یابی</span><h2>بررسی سلامت برنامه</h2><p class="muted">این بررسی سریع، تنظیمات پایه را نشان می‌دهد و جایگزین تست کامل سرور یا بازیابی پشتیبان نیست.</p><div class="health-check-list">
+    <div class="transaction-row"><div class="transaction-main"><strong>وضعیت اتصال اینترنت</strong><small>${online ? "دستگاه آنلاین است" : "دستگاه آفلاین است"}</small></div><b>${online ? "✓" : "!"}</b></div>
+    <div class="transaction-row"><div class="transaction-main"><strong>شماره پشتیبانی واتساپ</strong><small>${phoneReady ? "شماره تنظیم شده" : "شماره هنوز وارد نشده"}</small></div><b>${phoneReady ? "✓" : "!"}</b></div>
+    <div class="transaction-row"><div class="transaction-main"><strong>تنظیمات پشتیبان ابری</strong><small>${supabaseConfigured ? "متغیرهای Supabase در ساخت برنامه تعریف شده‌اند" : "نیاز به تنظیم متغیرهای Supabase"}</small></div><b>${supabaseConfigured ? "✓" : "!"}</b></div>
+    <div class="transaction-row"><div class="transaction-main"><strong>پشتیبان محلی</strong><small>از بخش خزانه می‌توانید خروجی بگیرید یا فایل پشتیبان را بازیابی کنید.</small></div><b>i</b></div>
+  </div><button class="primary-button wide" id="health-check-done">متوجه شدم</button></section></div>`;
+}
+function bindHealthCheckModal(): void {
+  const modal = document.querySelector<HTMLElement>("#health-check-modal");
+  if (!modal) return;
+  modal.querySelector("#health-check-close")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#health-check-done")?.addEventListener("click", () => modal.remove());
+}
+
 function visionSettingsModal(): string { return '<div class="modal-backdrop" id="vision-settings-modal"><section class="modal"><button class="modal-close" id="vision-close">×</button><span class="eyebrow">هوش تصویری سای‌سای</span><h2>خواندن نوشته‌های کالا</h2><p class="muted">بدون ثبت‌نام و کلید API. متن فارسی و انگلیسی روی تصویر در خود برنامه خوانده می‌شود. برای دریافت داده‌های زبان در اولین استفاده، اینترنت لازم است؛ سپس پردازش تصویر روی دستگاه انجام می‌شود. پیشنهاد نام ممکن است نیاز به اصلاح دستی داشته باشد.</p><button class="primary-button wide" id="vision-save">متوجه شدم</button></section></div>'; }
 function bindVisionSettingsModal(): void { const m=document.querySelector<HTMLDivElement>("#vision-settings-modal"); if(!m)return; m.querySelector("#vision-close")?.addEventListener("click",()=>m.remove()); m.querySelector("#vision-save")?.addEventListener("click",()=>m.remove()); }
 function pricingSettingsModal(): string {
@@ -332,6 +359,7 @@ async function dashboardView(subscription: Subscription): Promise<string> {
     '<button class="quick-card voice-quick-card" id="voice-sale"><b>🎙</b><span>ثبت فروش با صدا</span><small>فارسی صحبت کنید</small></button>' +
     '<button class="quick-card voice-quick-card" id="voice-query"><b>🔊</b><span>از سای‌سای بپرس</span><small>فروش، قیمت، موجودی</small></button>' +
     '<button class="quick-card" id="photo-price-lookup"><b>📷</b><span>قیمت از روی عکس</span><small>عکس بگیر و قیمت را بشنو</small></button>' +
+    '<button class="quick-card" id="whatsapp-support"><b>💬</b><span>پشتیبانی واتساپ</span><small>گزارش مشکل به سازنده</small></button>' +
     '</div></section>' +
     '<section class="section panel"><div class="section-head"><h3>آخرین تراکنش‌ها</h3><span class="muted">۵ مورد اخیر</span></div>' + recent + '</section>';
 }
@@ -1531,6 +1559,13 @@ async function bindActions(): Promise<void> {
       if (!phone) { showToast("شماره تماس تأمین‌کننده ثبت نشده است"); return; }
       const confirmed = window.confirm("برای تأمین «" + product.name + "» با " + supplier.name + " تماس گرفته شود؟");
       if (confirmed) window.location.href = "tel:" + phone.replace(/[^+0-9]/g, "");
+      return;
+    }
+    const supportButton = target.closest<HTMLButtonElement>("#whatsapp-support");
+    if (supportButton) {
+      const url = supportWhatsAppUrl();
+      if (!url) { showToast("ابتدا شماره واتساپ پشتیبانی را از تنظیمات وارد و ذخیره کنید"); document.querySelector<HTMLButtonElement>("#settings")?.click(); return; }
+      window.location.href = url;
       return;
     }
     const changeRangeButton = target.closest<HTMLButtonElement>("#report-change-range");
