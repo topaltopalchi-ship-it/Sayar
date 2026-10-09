@@ -67,6 +67,7 @@ declare
   v_phone text := regexp_replace(trim(coalesce(p_phone, '')), '[[:space:]()-]', '', 'g');
   v_active_count integer;
   v_existing_role text;
+  v_existing_enabled boolean;
 begin
   if not exists (
     select 1 from public.saysay_access_users u
@@ -77,13 +78,14 @@ begin
   if v_phone !~ '^[+][1-9][0-9]{7,14}$' then
     raise exception 'phone must use international E.164 format' using errcode = '22023';
   end if;
-  select role into v_existing_role from public.saysay_access_users where phone = v_phone;
+  select role, enabled into v_existing_role, v_existing_enabled from public.saysay_access_users where phone = v_phone;
   if v_existing_role = 'owner' and not p_enabled then
     raise exception 'owner account cannot be disabled' using errcode = '42501';
   end if;
   if p_enabled then
+    perform pg_advisory_xact_lock(735202610);
     select count(*) into v_active_count from public.saysay_access_users where enabled;
-    if v_existing_role is null and v_active_count >= 6 then
+    if (v_existing_role is null or v_existing_enabled is distinct from true) and v_active_count >= 6 then
       raise exception 'maximum six enabled users (owner plus five members)' using errcode = '23514';
     end if;
     insert into public.saysay_access_users(phone, role, enabled)
