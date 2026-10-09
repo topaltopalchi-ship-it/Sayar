@@ -105,8 +105,8 @@ export async function listCloudAccessUsers(): Promise<CloudAccessUser[]> {
 }
 export async function setCloudAccessUser(phone: string, enabled: boolean): Promise<void> {
   const session = requireSession();
-  const normalized = phone.trim().replace(/[\\s()-]/g, "");
-  if (!/^\\+[1-9]\\d{7,14}$/.test(normalized)) {
+  const normalized = phone.trim().replace(/[\s()-]/g, "");
+  if (!/^\+[1-9]\d{7,14}$/.test(normalized)) {
     throw new Error("شماره را با کد کشور وارد کنید؛ نمونه: +989121234567");
   }
   await request("/rest/v1/rpc/saysay_set_access_user", {
