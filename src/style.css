@@ -668,3 +668,15 @@ body{
 .photo-price-result strong { overflow-wrap: anywhere; }
 .photo-price-result small { color: var(--muted, #94a3b8); font-size: .78rem; }
 .photo-price-result > b { color: var(--accent, #2dd4bf); white-space: nowrap; }
+
+
+.access-control-modal { max-width: 520px; }
+.access-control-modal h3 { margin: 18px 0 10px; }
+.access-current, .access-user-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid var(--border, rgba(148,163,184,.25)); border-radius: 12px; margin: 12px 0; }
+.access-current span, .access-user-row b { overflow-wrap: anywhere; }
+.access-user-list { display: grid; gap: 8px; max-height: 32vh; overflow-y: auto; }
+.access-user-row { margin: 0; }
+.access-user-row > div { display: grid; gap: 4px; min-width: 0; }
+.access-user-row small { color: var(--muted, #94a3b8); font-size: .78rem; }
+.access-add-user { border-top: 1px solid var(--border, rgba(148,163,184,.25)); margin-top: 14px; padding-top: 12px; }
+.access-login-fields { display: grid; gap: 10px; }
