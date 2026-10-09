@@ -1109,7 +1109,7 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
         <input id="report-${prefix}-date" class="report-date-input" data-report-date-input="${prefix}" type="text" inputmode="numeric" maxlength="10" value="${formatted}" placeholder="۱۴۰۵/۰۷/۱۶" aria-label="${prefix === "from" ? "از تاریخ" : "تا تاریخ"}">
       </div>`;
   };
-  const summary = `<section class="panel report-list"><div class="report-range" role="group" aria-label="بازه گزارش"><button type="button" class="report-range-item" data-report-range="today">امروز</button><button type="button" class="report-range-item" data-report-range="week">۷ روز</button><button type="button" class="report-range-item" data-report-range="month">ماه جاری</button><button type="button" class="report-range-item" data-report-range="all">همه</button></div><form id="report-range-form" class="report-custom-range">
+  const summary = `<button type="button" id="report-change-range" class="report-change-range" aria-label="بازگشت به انتخاب بازه گزارش">↕ تغییر بازه</button><section class="panel report-list" id="report-range-panel"><div class="report-range" role="group" aria-label="بازه گزارش"><button type="button" class="report-range-item" data-report-range="today">امروز</button><button type="button" class="report-range-item" data-report-range="week">۷ روز</button><button type="button" class="report-range-item" data-report-range="month">ماه جاری</button><button type="button" class="report-range-item" data-report-range="all">همه</button></div><form id="report-range-form" class="report-custom-range">
   ${dateParts("from", defaultFrom)}
   ${dateParts("to", defaultTo)}
   <button type="submit" class="primary-button wide" id="report-apply-range">اعمال بازه</button>
@@ -1385,6 +1385,12 @@ async function bindActions(): Promise<void> {
 
   root.addEventListener("click", async event => {
     const target = event.target as HTMLElement;
+    const changeRangeButton = target.closest<HTMLButtonElement>("#report-change-range");
+    if (changeRangeButton) {
+      document.querySelector("#report-range-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+
     const rangeButton = target.closest<HTMLButtonElement>("[data-report-range]");
     if (rangeButton) {
       localStorage.setItem("sai-sai-report-range", rangeButton.dataset.reportRange || "month");
