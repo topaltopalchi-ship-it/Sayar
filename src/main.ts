@@ -736,7 +736,7 @@ function orderModal(existing?: Order): string {
     <label class="field"><span>کالا</span><select id="order-product">${productOptions}</select></label>
     <div class="form-grid"><label class="field"><span>مقدار</span><input id="order-quantity" type="text" inputmode="decimal" value="${existing?.quantity ?? 1}"></label>
       <label class="field"><span>قیمت واحد</span><input id="order-price" type="text" inputmode="numeric" value="${existing?.unitPrice ?? products.find(p => p.id === (existing?.productId || products[0]?.id))?.salePrice ?? 0}"></label></div>
-    <div class="form-grid"><label class="field"><span>تاریخ تحویل (شمسی)</span><input id="order-delivery" type="text" inputmode="numeric" placeholder="۱۴۰۵/۰۷/۱۷" maxlength="10" value="${dateValue}"></label>
+    <div class="form-grid"><label class="field"><span>تاریخ تحویل (شمسی)</span><div class="jalali-date-control"><input id="order-delivery" type="text" inputmode="numeric" placeholder="۱۴۰۵/۰۷/۱۷" maxlength="10" value="${dateValue}"><button type="button" class="secondary-button jalali-calendar-open" data-calendar-target="order-delivery">تقویم</button></div></label>
       <label class="field"><span>ساعت تحویل</span><input id="order-delivery-time" type="time" value="${existing?.deliveryTime || "12:00"}"></label></div>
     <label class="field"><span>یادداشت</span><input id="order-note" placeholder="مثلاً تحویل درب مغازه" value="${existing?.note || ""}"></label>
     <button class="primary-button wide" id="order-submit">${existing ? "ذخیره تغییرات" : "ثبت سفارش و یادآوری"}</button>
@@ -1164,7 +1164,7 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
     return `
       <div class="field report-date">
         <span>${prefix === "from" ? "از تاریخ شمسی" : "تا تاریخ شمسی"}</span>
-        <input id="report-${prefix}-date" class="report-date-input" data-report-date-input="${prefix}" type="text" inputmode="numeric" maxlength="10" value="${formatted}" placeholder="۱۴۰۵/۰۷/۱۶" aria-label="${prefix === "from" ? "از تاریخ" : "تا تاریخ"}">
+        <div class="jalali-date-control"><input id="report-${prefix}-date" class="report-date-input" data-report-date-input="${prefix}" type="text" inputmode="numeric" maxlength="10" value="${formatted}" placeholder="۱۴۰۵/۰۷/۱۶" aria-label="${prefix === "from" ? "از تاریخ" : "تا تاریخ"}"><button type="button" class="secondary-button jalali-calendar-open" data-calendar-target="report-${prefix}-date">تقویم</button></div>
       </div>`;
   };
   const summary = `<section class="panel report-list" id="report-range-panel"><div class="report-range" role="group" aria-label="بازه گزارش"><button type="button" class="report-range-item" data-report-range="today">امروز</button><button type="button" class="report-range-item" data-report-range="week">۷ روز</button><button type="button" class="report-range-item" data-report-range="month">ماه جاری</button><button type="button" class="report-range-item" data-report-range="all">همه</button></div><form id="report-range-form" class="report-custom-range">
@@ -1314,6 +1314,49 @@ async function subscribe(): Promise<void> {
   catch (e) { showToast(e instanceof Error ? e.message : "پرداخت در دسترس نیست"); }
 }
 
+
+function jalaliCalendarParts(date: Date): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-US-u-ca-persian", { year: "numeric", month: "numeric", day: "numeric" }).formatToParts(date);
+  const get = (key: string) => Number(parts.find(p => p.type === key)?.value || 0);
+  return { year: get("year"), month: get("month"), day: get("day") };
+}
+function jalaliCalendarMarkup(target: string, year: number, month: number, selectedDay: number): string {
+  const monthNames = ["فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند"];
+  const start = jalaliToGregorianDate(`${year}/${String(month).padStart(2,"0")}/01`);
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const next = jalaliToGregorianDate(`${nextYear}/${String(nextMonth).padStart(2,"0")}/01`);
+  if (!start || !next) return "";
+  const count = Math.round((next.getTime() - start.getTime()) / 86400000);
+  const offset = (start.getDay() + 1) % 7; // week starts Saturday
+  const cells = Array.from({length: offset}, () => '<span class="jalali-day-empty"></span>');
+  for (let day=1; day<=count; day++) cells.push(`<button type="button" class="jalali-calendar-day ${day===selectedDay?"selected":""}" data-jalali-day="${day}">${toPersianDigits(String(day))}</button>`);
+  return `<div class="modal-backdrop jalali-calendar-backdrop" id="jalali-calendar-modal" data-target="${target}" data-year="${year}" data-month="${month}"><section class="modal jalali-calendar" role="dialog" aria-modal="true"><button type="button" class="modal-close" id="jalali-calendar-close">×</button><h3>انتخاب تاریخ شمسی</h3><div class="jalali-calendar-nav"><button type="button" id="jalali-calendar-prev">ماه قبل</button><strong>${monthNames[month-1]} ${toPersianDigits(String(year))}</strong><button type="button" id="jalali-calendar-next">ماه بعد</button></div><div class="jalali-calendar-grid jalali-weekdays">${["ش","ی","د","س","چ","پ","ج"].map(x=>`<span>${x}</span>`).join("")}</div><div class="jalali-calendar-grid">${cells.join("")}</div><button type="button" class="secondary-button wide" id="jalali-calendar-cancel">لغو</button></section></div>`;
+}
+function openJalaliCalendar(target: string, value: string): void {
+  document.querySelector("#jalali-calendar-modal")?.remove();
+  const date = jalaliToGregorianDate(value) || new Date();
+  const parts = jalaliCalendarParts(date);
+  document.body.insertAdjacentHTML("beforeend", jalaliCalendarMarkup(target, parts.year, parts.month, parts.day));
+  const modal = document.querySelector<HTMLDivElement>("#jalali-calendar-modal");
+  if (!modal) return;
+  const close = () => modal.remove();
+  modal.querySelector("#jalali-calendar-close")?.addEventListener("click", close);
+  modal.querySelector("#jalali-calendar-cancel")?.addEventListener("click", close);
+  const move = (delta: number) => {
+    let year = Number(modal.dataset.year), month = Number(modal.dataset.month) + delta;
+    if (month < 1) { month = 12; year--; } else if (month > 12) { month = 1; year++; }
+    openJalaliCalendar(target, `${year}/${String(month).padStart(2,"0")}/01`);
+  };
+  modal.querySelector("#jalali-calendar-prev")?.addEventListener("click", () => move(-1));
+  modal.querySelector("#jalali-calendar-next")?.addEventListener("click", () => move(1));
+  modal.querySelectorAll<HTMLButtonElement>("[data-jalali-day]").forEach(button => button.addEventListener("click", () => {
+    const value = `${modal.dataset.year}/${String(modal.dataset.month).padStart(2,"0")}/${String(button.dataset.jalaliDay).padStart(2,"0")}`;
+    const input = document.getElementById(target) as HTMLInputElement | null;
+    if (input) { input.value = toPersianDigits(value); input.dispatchEvent(new Event("change", {bubbles:true})); }
+    close();
+  }));
+}
 
 function compactJalaliInput(value: string): string {
   return value
@@ -1570,6 +1613,11 @@ function bindReportControls(): void {
     showToast("بازه گزارش اعمال شد");
   };
 
+  document.querySelectorAll<HTMLButtonElement>(".jalali-calendar-open").forEach(button => button.addEventListener("click", () => {
+    const target = button.dataset.calendarTarget || "";
+    const input = document.getElementById(target) as HTMLInputElement | null;
+    if (input) openJalaliCalendar(target, input.value);
+  }));
   document.querySelector("#report-range-form")?.addEventListener("submit", event => {
     event.preventDefault();
     void applyReportRange();
