@@ -332,7 +332,26 @@ export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise
 export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promise<string>, notify: (message: string) => void): void {
   const button = document.querySelector<HTMLButtonElement>("#voice-query");
   if (!button) return;
+  let isListening = false;
+  let isProcessing = false;
+  const originalLabel = button.textContent || "🔊 از سای‌سای بپرس";
+  const resetVoiceButton = () => {
+    isListening = false;
+    button.disabled = false;
+    button.textContent = originalLabel;
+    button.removeAttribute("aria-pressed");
+  };
   button.addEventListener("click", async () => {
+    if (isListening) {
+      // A second tap cancels listening and restores the button immediately.
+      isListening = false;
+      button.textContent = originalLabel;
+      button.removeAttribute("aria-pressed");
+      await SpeechRecognition.stop().catch(() => undefined);
+      notify("شنیدن صدا لغو شد");
+      return;
+    }
+    if (isProcessing) return;
     const available = await SpeechRecognition.available().catch(() => ({ available: false }));
     if (!available.available) {
       notify("تشخیص صدا در این دستگاه در دسترس نیست");
@@ -343,11 +362,14 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
       notify("اجازه دسترسی به میکروفون و تشخیص صدا لازم است");
       return;
     }
-    button.disabled = true;
-    const originalLabel = button.textContent || "🔊 از سای‌سای بپرس";
-    button.textContent = "🎙 در حال شنیدن…";
+    isProcessing = true;
+    isListening = true;
+    button.disabled = false;
+    button.setAttribute("aria-pressed", "true");
+    button.textContent = "✕ لغو شنیدن";
     try {
       await prepareSpeechRecognition();
+      if (!isListening) return;
       let question = "";
       let lastError: unknown = null;
       // Android's recognizer can intermittently return ERROR_NO_MATCH for Persian.
@@ -365,6 +387,7 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
             popup: false,
             prompt: attempt === 0 ? "سؤال خود را واضح و به فارسی از سای‌سای بپرسید" : "دوباره گوش می‌دهم؛ سؤال را کوتاه و واضح بگویید"
           });
+          if (!isListening) return;
           question = result.matches?.find(item => item.trim().length > 0)?.trim() || "";
           if (!question) lastError = new Error("NO_MATCH");
         } catch (error) {
@@ -374,6 +397,10 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
         }
       }
       await SpeechRecognition.stop().catch(() => undefined);
+      if (!isListening) return;
+      isListening = false;
+      button.textContent = originalLabel;
+      button.removeAttribute("aria-pressed");
       if (!question) {
         const message = lastError instanceof Error ? lastError.name + " " + lastError.message : String(lastError || "");
         if (/didn.t understand|try again|no.?match|error.?7/i.test(message) || message === "NO_MATCH") {
@@ -389,8 +416,8 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
         notify(error instanceof Error ? error.message : "پاسخ‌گویی ناموفق بود");
       }
     } finally {
-      button.disabled = false;
-      button.textContent = originalLabel;
+      isProcessing = false;
+      resetVoiceButton();
     }
   });
 }
