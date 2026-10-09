@@ -358,6 +358,27 @@ export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise
   });
 }
 
+function showLargeVoiceAnswer(answer: string, note = ""): void {
+  document.querySelector("#voice-answer-modal")?.remove();
+  const modal = document.createElement("div");
+  modal.className = "modal-backdrop voice-answer-backdrop";
+  modal.id = "voice-answer-modal";
+  modal.innerHTML = '<section class="voice-answer-panel" role="dialog" aria-modal="true" aria-labelledby="voice-answer-title"><button class="voice-answer-close" type="button" aria-label="بستن پاسخ">×</button><div class="voice-answer-label">پاسخ سای‌سای</div><h2 id="voice-answer-title">پاسخ شما</h2><div class="voice-answer-text"></div><p class="voice-answer-note"></p></section>';
+  document.body.appendChild(modal);
+  modal.querySelector<HTMLElement>(".voice-answer-text")!.textContent = answer;
+  modal.querySelector<HTMLElement>(".voice-answer-note")!.textContent = note;
+  const close = () => modal.remove();
+  modal.querySelector(".voice-answer-close")?.addEventListener("click", close);
+  modal.addEventListener("click", event => { if (event.target === modal) close(); });
+  modal.querySelector<HTMLButtonElement>(".voice-answer-close")?.focus();
+  document.addEventListener("keydown", function escapeAnswer(event) {
+    if (event.key === "Escape" && document.querySelector("#voice-answer-modal") === modal) {
+      close();
+      document.removeEventListener("keydown", escapeAnswer);
+    }
+  });
+}
+
 function openOfflineQuestionPrompt(onAnswer: (question: string) => Promise<string>, notify: (message: string) => void): void {
   document.querySelector("#offline-question-modal")?.remove();
   const modal = document.createElement("div");
@@ -380,7 +401,7 @@ function openOfflineQuestionPrompt(onAnswer: (question: string) => Promise<strin
       const answer = await onAnswer(question);
       status.textContent = answer;
       const spoken = await speakSaiSai(answer);
-      notify(spoken ? answer : answer + "\n\nپاسخ متنی آماده است؛ برای پاسخ صوتی، موتور گفتار فارسی گوشی را فعال کنید.");
+      showLargeVoiceAnswer(answer, spoken ? "" : "برای شنیدن پاسخ، موتور گفتار فارسی گوشی را در تنظیمات فعال کنید.");
     } catch (error) {
       status.textContent = error instanceof Error ? error.message : "پاسخ‌گویی انجام نشد.";
     } finally {
