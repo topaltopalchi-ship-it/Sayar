@@ -79,20 +79,25 @@ jobs:
         run: npx cap add android
       - name: Sync Capacitor
         run: npx cap sync android
-      - name: Configure release signing
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      - name: Generate temporary release signing key
         run: |
           set -euo pipefail
-          test -n "$KEYSTORE_BASE64" || (echo "Missing GitHub Secret: KEYSTORE_BASE64" >&2; exit 1)
-          test -n "$KEYSTORE_PASSWORD" || (echo "Missing GitHub Secret: KEYSTORE_PASSWORD" >&2; exit 1)
-          test -n "$KEY_ALIAS" || (echo "Missing GitHub Secret: KEY_ALIAS" >&2; exit 1)
-          test -n "$KEY_PASSWORD" || (echo "Missing GitHub Secret: KEY_PASSWORD" >&2; exit 1)
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release-key.jks"
+          STORE_PASSWORD="$(openssl rand -hex 24)"
+          KEY_PASSWORD="$(openssl rand -hex 24)"
+          KEY_ALIAS="saysay-release"
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/release-key.jks" \
+            -storepass "$STORE_PASSWORD" \
+            -keypass "$KEY_PASSWORD" \
+            -alias "$KEY_ALIAS" \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=SaySay Release, OU=Mobile, O=SaySay, L=Unknown, ST=Unknown, C=US"
           chmod 600 "$RUNNER_TEMP/release-key.jks"
+          {
+            echo "KEYSTORE_PASSWORD=$STORE_PASSWORD"
+            echo "KEY_ALIAS=$KEY_ALIAS"
+            echo "KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
           python3 - <<'PY'
           from pathlib import Path
           import re
@@ -102,23 +107,23 @@ jobs:
           if "signingConfigs.release" in text:
               raise SystemExit("Release signing appears to be configured already; refusing to duplicate it.")
 
-          build_types = re.search(r"(?m)^([ \t]*)buildTypes\s*\{", text)
+          build_types = re.search(r"(?m)^([ \\t]*)buildTypes\\s*\\{", text)
           if not build_types:
               raise SystemExit("Could not find buildTypes block in android/app/build.gradle")
           indent = build_types.group(1)
           signing = (
-              f"{indent}signingConfigs {{\n"
-              f"{indent}    release {{\n"
-              f"{indent}        storeFile file(System.getenv('RUNNER_TEMP') + '/release-key.jks')\n"
-              f"{indent}        storePassword System.getenv('KEYSTORE_PASSWORD')\n"
-              f"{indent}        keyAlias System.getenv('KEY_ALIAS')\n"
-              f"{indent}        keyPassword System.getenv('KEY_PASSWORD')\n"
-              f"{indent}    }}\n"
-              f"{indent}}}\n\n"
+              f"{indent}signingConfigs {{\\n"
+              f"{indent}    release {{\\n"
+              f"{indent}        storeFile file(System.getenv('RUNNER_TEMP') + '/release-key.jks')\\n"
+              f"{indent}        storePassword System.getenv('KEYSTORE_PASSWORD')\\n"
+              f"{indent}        keyAlias System.getenv('KEY_ALIAS')\\n"
+              f"{indent}        keyPassword System.getenv('KEY_PASSWORD')\\n"
+              f"{indent}    }}\\n"
+              f"{indent}}}\\n\\n"
           )
           text = text[:build_types.start()] + signing + text[build_types.start():]
 
-          build_types = re.search(r"(?m)^([ \t]*)buildTypes\s*\{", text)
+          build_types = re.search(r"(?m)^([ \\t]*)buildTypes\\s*\\{", text)
           start = build_types.end()
           depth = 1
           i = start
@@ -129,12 +134,12 @@ jobs:
                   depth -= 1
               i += 1
           block = text[build_types.start():i]
-          release = re.search(r"(?m)^([ \t]*)release\s*\{", block)
+          release = re.search(r"(?m)^([ \\t]*)release\\s*\\{", block)
           if not release:
               raise SystemExit("Could not find release block inside buildTypes")
           release_indent = release.group(1)
           insert_at = release.end()
-          block = block[:insert_at] + f"\n{release_indent}    signingConfig signingConfigs.release" + block[insert_at:]
+          block = block[:insert_at] + f"\\n{release_indent}    signingConfig signingConfigs.release" + block[insert_at:]
           text = text[:build_types.start()] + block + text[i:]
           gradle.write_text(text)
           PY
