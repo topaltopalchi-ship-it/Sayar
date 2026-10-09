@@ -1679,6 +1679,41 @@ async function render(): Promise<void> {
     return "ماشین حساب صوتی را باز کردم. حالا عملیات را بگویید.";
   }
   const [dashboard, transactions, products, parties, balances] = await Promise.all([getDashboard(), listTransactions(), listProducts(), listParties(), getPartyBalances()]);
+  const commandText = q.replace(/[\u200c\sـ]/g, "").replace(/[،,.!?؟]/g, "");
+  const routeCommand = /(?:سای.?سای)?(?:بدهکاران|بدهکارها|لیستبدهکاران|حساببدهکاران)/.test(commandText)
+    ? "people"
+    : /(?:سای.?سای)?(?:موجودی|انبار|لیستموجودی|موجودیکالاها)/.test(commandText)
+      ? "inventory"
+      : /(?:سای.?سای)?(?:فروش|فاکتورهایفروش)/.test(commandText)
+        ? "sales"
+        : /(?:سای.?سای)?(?:خرید|فاکتورهایخرید)/.test(commandText)
+          ? "purchases"
+          : /(?:سای.?سای)?(?:داشبورد|صفحه?اصلی)/.test(commandText)
+            ? "dashboard"
+            : /(?:سای.?سای)?(?:سفارشات|سفارشها)/.test(commandText)
+              ? "orders"
+              : /(?:سای.?سای)?(?:گزارشها|گزارشات)/.test(commandText)
+                ? "reports"
+                : /(?:سای.?سای)?(?:چکها|چکها)/.test(commandText)
+                  ? "checks"
+                  : "";
+  if (routeCommand) {
+    activeTab = routeCommand as Tab;
+    await render();
+    if (routeCommand === "inventory") {
+      const stockRows = await Promise.all(products.slice(0, 8).map(async product => ({ product, stock: await getStock(product.id) })));
+      if (!stockRows.length) return "بخش موجودی را باز کردم، اما هنوز کالایی ثبت نشده است.";
+      const summary = stockRows.map(x => x.product.name + "، " + x.stock.toLocaleString("fa-IR") + " " + x.product.unit).join("؛ ");
+      return "بخش موجودی باز شد. موجودی کالاها: " + summary;
+    }
+    if (routeCommand === "people") {
+      const debtors = parties.filter(p => (balances[p.id]?.balance ?? 0) > 0);
+      if (!debtors.length) return "فهرست اشخاص باز شد. در حال حاضر بدهکار ثبت‌شده‌ای ندارید.";
+      return "فهرست بدهکاران باز شد. " + debtors.slice(0, 8).map(p => p.name + "، بدهی " + rial(balances[p.id].balance)).join("؛ ");
+    }
+    const labels: Record<string, string> = { dashboard: "داشبورد", sales: "فروش", purchases: "خرید", orders: "سفارش‌ها", reports: "گزارش‌ها", checks: "چک‌ها" };
+    return "بخش " + (labels[routeCommand] || "درخواستی") + " را باز کردم.";
+  }
 const commandAmountMatch = q.match(/(?:دریافت|وصول|گرفتم|پرداخت|پرداختم|دادم)[^۰-۹٠-٩\d]*(?:از|به|برای)?[^۰-۹٠-٩\d]*(?:[۰-۹٠-٩\d][۰-۹٠-٩\d٬,\.]*\s*(?:هزار|هزارتا|میلیون|میلیونی|میلیارد|میلیاردی)?|(?:یک|دو|سه|چهار|پنج|شش|هفت|هشت|نه|ده|بیست)\s*(?:هزار|هزارتا|میلیون|میلیونی|میلیارد|میلیاردی)?)/);
   const commandAmount = commandAmountMatch ? parseVoiceMoney(commandAmountMatch[0]) : 0;
   const receiptCommand = /^(?:سای‌?سای[، ]*)?(?:ثبت\s*)?(?:دریافت|وصول|گرفتم)\b/.test(q) && commandAmount > 0;
