@@ -22,7 +22,6 @@ import { jalaliToGregorianDate, todayJalaliInput, formatJalaliInput, toPersianDi
 import { bindVoiceAssistant, bindVoiceQuestionAssistant, bindVoiceProductAssistant, bindVoiceProductFieldAssistant, type VoiceSaleDraft, type VoiceSaleItem, type VoiceProductDraft } from "./voice-assistant";
 import { getCustomerTier, getMarketSettings, setMarketSettings, recommendPrice, tierLabel } from "./pricing";
 import { buildBusinessInsights, dailyBrief, customerScore, type BusinessInsight } from "./intelligence";
-import { analyzeProductPhoto } from "./product-vision";
 
 type Tab = "dashboard" | "sales" | "purchases" | "orders" | "inventory" | "people" | "reports" | "more" | "checks";
 
@@ -63,14 +62,13 @@ function setProfessionalMode(value: boolean): void { localStorage.setItem(UI_MOD
 function settingsModal(): string {
   const unit = getCurrencyUnit();
   const professional = isProfessionalMode();
-  return `<div class="modal-backdrop" id="settings-modal"><section class="modal ui-mode-modal"><button class="modal-close" id="settings-close">×</button><span class="eyebrow">تنظیمات سای‌سای</span><h2>تنظیمات پایه</h2><label class="field"><span>واحد نمایش مبلغ</span><select id="currency-unit"><option value="toman" ${unit === "toman" ? "selected" : ""}>تومان</option><option value="rial" ${unit === "rial" ? "selected" : ""}>ریال</option></select></label><label class="professional-toggle"><input id="professional-mode" type="checkbox" ${professional ? "checked" : ""}><span><b>نسخه حرفه‌ای</b><small>گزارش‌ها و ابزارهای مدیریتی پیشرفته نمایش داده شوند.</small></span></label><button class="secondary-button wide" id="pricing-settings">🛡️ قیمت‌گذاری و حفظ سرمایه</button><button class="secondary-button wide" id="vision-settings">📷 تنظیم هوش تصویری کالا</button><button class="secondary-button wide" id="subscription-settings">مدیریت اشتراک</button><button class="primary-button wide" id="settings-save">ذخیره و اعمال</button></section></div>`;
+  return `<div class="modal-backdrop" id="settings-modal"><section class="modal ui-mode-modal"><button class="modal-close" id="settings-close">×</button><span class="eyebrow">تنظیمات سای‌سای</span><h2>تنظیمات پایه</h2><label class="field"><span>واحد نمایش مبلغ</span><select id="currency-unit"><option value="toman" ${unit === "toman" ? "selected" : ""}>تومان</option><option value="rial" ${unit === "rial" ? "selected" : ""}>ریال</option></select></label><label class="professional-toggle"><input id="professional-mode" type="checkbox" ${professional ? "checked" : ""}><span><b>نسخه حرفه‌ای</b><small>گزارش‌ها و ابزارهای مدیریتی پیشرفته نمایش داده شوند.</small></span></label><button class="secondary-button wide" id="pricing-settings">🛡️ قیمت‌گذاری و حفظ سرمایه</button><button class="secondary-button wide" id="subscription-settings">مدیریت اشتراک</button><button class="primary-button wide" id="settings-save">ذخیره و اعمال</button></section></div>`;
 }
 function bindSettingsModal(): void {
   const modal = document.querySelector<HTMLDivElement>("#settings-modal");
   if (!modal) return;
   modal.querySelector("#settings-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#pricing-settings")?.addEventListener("click", async () => { modal.remove(); document.body.insertAdjacentHTML("beforeend", pricingSettingsModal()); bindPricingSettingsModal(); });
-  modal.querySelector("#vision-settings")?.addEventListener("click", () => { modal.remove(); document.body.insertAdjacentHTML("beforeend", visionSettingsModal()); bindVisionSettingsModal(); });
   modal.querySelector("#subscription-settings")?.addEventListener("click", async () => { modal.remove(); const subscription = await getSubscription().catch(() => ({ status: "none", plan: "none", expiresAt: null } as Subscription)); showSubscription(subscription); });
   modal.querySelector("#settings-save")?.addEventListener("click", async () => {
     const unit = modal.querySelector<HTMLSelectElement>("#currency-unit")?.value === "toman" ? "toman" : "rial";
@@ -81,8 +79,6 @@ function bindSettingsModal(): void {
     showToast("واحد مبلغ ذخیره شد");
   });
 }
-function visionSettingsModal(): string { return '<div class="modal-backdrop" id="vision-settings-modal"><section class="modal"><button class="modal-close" id="vision-close">×</button><span class="eyebrow">هوش تصویری سای‌سای</span><h2>خواندن نوشته‌های کالا</h2><p class="muted">بدون ثبت‌نام و کلید API. متن فارسی و انگلیسی روی تصویر در خود برنامه خوانده می‌شود. برای دریافت داده‌های زبان در اولین استفاده، اینترنت لازم است؛ سپس پردازش تصویر روی دستگاه انجام می‌شود. پیشنهاد نام ممکن است نیاز به اصلاح دستی داشته باشد.</p><button class="primary-button wide" id="vision-save">متوجه شدم</button></section></div>'; }
-function bindVisionSettingsModal(): void { const m=document.querySelector<HTMLDivElement>("#vision-settings-modal"); if(!m)return; m.querySelector("#vision-close")?.addEventListener("click",()=>m.remove()); m.querySelector("#vision-save")?.addEventListener("click",()=>m.remove()); }
 function pricingSettingsModal(): string {
   const s = getMarketSettings();
   return `<div class="modal-backdrop" id="pricing-settings-modal"><section class="modal"><button class="modal-close" id="pricing-close">×</button>
@@ -934,7 +930,7 @@ function productModal(product?: Product): string {
     <div class="form-grid"><label class="field"><span>قیمت خرید (${getCurrencyLabel()})</span><input id="p-buy" type="number" min="0" value="${moneyInputValue(product?.purchasePrice ?? 0)}"></label><label class="field"><span>قیمت فروش (${getCurrencyLabel()})</span><input id="p-sale" type="number" min="0" value="${moneyInputValue(product?.salePrice ?? 0)}"></label></div>
     <div class="form-grid"><label class="field"><span>مبنای قیمت بازار</span><select id="p-market-basis"><option value="none" ${product?.marketBasis === "none" || !product?.marketBasis ? "selected" : ""}>بدون شاخص</option><option value="dollar" ${product?.marketBasis === "dollar" ? "selected" : ""}>دلار</option><option value="gold" ${product?.marketBasis === "gold" ? "selected" : ""}>طلا</option><option value="market" ${product?.marketBasis === "market" ? "selected" : ""}>شاخص بازار</option></select></label><label class="field"><span>نرخ مرجع هنگام خرید</span><input id="p-market-reference" type="number" min="0" value="${product?.marketReferenceRate ?? 0}"></label></div><div class="form-grid"><label class="field"><span>سود هدف (%)</span><input id="p-margin" type="number" min="0" value="${product?.targetMarginPercent ?? getMarketSettings().defaultMarginPercent}"></label><label class="field"><span>حداقل سود (%)</span><input id="p-min-margin" type="number" min="0" value="${product?.minMarginPercent ?? getMarketSettings().minMarginPercent}"></label></div><label class="field"><span>حداقل موجودی (هشدار)</span><input id="p-low" type="number" min="0" step="0.001" value="${product?.lowStock ?? 5}"></label><label class="field"><span>تأمین‌کننده این کالا</span><select id="p-supplier"><option value="">بدون تأمین‌کننده</option>${parties.filter(p => p.type === "supplier" || p.type === "both").map(p => `<option value="${p.id}" ${product?.supplierId === p.id ? "selected" : ""}>${p.name}${p.phone ? " · " + p.phone : ""}</option>`).join("")}</select></label>
     ${product ? "" : '<label class="field"><span>موجودی اولیه</span><input id="p-initial-stock" type="text" inputmode="decimal" autocomplete="off" value="0" placeholder="مثلاً 20"></label>'}
-    ${product ? "" : `<button class="secondary-button wide" id="voice-product">🎙 ثبت کالای جدید با صدا</button><button class="secondary-button wide" id="photo-product">📷 شناسایی کالا از روی عکس</button><button class="secondary-button wide" id="photo-voice-product">📷🎙 عکس + تکمیل با صدا</button><button class="secondary-button wide" id="voice-photo-product">🎙📷 صدا + تکمیل با عکس</button>`}<button class="primary-button wide" id="product-submit">${product ? "ذخیره تغییرات" : "ذخیره کالا"}</button></section></div>`;
+    ${product ? "" : '<button class="secondary-button wide" id="voice-product">🎙 ثبت کالای جدید با صدا</button>'}<button class="primary-button wide" id="product-submit">${product ? "ذخیره تغییرات" : "ذخیره کالا"}</button></section></div>`;
 }
 
 async function saveVoiceProduct(draft: VoiceProductDraft): Promise<void> {
@@ -949,128 +945,7 @@ async function saveVoiceProduct(draft: VoiceProductDraft): Promise<void> {
 function bindProductModal(): void {
   const modal = document.querySelector<HTMLDivElement>("#product-modal")!;
   modal.querySelector("#product-close")?.addEventListener("click", () => modal.remove());
-  modal.querySelector("#photo-product")?.addEventListener("click", () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.capture = "environment";
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const button = modal.querySelector<HTMLButtonElement>("#photo-product");
-      if (button) {
-        button.disabled = true;
-        button.textContent = "📷 در حال تحلیل تصویر…";
-      }
-      try {
-        const result = await analyzeProductPhoto(file);
-        if (!result.name) throw new Error("نام کالا از تصویر تشخیص داده نشد");
-        const name = modal.querySelector<HTMLInputElement>("#p-name");
-        const sku = modal.querySelector<HTMLInputElement>("#p-sku");
-        const unit = modal.querySelector<HTMLSelectElement>("#p-unit");
-        if (name) name.value = result.name;
-        if (sku && result.sku) sku.value = result.sku;
-        if (unit) unit.value = result.unit;
-        showToast("نام کالا از روی عکس تشخیص داده شد؛ لطفاً بررسی کنید");
-      } catch (e) {
-        showToast(e instanceof Error ? e.message : "تشخیص تصویر ناموفق بود");
-      } finally {
-        if (button) {
-          button.disabled = false;
-          button.textContent = "📷 شناسایی کالا از روی عکس";
-        }
-      }
-    };
-    input.click();
-  });
-  const voicePhotoButton = modal.querySelector<HTMLButtonElement>("#voice-photo-product");
-  if (voicePhotoButton && !modal.dataset.editId) {
-    bindVoiceProductFieldAssistant(voicePhotoButton, showToast, async draft => {
-      const stock = modal.querySelector<HTMLInputElement>("#p-initial-stock");
-      const buy = modal.querySelector<HTMLInputElement>("#p-buy");
-      const sale = modal.querySelector<HTMLInputElement>("#p-sale");
-      const low = modal.querySelector<HTMLInputElement>("#p-low");
-      if (draft.initialStock > 0 && stock) stock.value = String(draft.initialStock);
-      if (draft.purchasePrice > 0 && buy) buy.value = String(draft.purchasePrice);
-      if (draft.salePrice > 0 && sale) sale.value = String(draft.salePrice);
-      if (draft.lowStock > 0 && low) low.value = String(draft.lowStock);
-
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = "image/*";
-      input.capture = "environment";
-      await new Promise<void>(resolve => {
-        input.onchange = async () => {
-          const file = input.files?.[0];
-          if (!file) { resolve(); return; }
-          voicePhotoButton.textContent = "📷 در حال تحلیل تصویر…";
-          try {
-            const r = await analyzeProductPhoto(file);
-            if (!r.name) throw new Error("نام کالا از تصویر تشخیص داده نشد");
-            const n = modal.querySelector<HTMLInputElement>("#p-name");
-            const s = modal.querySelector<HTMLInputElement>("#p-sku");
-            const u = modal.querySelector<HTMLSelectElement>("#p-unit");
-            if (n) n.value = r.name;
-            if (s && r.sku) s.value = r.sku;
-            if (u) u.value = r.unit;
-            showToast("صدا و عکس با هم ترکیب شدند؛ اطلاعات را بررسی و ثبت کنید");
-          } catch (e) {
-            showToast(e instanceof Error ? e.message : "تشخیص تصویر ناموفق بود");
-          } finally { resolve(); }
-        };
-        input.click();
-      });
-    });
-  }
-
-  const combinedVoiceButton = modal.querySelector<HTMLButtonElement>("#photo-voice-product");
-  if (combinedVoiceButton && !modal.dataset.editId) {
-    bindVoiceProductFieldAssistant(
-      combinedVoiceButton,
-      showToast,
-      async draft => {
-        const stock = modal.querySelector<HTMLInputElement>("#p-initial-stock");
-        const buy = modal.querySelector<HTMLInputElement>("#p-buy");
-        const sale = modal.querySelector<HTMLInputElement>("#p-sale");
-        const low = modal.querySelector<HTMLInputElement>("#p-low");
-        if (draft.initialStock > 0 && stock) stock.value = String(draft.initialStock);
-        if (draft.purchasePrice > 0 && buy) buy.value = String(draft.purchasePrice);
-        if (draft.salePrice > 0 && sale) sale.value = String(draft.salePrice);
-        if (draft.lowStock > 0 && low) low.value = String(draft.lowStock);
-        showToast("عکس و اطلاعات صوتی با هم ترکیب شدند؛ حالا ثبت کالا را بزنید");
-      },
-      async () => {
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = "image/*";
-        input.capture = "environment";
-        return await new Promise<boolean>(resolve => {
-          input.onchange = async () => {
-            const file = input.files?.[0];
-            if (!file) { resolve(false); return; }
-            combinedVoiceButton.textContent = "📷 در حال تحلیل تصویر…";
-            try {
-              const r = await analyzeProductPhoto(file);
-              if (!r.name) throw new Error("نام کالا از تصویر تشخیص داده نشد");
-              const n = modal.querySelector<HTMLInputElement>("#p-name");
-              const s = modal.querySelector<HTMLInputElement>("#p-sku");
-              const u = modal.querySelector<HTMLSelectElement>("#p-unit");
-              if (n) n.value = r.name;
-              if (s && r.sku) s.value = r.sku;
-              if (u) u.value = r.unit;
-              showToast("نام کالا از عکس تشخیص داده شد؛ حالا اطلاعات عددی را با صدا بگویید");
-              resolve(true);
-            } catch (e) {
-              showToast(e instanceof Error ? e.message : "تشخیص تصویر ناموفق بود");
-              resolve(false);
-            }
-          };
-          input.click();
-        });
-      }
-    );
-  }
-if (!modal.dataset.editId) bindVoiceProductAssistant(async draft => { modal.remove(); await saveVoiceProduct(draft); }, showToast, async drafts => { modal.remove(); for (const draft of drafts) await saveVoiceProduct(draft); showToast(`${drafts.length} کالا ثبت شد`); });
+  if (!modal.dataset.editId) bindVoiceProductAssistant(async draft => { modal.remove(); await saveVoiceProduct(draft); }, showToast, async drafts => { modal.remove(); for (const draft of drafts) await saveVoiceProduct(draft); showToast(`${drafts.length} کالا ثبت شد`); });
   modal.querySelector("#product-submit")?.addEventListener("click", async () => {
     try {
       const name = (modal.querySelector<HTMLInputElement>("#p-name")!.value).trim();
