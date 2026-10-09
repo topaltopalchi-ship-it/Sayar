@@ -82,3 +82,5 @@ export function initializeOfflineServices(): void {
   window.addEventListener("offline", () => render(readCache(), "آفلاین · نمایش آخرین قیمت ذخیره‌شده"));
   void refresh();
 }
+
+initializeOfflineServices();
