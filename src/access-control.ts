@@ -1,6 +1,6 @@
 import {
   getCloudAccount, listCloudAccessUsers, requestCloudSmsCode, setCloudAccessUser,
-  signOutCloud, verifyCloudSmsCode, type CloudAccessUser,
+  signOutCloud, verifyCloudSmsCode,
 } from "./cloud-backup";
 
 type Notify = (message: string) => void;
@@ -12,10 +12,10 @@ function accessModal(): string {
     <span class="eyebrow">امنیت سای‌سای</span><h2>مدیریت کاربران مجاز</h2>
     <p class="muted">فقط مدیر می‌تواند شماره‌ها را فعال یا غیرفعال کند. سقف کل حساب‌ها ۶ نفر است: شما و حداکثر پنج کاربر دیگر.</p>
     ${account ? `<div class="access-current"><b>واردشده</b><span dir="ltr">${escapeHtml(account.phone || "")}</span><button class="secondary-button" id="access-signout">خروج</button></div>` : `
-    <label class="field"><span>شماره موبایل مدیر یا کاربر مجاز</span><input id="access-phone" type="tel" inputmode="tel" placeholder="+989121234567" dir="ltr" autocomplete="tel"></label>
+    <div class="access-login-fields"><label class="field"><span>شماره موبایل مدیر یا کاربر مجاز</span><input id="access-phone" type="tel" inputmode="tel" placeholder="+989121234567" dir="ltr" autocomplete="tel"></label>
     <button class="primary-button wide" id="access-send-code">ارسال کد پیامکی</button>
     <label class="field"><span>کد پیامکی</span><input id="access-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="کد تأیید" dir="ltr"></label>
-    <button class="primary-button wide" id="access-verify-code">تأیید و ورود</button>`}
+    <button class="primary-button wide" id="access-verify-code">تأیید و ورود</button></div>`}
     <div id="access-owner-panel"><p class="muted">برای مدیریت فهرست، ابتدا با شماره‌ای که مدیر تعیین کرده وارد شوید.</p></div>
   </section></div>`;
 }
@@ -47,8 +47,13 @@ export function openAccessControlModal(notify: Notify): void {
     try {
       await verifyCloudSmsCode(phone, code);
       notify("ورود با موفقیت انجام شد");
-      await renderOwnerPanel(modal, notify);
       modal.querySelector(".access-login-fields")?.remove();
+      const current = document.createElement("div");
+      current.className = "access-current";
+      current.innerHTML = `<b>واردشده</b><span dir="ltr">${escapeHtml(getCloudAccount()?.phone || "")}</span><button class="secondary-button" id="access-signout">خروج</button>`;
+      modal.querySelector("#access-owner-panel")?.before(current);
+      current.querySelector("#access-signout")?.addEventListener("click", () => { signOutCloud(); modal.remove(); notify("از حساب ابری خارج شدید"); });
+      await renderOwnerPanel(modal, notify);
     } catch (error) {
       notify(error instanceof Error ? error.message : "ورود ناموفق بود");
     }
