@@ -112,6 +112,33 @@ function bindPricingSettingsModal(): void {
     m.remove(); showToast("تنظیمات قیمت‌گذاری هوشمند ذخیره شد");
   });
 }
+function marketPricesModal(): string {
+  const s = getMarketSettings();
+  const rate = (value: number) => value > 0 ? rial(value) : "ثبت نشده";
+  return '<div class="modal-backdrop" id="market-prices-modal"><section class="modal"><button class="modal-close" id="market-prices-close">×</button>' +
+    '<span class="eyebrow">اطلاعات بازار</span><h2>قیمت دلار، طلا و شاخص بازار</h2>' +
+    '<p class="muted">این نرخ‌ها آخرین مقادیری هستند که در تنظیمات سای‌سای ذخیره کرده‌اید؛ قیمت زنده نیستند.</p>' +
+    '<div class="stats-grid">' +
+    stat("دلار", rate(s.dollarRate), "primary") +
+    stat("طلا", rate(s.goldRate), "warning") +
+    stat("تغییر شاخص بازار", s.marketIndexPercent + "%", "success") +
+    stat("حاشیه جایگزینی", s.replacementBufferPercent + "%", "primary") +
+    '</div><button class="primary-button wide" id="market-prices-edit">ویرایش نرخ‌ها</button>' +
+    '<button class="secondary-button wide" id="market-prices-done">بستن</button></section></div>';
+}
+function bindMarketPricesModal(): void {
+  const m = document.querySelector<HTMLDivElement>("#market-prices-modal");
+  if (!m) return;
+  const close = () => m.remove();
+  m.querySelector("#market-prices-close")?.addEventListener("click", close);
+  m.querySelector("#market-prices-done")?.addEventListener("click", close);
+  m.querySelector("#market-prices-edit")?.addEventListener("click", () => {
+    close();
+    document.body.insertAdjacentHTML("beforeend", pricingSettingsModal());
+    bindPricingSettingsModal();
+  });
+}
+
 function priceRecommendationModal(product: Product): string {
   const s=getMarketSettings();
   const transactionsCache=(window as typeof window & { __saiPricingTransactions?: Transaction[] }).__saiPricingTransactions || [];
@@ -316,6 +343,7 @@ async function dashboardView(subscription: Subscription): Promise<string> {
     '<button class="quick-card" data-action="sale"><b>＋</b><span>فروش جدید</span><small>ثبت سریع فاکتور</small></button>' +
     '<button class="quick-card" data-action="purchase"><b>⇩</b><span>ثبت خرید</span><small>افزایش موجودی</small></button>' +
     '<button class="quick-card" data-action="receipt"><b>↙</b><span>دریافت وجه</span><small>پیگیری مطالبات</small></button>' +
+    '<button class="quick-card" data-action="market-prices"><b>💱</b><span>قیمت‌های بازار</span><small>نمایش دلار، طلا و شاخص‌ها</small></button>' +
     '<button class="quick-card voice-quick-card" id="voice-sale"><b>🎙</b><span>ثبت فروش با صدا</span><small>فارسی صحبت کنید</small></button>' +
     '<button class="quick-card voice-quick-card" id="voice-query"><b>🔊</b><span>از سای‌سای بپرس</span><small>فروش، قیمت، موجودی</small></button>' +
     '</div></section>' +
@@ -1443,6 +1471,9 @@ async function bindActions(): Promise<void> {
         products = await listProducts();
         parties = await listParties();
         openPurchaseModal(products, parties, rial, async m => { showToast(m); await render(); });
+      } else if (action === "market-prices") {
+        document.body.insertAdjacentHTML("beforeend", marketPricesModal());
+        bindMarketPricesModal();
       } else if (action === "receipt") {
         await openSettlement("receipt");
       } else if (action === "voice-sale") {
