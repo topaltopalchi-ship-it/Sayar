@@ -31,8 +31,8 @@ export async function analyzeProductPhoto(file: File): Promise<ProductVisionResu
     worker = await createWorker("fas+eng", 1, { logger: () => undefined });
     const { data } = await worker.recognize(file);
     const text = String(data.text || "").trim();
-    if (!text) throw new Error("نوشته‌ای خوانا پیدا نشد؛ عکس را نزدیک‌تر و واضح‌تر بگیرید.");
-    const name = proposeName(text);
+    // OCR is not visual object recognition; allow manual naming when no text is readable.
+    const name = text ? proposeName(text) : "";
     const skuMatch = text.match(/(?:\b\d{8,14}\b|\b[A-Z0-9][A-Z0-9-]{4,}\b)/i);
     const lower = text.toLocaleLowerCase();
     let unit: ProductVisionResult["unit"] = "عدد";
@@ -41,7 +41,7 @@ export async function analyzeProductPhoto(file: File): Promise<ProductVisionResu
     else if (/\b(ml|لیتر|liter|litre|\bl\b)\b/i.test(lower)) unit = "لیتر";
     else if (/\b(m|متر)\b/i.test(lower)) unit = "متر";
     else if (/\b(pack|بسته)\b/i.test(lower)) unit = "بسته";
-    return { name, sku: skuMatch?.[0] || "", unit, confidence: Math.max(0, Math.min(1, Number(data.confidence || 0) / 100)) };
+    return { name: name || "کالای جدید", sku: skuMatch?.[0] || "", unit, confidence: text ? Math.max(0, Math.min(1, Number(data.confidence || 0) / 100)) : 0 };
   } finally {
     await worker?.terminate();
   }
