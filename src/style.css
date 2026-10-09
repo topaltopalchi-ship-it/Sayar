@@ -506,3 +506,78 @@ body{background:radial-gradient(circle at 12% 0,#223657 0,#10182a 34%,#090e1b 78
 .jalali-calendar-day{border:1px solid var(--border,#334155);border-radius:10px;background:var(--surface,#111827);color:inherit}
 .jalali-calendar-day.selected{background:var(--primary,#2563eb);color:#fff;border-color:var(--primary,#2563eb)}
 #jalali-calendar-cancel{margin-top:14px}
+
+
+/* Large, persistent answer screen for voice questions. */
+.voice-answer-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 10000 !important;
+  display: flex !important;
+  align-items: stretch !important;
+  justify-content: stretch !important;
+  padding: max(10px, env(safe-area-inset-top, 0px)) 10px max(10px, env(safe-area-inset-bottom, 0px)) !important;
+  background: rgba(3, 8, 20, .92) !important;
+  overflow: auto !important;
+}
+.voice-answer-panel {
+  position: relative;
+  width: 100%;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 76px 24px 32px;
+  border: 1px solid #334766;
+  border-radius: 24px;
+  background: #101b2d;
+  color: #f8fafc;
+  box-shadow: 0 24px 80px #0009;
+  direction: rtl;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.voice-answer-close {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top, 0px));
+  left: 14px;
+  width: 54px;
+  height: 54px;
+  border: 1px solid #64748b;
+  border-radius: 16px;
+  background: #26364f;
+  color: #fff;
+  font-size: 38px;
+  line-height: 1;
+  font-weight: 500;
+  cursor: pointer;
+}
+.voice-answer-label {
+  color: #93c5fd;
+  font-size: 16px;
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+.voice-answer-panel h2 {
+  color: #fff;
+  font-size: clamp(25px, 5vw, 36px);
+  line-height: 1.4;
+  margin: 0 0 22px;
+}
+.voice-answer-text {
+  color: #f8fafc;
+  white-space: pre-wrap;
+  font-size: clamp(24px, 5.2vw, 34px);
+  font-weight: 650;
+  line-height: 1.9;
+}
+.voice-answer-note {
+  color: #cbd5e1;
+  font-size: 16px;
+  line-height: 1.7;
+  margin-top: 28px;
+}
+@media (max-width: 480px) {
+  .voice-answer-backdrop { padding: max(6px, env(safe-area-inset-top, 0px)) 6px max(6px, env(safe-area-inset-bottom, 0px)) !important; }
+  .voice-answer-panel { border-radius: 18px; padding: 76px 18px 28px; }
+  .voice-answer-close { width: 50px; height: 50px; font-size: 36px; }
+  .voice-answer-text { font-size: clamp(23px, 6vw, 30px); line-height: 1.85; }
+}
