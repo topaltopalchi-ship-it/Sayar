@@ -1061,18 +1061,25 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const settlements = [...receiptTx,...paymentTx].sort((a,b)=>b.date-a.date).map(t => `<div class="transaction-row"><div class="transaction-icon">${t.type==="receipt"?"↓":"↑"}</div><div class="transaction-main"><strong>${t.type==="receipt"?"دریافت":"پرداخت"}</strong><small>${dateLabel(t.date)} · ${t.description || ""}</small></div><b>${rial(t.amount)}</b><button class="secondary-button" data-settlement-edit="${t.id}">ویرایش</button><button class="secondary-button" data-settlement-delete="${t.id}">حذف</button></div>`).join("");
   const settlementSection = `<section class="panel"><div class="section-head"><h3>دریافت و پرداخت‌ها</h3><span class="muted">قابل ویرایش</span></div>${settlements}</section>`;
   const partyNames = new Map(parties.map(p => [p.id, p.name]));
-  const debtorTotals = new Map<string, number>();
+  // A sale can be saved with a customer name but without a linked partyId.
+  // The People screen still shows such invoices, so the report must include them too.
+  const debtorTotals = new Map<string, { balance: number; name: string; sales: Transaction[] }>();
   for (const t of transactions) {
-    if (t.type !== "sale" || !t.partyId) continue;
+    if (t.type !== "sale") continue;
     const balance = Math.max(0, t.amount - t.paid);
-    if (balance > 0) debtorTotals.set(t.partyId, (debtorTotals.get(t.partyId) || 0) + balance);
+    if (balance <= 0) continue;
+    const name = t.customerName?.trim() || (t.partyId ? partyNames.get(t.partyId) : undefined) || "مشتری ثبت نشده";
+    const key = t.partyId ? `party:${t.partyId}` : `name:${name.toLocaleLowerCase("fa-IR")}`;
+    const current = debtorTotals.get(key) || { balance: 0, name, sales: [] };
+    current.balance += balance;
+    current.sales.push(t);
+    debtorTotals.set(key, current);
   }
   const debtorRows = [...debtorTotals.entries()]
-    .sort((a,b) => b[1] - a[1])
-    .map(([partyId, balance]) => {
-      const partySales = transactions.filter(t => t.type === "sale" && t.partyId === partyId && Math.max(0, t.amount - t.paid) > 0);
-      const invoiceButtons = partySales.map(t => `<button class="secondary-button debtor-invoice" data-invoice-id="${t.id}">${t.invoiceNumber || "فاکتور"}</button>`).join("");
-      return `<div class="transaction-row debtor-row"><div class="transaction-icon debtor-icon">!</div><div class="transaction-main"><strong>${partyNames.get(partyId) || "طرف حساب حذف‌شده"}</strong><small>${partySales.length} فاکتور تسویه‌نشده</small></div><b class="debtor-amount">${rial(balance)}</b><div class="debtor-invoices">${invoiceButtons}</div></div>`;
+    .sort((a,b) => b[1].balance - a[1].balance)
+    .map(([, debtor]) => {
+      const invoiceButtons = debtor.sales.map(t => `<button class="secondary-button debtor-invoice" data-invoice-id="${t.id}">${t.invoiceNumber || "فاکتور"}</button>`).join("");
+      return `<div class="transaction-row debtor-row"><div class="transaction-icon debtor-icon">!</div><div class="transaction-main"><strong>${debtor.name}</strong><small>${debtor.sales.length} فاکتور تسویه‌نشده</small></div><b class="debtor-amount">${rial(debtor.balance)}</b><div class="debtor-invoices">${invoiceButtons}</div></div>`;
     }).join("");
   const debtorSection = `<section class="panel"><div class="section-head"><h3>بدهکاران</h3><span class="muted">${money.format(debtorTotals.size)} نفر</span></div>${debtorRows || '<div class="empty-inline"><p>در حال حاضر فاکتور بدهکار و تسویه‌نشده‌ای وجود ندارد.</p></div>'}</section>`;
   return pageHead("تحلیل مالی", "گزارش سود و زیان", "گزارش بر اساس بازه انتخابی و بهای تمام‌شده FIFO.") + summary + stats + cash + debtorSection + expenseSection + settlementSection + reportExportButtons();
