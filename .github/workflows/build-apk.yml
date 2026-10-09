@@ -38,6 +38,9 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      - name: Restore Sai Sai launcher logo
+        run: python3 scripts/restore-android-icon.py
+
       - name: Build release APK
         working-directory: android
         run: ./gradlew assembleRelease
