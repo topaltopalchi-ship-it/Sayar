@@ -116,14 +116,14 @@ function marketPricesModal(): string {
   const s = getMarketSettings();
   const rate = (value: number) => value > 0 ? rial(value) : "ثبت نشده";
   return '<div class="modal-backdrop" id="market-prices-modal"><section class="modal"><button class="modal-close" id="market-prices-close">×</button>' +
-    '<span class="eyebrow">اطلاعات بازار</span><h2>قیمت دلار، طلا و شاخص بازار</h2>' +
-    '<p class="muted">این نرخ‌ها آخرین مقادیری هستند که در تنظیمات سای‌سای ذخیره کرده‌اید؛ قیمت زنده نیستند.</p>' +
-    '<div class="stats-grid">' +
-    stat("دلار", rate(s.dollarRate), "primary") +
-    stat("طلا", rate(s.goldRate), "warning") +
-    stat("تغییر شاخص بازار", s.marketIndexPercent + "%", "success") +
-    stat("حاشیه جایگزینی", s.replacementBufferPercent + "%", "primary") +
-    '</div><button class="primary-button wide" id="market-prices-edit">ویرایش نرخ‌ها</button>' +
+    '<span class="eyebrow">اطلاعات بازار</span><h2>قیمت دلار، طلا و سکه</h2>' +
+    '<p class="muted">برای دریافت آخرین قیمت‌های منتشرشده، دکمهٔ دریافت قیمت زنده را بزنید. قیمت‌ها ممکن است با تأخیر منبع همراه باشند.</p>' +
+    '<div id="market-live-status" class="muted">برای دریافت قیمت زنده، اینترنت لازم است.</div>' +
+    '<div class="stats-grid"><div class="stat-card"><span>دلار آزاد</span><strong id="market-live-usd">'+rate(s.dollarRate)+'</strong></div>' +
+    '<div class="stat-card"><span>طلای ۱۸ عیار</span><strong id="market-live-gold">'+rate(s.goldRate)+'</strong></div>' +
+    '<div class="stat-card"><span>سکه امامی</span><strong id="market-live-coin">—</strong></div></div>' +
+    '<button class="primary-button wide" id="market-prices-refresh">دریافت قیمت زنده</button>' +
+    '<button class="secondary-button wide" id="market-prices-edit">ویرایش نرخ‌های ذخیره‌شده</button>' +
     '<button class="secondary-button wide" id="market-prices-done">بستن</button></section></div>';
 }
 function bindMarketPricesModal(): void {
@@ -136,6 +136,31 @@ function bindMarketPricesModal(): void {
     close();
     document.body.insertAdjacentHTML("beforeend", pricingSettingsModal());
     bindPricingSettingsModal();
+  });
+  m.querySelector("#market-prices-refresh")?.addEventListener("click", async () => {
+    const status = m.querySelector<HTMLElement>("#market-live-status");
+    const button = m.querySelector<HTMLButtonElement>("#market-prices-refresh");
+    if (!status || !button) return;
+    button.disabled = true;
+    status.textContent = "در حال دریافت قیمت‌ها…";
+    try {
+      const response = await fetch("https://raw.githubusercontent.com/iran-market/iran-market.github.io/main/data/popular.json", {cache:"no-store",headers:{Accept:"application/json"}});
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const raw = await response.json() as {data?:Array<Record<string,unknown>>;items?:Array<Record<string,unknown>>};
+      const rows = Array.isArray(raw.data) ? raw.data : Array.isArray(raw.items) ? raw.items : [];
+      const find = (re:RegExp) => rows.map(v => ({label:String(v.name??v.title??v.label??v.symbol??""),symbol:String(v.symbol??v.id??v.code??""),price:Number(String(v.price??v.value??v.rate??"").replace(/[٬,]/g,"").replace(/[^0-9.\-]/g,""))})).find(v=>re.test((v.label+" "+v.symbol).toLowerCase())&&v.price>0);
+      const usd=find(/usd_irr_free|usd.*free|dollar.*free|دلار.*آزاد|دلار آمریکا/);
+      const gold=find(/gold_18|geram18|18k|gold.*18|طلای ۱۸|طلای 18/);
+      const coin=find(/coin.*emami|emami.*coin|سکه امامی/);
+      if (!usd && !gold && !coin) throw new Error("قیمت‌ها از منبع شناسایی نشدند");
+      const fmt=(n:number)=>new Intl.NumberFormat("fa-IR").format(Math.round(n))+" تومان";
+      if(usd) m.querySelector("#market-live-usd")!.textContent=fmt(usd.price);
+      if(gold) m.querySelector("#market-live-gold")!.textContent=fmt(gold.price)+" / گرم";
+      if(coin) m.querySelector("#market-live-coin")!.textContent=fmt(coin.price);
+      status.textContent="آخرین دادهٔ دریافت‌شده از منبع عمومی؛ ممکن است با تأخیر همراه باشد.";
+    } catch {
+      status.textContent="دریافت قیمت زنده ناموفق بود. اتصال اینترنت را بررسی کنید؛ نرخ ذخیره‌شده نمایش داده شده است.";
+    } finally { button.disabled=false; }
   });
 }
 
