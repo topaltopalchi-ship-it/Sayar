@@ -373,3 +373,46 @@ body{background:radial-gradient(circle at 12% 0,#223657 0,#10182a 34%,#090e1b 78
     padding: 20px 16px max(20px, env(safe-area-inset-bottom, 0px));
   }
 }
+
+
+/* Mobile fix: make received/issued check forms fully scrollable on Android. */
+#check-modal.modal-backdrop {
+  display: block;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  height: 100vh;
+  height: 100dvh;
+  padding: max(12px, env(safe-area-inset-top, 0px)) 12px
+    max(24px, env(safe-area-inset-bottom, 0px));
+}
+
+#check-modal .modal {
+  width: min(100%, 430px);
+  max-height: calc(100vh - 28px);
+  max-height: calc(100dvh - max(28px, env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px)));
+  margin: 0 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+}
+
+#check-modal #check-submit {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  box-shadow: 0 -8px 18px #0d1421aa;
+}
+
+@media (max-width: 480px) {
+  #check-modal.modal-backdrop {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  #check-modal .modal {
+    border-radius: 20px;
+    padding: 20px 16px max(20px, env(safe-area-inset-bottom, 0px));
+  }
+}
