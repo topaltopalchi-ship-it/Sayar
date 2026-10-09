@@ -471,9 +471,9 @@ function invoiceModal(t: Transaction, productMap: Map<string, Product>, partyMap
       <div class="invoice-branding no-print">
         <button class="secondary-button" id="invoice-branding-settings">⚙ امضا، مهر و شعار</button>
       </div>
-      <div class="invoice-actions no-print">
-        <button class="secondary-button" id="invoice-share">ارسال فاکتور</button>
-        <button class="primary-button" id="invoice-print">چاپ / ذخیره PDF</button>
+      <div class="invoice-actions invoice-actions-footer no-print">
+        <button class="primary-button wide" id="invoice-share">ارسال فاکتور با واتساپ، بلوتوث و…</button>
+        <button class="secondary-button wide" id="invoice-print">چاپ / ذخیره PDF</button>
       </div>
     </section>
   </div>`;
@@ -661,6 +661,7 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
         ? await updateTransaction(existing.id, { date: Date.now(), partyId: undefined, customerName, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${data.length} قلم کالا`, lines: transactionLines, paid: paidValue })
         : await addSale({ date: Date.now(), partyId: undefined, customerName, accountId: modal.querySelector<HTMLSelectElement>("#sale-account")!.value || undefined, description: `فروش ${data.length} قلم کالا`, lines: transactionLines, paid: paidValue });
       modal.remove();
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
       try { await openInvoice(savedSale); } catch (error) { showToast(error instanceof Error ? `فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود: ${error.message}` : "فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود"); }
       showToast(`${existing ? "فاکتور ویرایش شد" : "فروش ثبت شد"}؛ مانده ${rial(amount - paidValue)}`);
     } catch (e) { showToast(e instanceof Error ? e.message : "ثبت فروش ناموفق بود"); }
