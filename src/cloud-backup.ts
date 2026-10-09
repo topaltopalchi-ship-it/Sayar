@@ -30,15 +30,11 @@ function saveSession(session: CloudSession): void {
 }
 async function request<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
   configured();
-  const response = await fetch(`${SUPABASE_URL}${path}`, {
-    ...init,
-    headers: {
-      apikey: SUPABASE_ANON_KEY!,
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
-  });
+  const headers = new Headers(init.headers);
+  headers.set("apikey", SUPABASE_ANON_KEY!);
+  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(`${SUPABASE_URL}${path}`, { ...init, headers });
   if (!response.ok) {
     let message = "ارتباط با فضای ابری ناموفق بود";
     try {
