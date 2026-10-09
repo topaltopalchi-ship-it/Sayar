@@ -1387,6 +1387,22 @@ async function bindActions(): Promise<void> {
 
   root.addEventListener("click", async event => {
     const target = event.target as HTMLElement;
+    const supplyButton = target.closest<HTMLButtonElement>("[data-supply-product]");
+    if (supplyButton) {
+      const productId = supplyButton.dataset.supplyProduct || "";
+      const product = (await listProducts()).find(item => item.id === productId);
+      if (!product) { showToast("کالا پیدا نشد؛ صفحه را تازه‌سازی کنید"); return; }
+      const supplier = (await listParties()).find(p => p.id === product.supplierId && (p.type === "supplier" || p.type === "both"));
+      if (!supplier) {
+        showToast("برای این کالا تأمین‌کننده ثبت نشده است؛ کالا را ویرایش و تأمین‌کننده را انتخاب کنید");
+        return;
+      }
+      const phone = (supplier.phone || "").trim();
+      if (!phone) { showToast("شماره تماس تأمین‌کننده ثبت نشده است"); return; }
+      const confirmed = window.confirm("برای تأمین «" + product.name + "» با " + supplier.name + " تماس گرفته شود؟");
+      if (confirmed) window.location.href = "tel:" + phone.replace(/[^+0-9]/g, "");
+      return;
+    }
     const changeRangeButton = target.closest<HTMLButtonElement>("#report-change-range");
     if (changeRangeButton) {
       document.querySelector("#report-range-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
