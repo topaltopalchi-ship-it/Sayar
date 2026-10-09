@@ -659,3 +659,12 @@ body{
   background: linear-gradient(135deg, rgba(13, 148, 136, .22), rgba(37, 99, 235, .2)) !important;
   box-shadow: 0 0 0 2px rgba(45, 212, 191, .14), 0 8px 24px rgba(13, 148, 136, .12);
 }
+
+
+.photo-price-modal { max-width: 520px; }
+.photo-price-results { display: grid; gap: 8px; margin-top: 12px; max-height: 42vh; overflow-y: auto; }
+.photo-price-result { display: flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; padding: 13px; border: 1px solid var(--border, rgba(148,163,184,.25)); border-radius: 13px; background: rgba(148,163,184,.07); color: inherit; text-align: right; cursor: pointer; }
+.photo-price-result span { display: grid; gap: 5px; min-width: 0; }
+.photo-price-result strong { overflow-wrap: anywhere; }
+.photo-price-result small { color: var(--muted, #94a3b8); font-size: .78rem; }
+.photo-price-result > b { color: var(--accent, #2dd4bf); white-space: nowrap; }
