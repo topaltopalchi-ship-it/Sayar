@@ -85,6 +85,33 @@ export async function verifyCloudSmsCode(phone: string, code: string): Promise<v
   });
   if (!session.access_token || !session.user?.id) throw new Error("ورود تأیید شد اما نشست معتبر دریافت نشد");
   saveSession(session);
+  try {
+    const access = await request<{ allowed?: boolean }>("/rest/v1/rpc/saysay_has_access", {
+      method: "POST", body: "{}",
+    }, session.access_token);
+    if (!access.allowed) throw new Error("این شماره توسط مدیر سای‌سای مجاز نشده است.");
+  } catch (error) {
+    signOutCloud();
+    if (error instanceof Error && error.message.includes("مدیر سای‌سای")) throw error;
+    throw new Error("دسترسی این شماره تأیید نشد. مدیر باید شماره را در فهرست کاربران مجاز فعال کند.");
+  }
+}
+export type CloudAccessUser = { phone: string; role: "owner" | "member"; enabled: boolean; created_at: string };
+export async function listCloudAccessUsers(): Promise<CloudAccessUser[]> {
+  const session = requireSession();
+  return await request<CloudAccessUser[]>("/rest/v1/rpc/saysay_list_access_users", {
+    method: "POST", body: "{}",
+  }, session.access_token);
+}
+export async function setCloudAccessUser(phone: string, enabled: boolean): Promise<void> {
+  const session = requireSession();
+  const normalized = phone.trim().replace(/[\\s()-]/g, "");
+  if (!/^\\+[1-9]\\d{7,14}$/.test(normalized)) {
+    throw new Error("شماره را با کد کشور وارد کنید؛ نمونه: +989121234567");
+  }
+  await request("/rest/v1/rpc/saysay_set_access_user", {
+    method: "POST", body: JSON.stringify({ p_phone: normalized, p_enabled: enabled }),
+  }, session.access_token);
 }
 export function getCloudAccount(): { id: string; phone?: string } | null {
   const session = readSession();
