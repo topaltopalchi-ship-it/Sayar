@@ -19,10 +19,12 @@ import { accountModal, accountLedgerModal, accountsView, bindAccountLedger, bind
 import { getAccountBalances, listAccounts } from "./db";
 import { checksView, checkModal, bindCheckModal, bindCheckStatuses, bindCheckActions } from "./checks-ui";
 import { jalaliToGregorianDate, todayJalaliInput, formatJalaliInput, toPersianDigits } from "./calendar";
-import { bindVoiceAssistant, bindVoiceQuestionAssistant, bindVoiceProductAssistant, bindVoiceProductFieldAssistant, type VoiceSaleDraft, type VoiceSaleItem, type VoiceProductDraft } from "./voice-assistant";
+import { bindVoiceAssistant, bindVoiceQuestionAssistant, bindVoiceProductAssistant, bindVoiceProductFieldAssistant, speakSaiSai, type VoiceSaleDraft, type VoiceSaleItem, type VoiceProductDraft } from "./voice-assistant";
 import { getCustomerTier, getMarketSettings, setMarketSettings, recommendPrice, tierLabel } from "./pricing";
 import { buildBusinessInsights, dailyBrief, customerScore, type BusinessInsight } from "./intelligence";
 import { analyzeProductPhoto } from "./product-vision";
+import { getEconomicBrief } from "./economic-news";
+import { openAccessControlModal } from "./access-control";
 
 type Tab = "dashboard" | "sales" | "purchases" | "orders" | "inventory" | "people" | "reports" | "more" | "checks";
 
@@ -63,7 +65,7 @@ function setProfessionalMode(value: boolean): void { localStorage.setItem(UI_MOD
 function settingsModal(): string {
   const unit = getCurrencyUnit();
   const professional = isProfessionalMode();
-  return `<div class="modal-backdrop" id="settings-modal"><section class="modal ui-mode-modal"><button class="modal-close" id="settings-close">×</button><span class="eyebrow">تنظیمات سای‌سای</span><h2>تنظیمات پایه</h2><label class="field"><span>واحد نمایش مبلغ</span><select id="currency-unit"><option value="toman" ${unit === "toman" ? "selected" : ""}>تومان</option><option value="rial" ${unit === "rial" ? "selected" : ""}>ریال</option></select></label><label class="professional-toggle"><input id="professional-mode" type="checkbox" ${professional ? "checked" : ""}><span><b>نسخه حرفه‌ای</b><small>گزارش‌ها و ابزارهای مدیریتی پیشرفته نمایش داده شوند.</small></span></label><button class="secondary-button wide" id="pricing-settings">🛡️ قیمت‌گذاری و حفظ سرمایه</button><button class="secondary-button wide" id="vision-settings">📷 تنظیم هوش تصویری کالا</button><button class="secondary-button wide" id="subscription-settings">مدیریت اشتراک</button><button class="primary-button wide" id="settings-save">ذخیره و اعمال</button></section></div>`;
+  return `<div class="modal-backdrop" id="settings-modal"><section class="modal ui-mode-modal"><button class="modal-close" id="settings-close">×</button><span class="eyebrow">تنظیمات سای‌سای</span><h2>تنظیمات پایه</h2><label class="field"><span>واحد نمایش مبلغ</span><select id="currency-unit"><option value="toman" ${unit === "toman" ? "selected" : ""}>تومان</option><option value="rial" ${unit === "rial" ? "selected" : ""}>ریال</option></select></label><label class="professional-toggle"><input id="professional-mode" type="checkbox" ${professional ? "checked" : ""}><span><b>نسخه حرفه‌ای</b><small>گزارش‌ها و ابزارهای مدیریتی پیشرفته نمایش داده شوند.</small></span></label><button class="secondary-button wide" id="pricing-settings">🛡️ قیمت‌گذاری و حفظ سرمایه</button><button class="secondary-button wide" id="vision-settings">📷 تنظیم هوش تصویری کالا</button><button class="secondary-button wide" id="access-control-settings">مدیریت کاربران مجاز (۶ نفر)</button><button class="secondary-button wide" id="subscription-settings">مدیریت اشتراک</button><button class="primary-button wide" id="settings-save">ذخیره و اعمال</button></section></div>`;
 }
 function bindSettingsModal(): void {
   const modal = document.querySelector<HTMLDivElement>("#settings-modal");
@@ -72,6 +74,7 @@ function bindSettingsModal(): void {
   modal.querySelector("#pricing-settings")?.addEventListener("click", async () => { modal.remove(); document.body.insertAdjacentHTML("beforeend", pricingSettingsModal()); bindPricingSettingsModal(); });
   modal.querySelector("#vision-settings")?.addEventListener("click", () => { modal.remove(); document.body.insertAdjacentHTML("beforeend", visionSettingsModal()); bindVisionSettingsModal(); });
   modal.querySelector("#subscription-settings")?.addEventListener("click", async () => { modal.remove(); const subscription = await getSubscription().catch(() => ({ status: "none", plan: "none", expiresAt: null } as Subscription)); showSubscription(subscription); });
+  modal.querySelector("#access-control-settings")?.addEventListener("click", () => { modal.remove(); openAccessControlModal(showToast); });
   modal.querySelector("#settings-save")?.addEventListener("click", async () => {
     const unit = modal.querySelector<HTMLSelectElement>("#currency-unit")?.value === "toman" ? "toman" : "rial";
     setCurrencyUnit(unit);
@@ -283,6 +286,10 @@ function layout(content: string, subscription: Subscription): void {
   document.querySelectorAll<HTMLButtonElement>("[data-subscribe]").forEach(b => b.addEventListener("click", subscribe));
 }
 
+function escapeNewsHtml(value: string): string {
+  return value.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] || char));
+}
+
 function stat(label: string, value: string, tone: string): string {
   return `<article class="stat-card ${tone}"><span>${label}</span><strong>${value}</strong></article>`;
 }
@@ -293,19 +300,25 @@ function pageHead(eyebrow: string, title: string, text: string, action = ""): st
 
 async function dashboardView(subscription: Subscription): Promise<string> {
   const d = await getDashboard();
-  const [lowStock, supplierParties, tx, allProducts, allParties, expenses] = await Promise.all([
-    getLowStockItems(), listParties(), listTransactions(), listProducts(), listParties(), listExpenses()
+  const [lowStock, supplierParties, tx, allProducts, allParties, expenses, economicBrief] = await Promise.all([
+    getLowStockItems(), listParties(), listTransactions(), listProducts(), listParties(), listExpenses(), getEconomicBrief()
   ]);
   const insights = await buildBusinessInsights(allProducts, allParties, tx, expenses);
   const brief = dailyBrief(insights);
   const insightHtml = insights.slice(0, 6).map((x: BusinessInsight) =>
     '<div class="transaction-row"><div class="transaction-icon">' + (x.tone === "danger" ? "!" : x.tone === "warning" ? "⚠" : x.tone === "success" ? "↑" : "💡") + '</div><div class="transaction-main"><strong>' + x.title + '</strong><small>' + x.text + '</small></div>' + (x.action ? '<button type="button" class="secondary-button insight-action" data-insight-id="' + x.id + '">' + x.action + '</button>' : '') + '</div>'
   ).join("");
+  const economicNewsHtml = '<section class="panel economic-brief"><div class="section-head"><div><h3>📰 نبض کوتاه اقتصاد</h3><span class="muted">' +
+    (economicBrief.updatedAt ? 'به‌روزرسانی ' + escapeNewsHtml(new Date(economicBrief.updatedAt).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" })) + (economicBrief.stale ? ' · آخرین داده ذخیره‌شده' : '') : 'خبر زنده فعلاً در دسترس نیست') +
+    '</span></div><a class="economic-source" href="https://news.google.com/search?q=%D8%A7%D9%82%D8%AA%D8%B5%D8%A7%D8%AF%20%D8%A7%DB%8C%D8%B1%D8%A7%D9%86&hl=fa&gl=IR&ceid=IR%3Afa" target="_blank" rel="noopener noreferrer">منبع خبرها ↗</a></div>' +
+    (economicBrief.items.length ? '<ul class="economic-headlines">' + economicBrief.items.map(item => '<li><a href="' + escapeNewsHtml(item.link) + '" target="_blank" rel="noopener noreferrer">' + escapeNewsHtml(item.title) + '</a></li>').join('') + '</ul>' : '<p class="muted economic-unavailable">برای دریافت تیترهای تازه اتصال برقرار نشد؛ برای دیدن خبرهای روز منبع را باز کنید.</p>') +
+    '<div class="economic-tips"><p><strong>برای فروشنده:</strong> ' + escapeNewsHtml(economicBrief.sellerAdvice) + '</p><p><strong>برای مدیر شرکت:</strong> ' + escapeNewsHtml(economicBrief.ownerAdvice) + '</p></div></section>';
   const lowStockHtml = lowStock.length ? '<section class="panel low-stock-alert-panel"><div class="section-head"><div><h3>⚠️ کالاهای نیازمند تأمین</h3><span class="muted">موجودی به حد هشدار رسیده است</span></div><strong>' + money.format(lowStock.length) + ' کالا</strong></div>' +
     lowStock.map(x => '<div class="person-row"><div class="person-avatar">!</div><div><strong>' + x.product.name + '</strong><small>حد هشدار: ' + money.format(x.product.lowStock) + ' ' + x.product.unit + (x.product.supplierId ? ' · تأمین‌کننده: ' + (supplierParties.find(p => p.id === x.product.supplierId)?.name || 'ثبت نشده') : '') + '</small></div><b class="debt-amount">' + money.format(x.stock) + ' ' + x.product.unit + '</b><span class="account-actions"><button type="button" class="secondary-button supply-item" data-supply-product="' + x.product.id + '">تأمین کالا</button>' + ((supplierParties.find(p => p.id === x.product.supplierId)?.phone || "").trim() ? '<a class="secondary-button" href="tel:' + (supplierParties.find(p => p.id === x.product.supplierId)?.phone || "").trim() + '">📞 تماس</a>' : '') + '</span></div>').join("") + '</section>' : "";
   const recent = d.recent.length ? d.recent.map(t => transactionRow(t)).join("") : '<div class="empty-inline"><span>◌</span><p>هنوز تراکنشی ثبت نشده است.</p></div>';
   return '<section class="hero"><div><p class="hero-kicker">داشبورد مدیریت هوشمند</p><h2>سای‌سای مراقب کسب‌وکار شماست</h2><p class="muted">' + brief + '</p></div><div class="hero-mark"><img src="/saysay-ai.svg" alt="سای‌سای؛ مدیر فروش و هوش مصنوعی" /></div></section>' +
     (subscription.status !== "active" ? '<section class="subscription-card"><div><span class="eyebrow">اشتراک سای‌سای</span><h3>برای استفاده از نسخه کامل، اشتراک ماهانه فعال کنید.</h3><p class="muted">بعد از تأیید موفق پرداخت، دسترسی از سمت سرور فعال می‌شود.</p></div><button class="primary-button" data-subscribe>خرید اشتراک ماهانه</button></section>' : "") +
+    economicNewsHtml +
     lowStockHtml +
     '<section class="stats-grid">' + stat("فروش امروز", rial(d.salesToday), "primary") + stat("دریافت امروز", rial(d.receiptsToday), "success") +
     (isProfessionalMode() ? stat("مطالبات", rial(d.receivables), "warning") + stat("موجودی کم", money.format(d.lowStock) + " کالا", "danger") : "") + '</section>' +
@@ -318,6 +331,7 @@ async function dashboardView(subscription: Subscription): Promise<string> {
     '<button class="quick-card" data-action="receipt"><b>↙</b><span>دریافت وجه</span><small>پیگیری مطالبات</small></button>' +
     '<button class="quick-card voice-quick-card" id="voice-sale"><b>🎙</b><span>ثبت فروش با صدا</span><small>فارسی صحبت کنید</small></button>' +
     '<button class="quick-card voice-quick-card" id="voice-query"><b>🔊</b><span>از سای‌سای بپرس</span><small>فروش، قیمت، موجودی</small></button>' +
+    '<button class="quick-card" id="photo-price-lookup"><b>📷</b><span>قیمت از روی عکس</span><small>عکس بگیر و قیمت را بشنو</small></button>' +
     '</div></section>' +
     '<section class="section panel"><div class="section-head"><h3>آخرین تراکنش‌ها</h3><span class="muted">۵ مورد اخیر</span></div>' + recent + '</section>';
 }
@@ -885,42 +899,134 @@ async function saveVoiceProduct(draft: VoiceProductDraft): Promise<void> {
   } catch (e) { showToast(e instanceof Error ? e.message : "ثبت کالای صوتی ناموفق بود"); }
 }
 
-function bindProductModal(): void {
-  const modal = document.querySelector<HTMLDivElement>("#product-modal")!;
-  modal.querySelector("#product-close")?.addEventListener("click", () => modal.remove());
-  modal.querySelector("#photo-product")?.addEventListener("click", () => {
+function pickProductPhoto(): Promise<File | null> {
+  return new Promise(resolve => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
-    input.capture = "environment";
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const button = modal.querySelector<HTMLButtonElement>("#photo-product");
-      if (button) {
-        button.disabled = true;
-        button.textContent = "📷 در حال تحلیل تصویر…";
-      }
-      try {
-        const result = await analyzeProductPhoto(file);
-        if (!result.name) throw new Error("نام کالا از تصویر تشخیص داده نشد");
-        const name = modal.querySelector<HTMLInputElement>("#p-name");
-        const sku = modal.querySelector<HTMLInputElement>("#p-sku");
-        const unit = modal.querySelector<HTMLSelectElement>("#p-unit");
-        if (name) name.value = result.name;
-        if (sku && result.sku) sku.value = result.sku;
-        if (unit) unit.value = result.unit;
-        showToast("نام کالا از روی عکس تشخیص داده شد؛ لطفاً بررسی کنید");
-      } catch (e) {
-        showToast(e instanceof Error ? e.message : "تشخیص تصویر ناموفق بود");
-      } finally {
-        if (button) {
-          button.disabled = false;
-          button.textContent = "📷 شناسایی کالا از روی عکس";
-        }
-      }
+    input.setAttribute("capture", "environment");
+    input.setAttribute("aria-label", "انتخاب یا عکس‌گرفتن از کالا");
+    // Some Android WebViews ignore click/change on detached file inputs.
+    input.style.position = "fixed";
+    input.style.left = "-10000px";
+    input.style.top = "0";
+    document.body.appendChild(input);
+    let settled = false;
+    const finish = (file: File | null) => {
+      if (settled) return;
+      settled = true;
+      input.removeEventListener("change", onChange);
+      input.removeEventListener("cancel", onCancel);
+      input.remove();
+      resolve(file);
     };
+    const onChange = () => finish(input.files?.item(0) ?? null);
+    const onCancel = () => finish(null);
+    input.addEventListener("change", onChange, { once: true });
+    input.addEventListener("cancel", onCancel, { once: true });
     input.click();
+  });
+}
+
+
+async function openPhotoPriceLookup(): Promise<void> {
+  const products = await listProducts();
+  if (!products.length) { showToast("ابتدا کالاها و قیمت فروش آن‌ها را در بخش موجودی ثبت کنید"); return; }
+  document.querySelector("#photo-price-modal")?.remove();
+  const modal = document.createElement("div");
+  modal.className = "modal-backdrop";
+  modal.id = "photo-price-modal";
+  modal.innerHTML = '<section class="modal photo-price-modal" role="dialog" aria-modal="true"><button class="modal-close" id="photo-price-close" type="button">×</button><span class="eyebrow">قیمت‌یاب تصویری سای‌سای</span><h2>قیمت کالا از روی عکس</h2><p class="muted">از بسته‌بندی کالا عکس بگیر؛ سای‌سای نوشته‌ها را می‌خواند و با کالاهای ثبت‌شده تطبیق می‌دهد.</p><button class="primary-button wide" id="photo-price-camera" type="button">📷 عکس بگیر / انتخاب از گالری</button><label class="field"><span>یا نام یا کد کالا را جست‌وجو کن</span><input id="photo-price-search" placeholder="نام کالا یا کد کالا…" autocomplete="off"></label><div id="photo-price-status" class="muted" aria-live="polite"></div><div id="photo-price-results" class="photo-price-results"></div><p class="muted">قیمت از فهرست کالاهای ثبت‌شده در سای‌سای خوانده می‌شود.</p></section>';
+  document.body.appendChild(modal);
+  const status = modal.querySelector<HTMLElement>("#photo-price-status")!;
+  const results = modal.querySelector<HTMLElement>("#photo-price-results")!;
+  const search = modal.querySelector<HTMLInputElement>("#photo-price-search")!;
+  const close = () => modal.remove();
+  modal.querySelector("#photo-price-close")?.addEventListener("click", close);
+  modal.addEventListener("click", event => { if (event.target === modal) close(); });
+  const normalize = (value: string) => value.toLocaleLowerCase("fa").replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/[\u200c\s\-_/]+/g, "").replace(/[^a-z0-9\u0600-\u06ff]/gi, "");
+  const renderMatches = (query: string, fromPhoto = false) => {
+    const q = normalize(query);
+    const ranked = products.map(product => {
+      const name = normalize(product.name);
+      const sku = normalize(product.sku || "");
+      let score = 0;
+      if (q && name === q) score = 100;
+      else if (q && sku && sku === q) score = 95;
+      else if (q && (name.includes(q) || q.includes(name))) score = 70;
+      else if (q && sku && (sku.includes(q) || q.includes(sku))) score = 60;
+      else if (q) {
+        const tokens = query.toLocaleLowerCase("fa").split(/[\s،,.;:()]+/).map(normalize).filter(token => token.length >= 3);
+        const hits = tokens.filter(token => name.includes(token) || (sku && sku.includes(token)));
+        score = tokens.length ? Math.round(hits.length / tokens.length * 55) : 0;
+      }
+      return { product, score };
+    }).filter(item => item.score > 0).sort((a,b) => b.score-a.score).slice(0, 8);
+    results.innerHTML = ranked.length ? ranked.map(item => '<button type="button" class="photo-price-result" data-photo-price-product="' + item.product.id.replace(/"/g, "&quot;") + '"><span><strong>' + item.product.name.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + '</strong><small>' + (item.product.sku ? 'کد: ' + item.product.sku.replace(/</g,"&lt;") + ' · ' : '') + 'قیمت فروش ثبت‌شده</small></span><b>' + rial(item.product.salePrice) + '</b></button>').join("") : '<div class="empty-inline"><p>' + (fromPhoto ? 'کالای دقیقی پیدا نشد؛ نام کالا را دستی جست‌وجو کن.' : 'کالایی با این عبارت پیدا نشد.') + '</p></div>';
+    results.querySelectorAll<HTMLButtonElement>("[data-photo-price-product]").forEach(button => button.addEventListener("click", () => {
+      const product = products.find(item => item.id === button.dataset.photoPriceProduct);
+      if (!product) return;
+      const message = 'قیمت ثبت‌شدهٔ ' + product.name + '، ' + rial(product.salePrice) + ' برای هر ' + product.unit + ' است.';
+      status.textContent = message;
+      void speakSaiSai(message);
+      showToast(message);
+    }));
+  };
+  renderMatches("");
+  search.addEventListener("input", () => renderMatches(search.value));
+  modal.querySelector("#photo-price-camera")?.addEventListener("click", async event => {
+    const button = event.currentTarget as HTMLButtonElement;
+    button.disabled = true;
+    status.textContent = "در حال خواندن نوشته‌های عکس؛ بار اول ممکن است اینترنت لازم باشد.";
+    try {
+      const file = await pickProductPhoto();
+      if (!file) { status.textContent = "عکسی انتخاب نشد."; return; }
+      const recognized = await analyzeProductPhoto(file);
+      search.value = recognized.name;
+      renderMatches(recognized.name, true);
+      status.textContent = recognized.name ? "متن خوانده‌شده از عکس: " + recognized.name + " — کالای درست را از نتایج انتخاب کن." : "نام کالا از عکس خوانده نشد.";
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : "خواندن تصویر انجام نشد.";
+    } finally {
+      button.disabled = false;
+      button.textContent = "📷 عکس بگیر / انتخاب از گالری";
+    }
+  });
+}
+
+function bindProductModal(): void {
+  const modal = document.querySelector<HTMLDivElement>("#product-modal")!;
+  modal.querySelector("#product-close")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#photo-product")?.addEventListener("click", async () => {
+    const button = modal.querySelector<HTMLButtonElement>("#photo-product");
+    if (button) {
+      button.disabled = true;
+      button.textContent = "📷 در حال بازکردن دوربین…";
+    }
+    try {
+      const file = await pickProductPhoto();
+      if (!file) {
+        showToast("عکسی انتخاب نشد؛ دوباره تلاش کنید یا از گالری انتخاب کنید");
+        return;
+      }
+      if (button) button.textContent = "📷 در حال خواندن نوشته‌های عکس…";
+      const result = await analyzeProductPhoto(file);
+      if (!result.name) throw new Error("نام کالا از تصویر تشخیص داده نشد");
+      const name = modal.querySelector<HTMLInputElement>("#p-name");
+      const sku = modal.querySelector<HTMLInputElement>("#p-sku");
+      const unit = modal.querySelector<HTMLSelectElement>("#p-unit");
+      if (name) name.value = result.name;
+      if (sku && result.sku) sku.value = result.sku;
+      if (unit) unit.value = result.unit;
+      showToast("نام کالا از روی عکس تشخیص داده شد؛ لطفاً بررسی کنید");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "تشخیص تصویر ناموفق بود");
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = "📷 شناسایی کالا از روی عکس";
+      }
+    }
   });
   const voicePhotoButton = modal.querySelector<HTMLButtonElement>("#voice-photo-product");
   if (voicePhotoButton && !modal.dataset.editId) {
@@ -1055,12 +1161,17 @@ async function peopleView(): Promise<string> {
     .sort((a, b) => b.debt - a.debt);
   const totalDebt = debtors.reduce((sum, x) => sum + x.debt, 0);
   const debtorSection = `<section class="panel debtor-panel">
-      <div class="section-head"><div><h3>لیست بدهکاران</h3><span class="muted">فقط فاکتورهای فروش تسویه‌نشده</span></div><strong>${rial(totalDebt)}</strong></div>
-      ${debtors.length ? debtors.map(({transaction:t,name,debt}) => `<div class="person-row debtor-row">
+      <div class="section-head"><div><h3>جست‌وجوی حساب بدهکاران</h3><span class="muted">نام مشتری را بنویس؛ فاکتور و مانده حساب را مستقیم باز کن.</span></div><strong>${rial(totalDebt)}</strong></div>
+      <label class="field debtor-search-field"><span>نام مشتری یا عبارت‌هایی مثل «حساب آقای احمدزاده»</span><input id="debtor-search" type="search" placeholder="مثلاً احمدزاده…" autocomplete="off" aria-label="جست‌وجوی حساب بدهکار"></label>
+      <div id="debtor-search-count" class="muted debtor-search-count">${debtors.length ? money.format(debtors.length) + " فاکتور بدهکار" : "بدون فاکتور بدهکار"}</div>
+      <div id="debtor-search-results">
+      ${debtors.length ? debtors.map(({transaction:t,name,debt}) => `<div class="person-row debtor-row debtor-search-item" data-debtor-search="${(name + " " + (t.invoiceNumber || "")).toLocaleLowerCase().replace(/"/g, "&quot;")}">
         <div class="person-avatar">₺</div>
-        <div><strong>${name}</strong><small>${t.invoiceNumber ? "فاکتور " + t.invoiceNumber + " · " : ""}${dateLabel(t.date)} · مبلغ فاکتور ${rial(t.amount)} · پرداخت‌شده ${rial(t.paid)}</small></div>
-        <b class="debt-amount">${rial(debt)}</b>
+        <div class="debtor-person-info"><strong>${name}</strong><small>${t.invoiceNumber ? "فاکتور " + t.invoiceNumber + " · " : ""}${dateLabel(t.date)} · مبلغ فاکتور ${rial(t.amount)} · پرداخت‌شده ${rial(t.paid)}</small><b class="debt-amount">مانده: ${rial(debt)}</b></div>
+        <button type="button" class="secondary-button debtor-open-invoice" data-invoice-id="${t.id}">مشاهده فاکتور</button>
       </div>`).join("") : `<div class="empty-inline"><span>✓</span><p>هیچ فاکتور تسویه‌نشده‌ای وجود ندارد.</p></div>`}
+      </div>
+      <div id="debtor-search-empty" class="empty-inline" hidden><span>⌕</span><p>موردی پیدا نشد؛ نام را کوتاه‌تر یا بدون عنوان وارد کن.</p></div>
     </section>`;
   return pageHead("دفتر اشخاص", "مشتریان و تأمین‌کنندگان", `${money.format(customerCount)} مشتری · ${money.format(supplierCount)} تأمین‌کننده`, `<button class="primary-button" id="new-party">＋ افزودن شخص</button>`) +
     debtorSection +
@@ -1373,6 +1484,25 @@ async function bindActions(): Promise<void> {
   root.addEventListener("input", event => {
     const target = event.target as HTMLInputElement;
     if (target.matches("[data-jalali-input]")) target.value = formatJalaliInput(target.value);
+    if (target.matches("#debtor-search")) {
+      const normalize = (value: string) => value.toLocaleLowerCase()
+        .replace(/ي/g, "ی").replace(/ك/g, "ک")
+        .replace(/(?:حساب|بدهی|بدهکار|فاکتور|آقای|اقای|خانم|جناب|سرکار|آقا|خانم)/g, " ")
+        .replace(/[\u200c\s]+/g, " ").trim();
+      const query = normalize(target.value);
+      const rows = Array.from(root.querySelectorAll<HTMLElement>(".debtor-search-item"));
+      let visible = 0;
+      for (const row of rows) {
+        const haystack = normalize(row.dataset.debtorSearch || row.textContent || "");
+        const matches = !query || query.split(" ").filter(Boolean).every(word => haystack.includes(word));
+        row.hidden = !matches;
+        if (matches) visible++;
+      }
+      const count = root.querySelector<HTMLElement>("#debtor-search-count");
+      const empty = root.querySelector<HTMLElement>("#debtor-search-empty");
+      if (count) count.textContent = visible ? money.format(visible) + " فاکتور در نتیجه جست‌وجو" : "نتیجه‌ای وجود ندارد";
+      if (empty) empty.hidden = visible > 0;
+    }
   });
 
   root.addEventListener("change", event => {
@@ -1618,6 +1748,41 @@ async function render(): Promise<void> {
     return "ماشین حساب صوتی را باز کردم. حالا عملیات را بگویید.";
   }
   const [dashboard, transactions, products, parties, balances] = await Promise.all([getDashboard(), listTransactions(), listProducts(), listParties(), getPartyBalances()]);
+  const commandText = q.replace(/[\u200c\sـ]/g, "").replace(/[،,.!?؟]/g, "");
+  const routeCommand = /(?:سای.?سای)?(?:بدهکاران|بدهکارها|لیستبدهکاران|حساببدهکاران)/.test(commandText)
+    ? "people"
+    : /(?:سای.?سای)?(?:موجودی|انبار|لیستموجودی|موجودیکالاها)/.test(commandText)
+      ? "inventory"
+      : /(?:سای.?سای)?(?:فروش|فاکتورهایفروش)/.test(commandText)
+        ? "sales"
+        : /(?:سای.?سای)?(?:خرید|فاکتورهایخرید)/.test(commandText)
+          ? "purchases"
+          : /(?:سای.?سای)?(?:داشبورد|صفحه?اصلی)/.test(commandText)
+            ? "dashboard"
+            : /(?:سای.?سای)?(?:سفارشات|سفارشها)/.test(commandText)
+              ? "orders"
+              : /(?:سای.?سای)?(?:گزارشها|گزارشات)/.test(commandText)
+                ? "reports"
+                : /(?:سای.?سای)?(?:چکها|چکها)/.test(commandText)
+                  ? "checks"
+                  : "";
+  if (routeCommand) {
+    activeTab = routeCommand as Tab;
+    await render();
+    if (routeCommand === "inventory") {
+      const stockRows = await Promise.all(products.slice(0, 8).map(async product => ({ product, stock: await getStock(product.id) })));
+      if (!stockRows.length) return "بخش موجودی را باز کردم، اما هنوز کالایی ثبت نشده است.";
+      const summary = stockRows.map(x => x.product.name + "، " + x.stock.toLocaleString("fa-IR") + " " + x.product.unit).join("؛ ");
+      return "بخش موجودی باز شد. موجودی کالاها: " + summary;
+    }
+    if (routeCommand === "people") {
+      const debtors = parties.filter(p => (balances[p.id]?.balance ?? 0) > 0);
+      if (!debtors.length) return "فهرست اشخاص باز شد. در حال حاضر بدهکار ثبت‌شده‌ای ندارید.";
+      return "فهرست بدهکاران باز شد. " + debtors.slice(0, 8).map(p => p.name + "، بدهی " + rial(balances[p.id].balance)).join("؛ ");
+    }
+    const labels: Record<string, string> = { dashboard: "داشبورد", sales: "فروش", purchases: "خرید", orders: "سفارش‌ها", reports: "گزارش‌ها", checks: "چک‌ها" };
+    return "بخش " + (labels[routeCommand] || "درخواستی") + " را باز کردم.";
+  }
 const commandAmountMatch = q.match(/(?:دریافت|وصول|گرفتم|پرداخت|پرداختم|دادم)[^۰-۹٠-٩\d]*(?:از|به|برای)?[^۰-۹٠-٩\d]*(?:[۰-۹٠-٩\d][۰-۹٠-٩\d٬,\.]*\s*(?:هزار|هزارتا|میلیون|میلیونی|میلیارد|میلیاردی)?|(?:یک|دو|سه|چهار|پنج|شش|هفت|هشت|نه|ده|بیست)\s*(?:هزار|هزارتا|میلیون|میلیونی|میلیارد|میلیاردی)?)/);
   const commandAmount = commandAmountMatch ? parseVoiceMoney(commandAmountMatch[0]) : 0;
   const receiptCommand = /^(?:سای‌?سای[، ]*)?(?:ثبت\s*)?(?:دریافت|وصول|گرفتم)\b/.test(q) && commandAmount > 0;
@@ -1664,6 +1829,8 @@ return receiptCommand ? ("دریافت " + rial(commandAmount) + " از " + comm
     if (/موجودی|انبار|کمبود|رو به اتمام/.test(q)) return `${dashboard.lowStock.toLocaleString("fa-IR")} کالا به حد هشدار موجودی رسیده است.`;
     return "می‌توانم درباره فروش، دریافت، مطالبات، مشتری‌ها و موجودی کالا به شما جواب بدهم.";
   }, showToast);
+
+  document.querySelector("#photo-price-lookup")?.addEventListener("click", () => { void openPhotoPriceLookup(); });
 
   bindReportControls();
 

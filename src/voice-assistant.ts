@@ -348,6 +348,12 @@ function openOfflineQuestionPrompt(onAnswer: (question: string) => Promise<strin
     submit.disabled = true;
     status.textContent = "در حال بررسی اطلاعات محلی…";
     try {
+      if (isCalculatorVoiceCommand(question)) {
+        await SpeechRecognition.stop().catch(() => undefined);
+        openSaiSaiCalculator();
+        void speakSaiSai("ماشین حساب را باز کردم");
+        return;
+      }
       const answer = await onAnswer(question);
       status.textContent = answer;
       const spoken = await speakSaiSai(answer);
@@ -363,26 +369,87 @@ function openOfflineQuestionPrompt(onAnswer: (question: string) => Promise<strin
   input.focus();
 }
 
+
+function evaluateCalculatorExpression(source: string): number {
+  const input = source.replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+    .replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+    .replace(/×/g, "*").replace(/÷/g, "/").replace(/,/g, "").replace(/٬/g, "").replace(/\s+/g, "");
+  if (!input || !/^[0-9.+*/()\-]+$/.test(input)) throw new Error("عبارت ریاضی معتبر نیست");
+  let i = 0;
+  const parseNumber = (): number => {
+    if (input[i] === "+" || input[i] === "-") { const sign = input[i++] === "-" ? -1 : 1; return sign * parseNumber(); }
+    if (input[i] === "(") { i++; const value = parseSum(); if (input[i++] !== ")") throw new Error("پرانتز بسته نشده است"); return value; }
+    const match = input.slice(i).match(/^\d+(?:\.\d*)?|^\.\d+/);
+    if (!match) throw new Error("عدد نامعتبر است");
+    i += match[0].length;
+    return Number(match[0]);
+  };
+  const parseProduct = (): number => { let value = parseNumber(); while (input[i] === "*" || input[i] === "/") { const op = input[i++]; const rhs = parseNumber(); if (op === "/" && rhs === 0) throw new Error("تقسیم بر صفر ممکن نیست"); value = op === "*" ? value * rhs : value / rhs; } return value; };
+  const parseSum = (): number => { let value = parseProduct(); while (input[i] === "+" || input[i] === "-") { const op = input[i++]; const rhs = parseProduct(); value = op === "+" ? value + rhs : value - rhs; } return value; };
+  const result = parseSum();
+  if (i !== input.length || !Number.isFinite(result)) throw new Error("عبارت ریاضی کامل یا معتبر نیست");
+  return result;
+}
+
+function openSaiSaiCalculator(): void {
+  document.querySelector("#saisai-calculator-modal")?.remove();
+  const modal = document.createElement("div");
+  modal.className = "modal-backdrop";
+  modal.id = "saisai-calculator-modal";
+  modal.innerHTML = '<section class="modal calculator-modal" role="dialog" aria-modal="true" aria-label="ماشین حساب"><button class="modal-close" id="calc-close" type="button">×</button><span class="eyebrow">ابزار سریع سای‌سای</span><h2>ماشین حساب</h2><label class="field"><span>عبارت یا محاسبه</span><input id="calc-expression" inputmode="decimal" autocomplete="off" placeholder="مثلاً ۱۲۵۰۰۰ + ۳۵۰۰۰"></label><p class="calculator-result" id="calc-result" aria-live="polite">نتیجه اینجا نمایش داده می‌شود</p><div class="calculator-keys"><button type="button" data-calc-key="7">۷</button><button type="button" data-calc-key="8">۸</button><button type="button" data-calc-key="9">۹</button><button type="button" data-calc-key="/">÷</button><button type="button" data-calc-key="4">۴</button><button type="button" data-calc-key="5">۵</button><button type="button" data-calc-key="6">۶</button><button type="button" data-calc-key="*">×</button><button type="button" data-calc-key="1">۱</button><button type="button" data-calc-key="2">۲</button><button type="button" data-calc-key="3">۳</button><button type="button" data-calc-key="-">−</button><button type="button" data-calc-key="0">۰</button><button type="button" data-calc-key=".">.</button><button type="button" data-calc-key="clear">پاک</button><button type="button" data-calc-key="+">+</button></div><div class="form-actions"><button class="secondary-button" id="calc-clear" type="button">پاک کردن</button><button class="primary-button" id="calc-equal" type="button">محاسبه =</button></div></section>';
+  document.body.appendChild(modal);
+  const input = modal.querySelector<HTMLInputElement>("#calc-expression")!;
+  const result = modal.querySelector<HTMLElement>("#calc-result")!;
+  const calculate = () => {
+    try { result.textContent = evaluateCalculatorExpression(input.value).toLocaleString("fa-IR", { maximumFractionDigits: 8 }); }
+    catch (error) { result.textContent = error instanceof Error ? error.message : "محاسبه انجام نشد"; }
+  };
+  const close = () => modal.remove();
+  modal.querySelector("#calc-close")?.addEventListener("click", close);
+  modal.addEventListener("click", event => { if (event.target === modal) close(); });
+  modal.querySelector("#calc-equal")?.addEventListener("click", calculate);
+  modal.querySelector("#calc-clear")?.addEventListener("click", () => { input.value = ""; result.textContent = "نتیجه اینجا نمایش داده می‌شود"; input.focus(); });
+  modal.querySelectorAll<HTMLButtonElement>("[data-calc-key]").forEach(button => button.addEventListener("click", () => {
+    const key = button.dataset.calcKey || "";
+    if (key === "clear") input.value = ""; else input.value += key;
+    input.focus();
+  }));
+  input.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); calculate(); } });
+  input.focus();
+}
+
+function isCalculatorVoiceCommand(text: string): boolean {
+  const normalized = text.replace(/[\u200c\s\-ـ]/g, "").replace(/[،,.!?؟]/g, "").toLocaleLowerCase("fa");
+  return /ماشینحساب|حسابگر|ماشینحسابروبیار|ماشینحسابروبازکن/.test(normalized);
+}
+
+let stopVoiceCommandSession: (() => void) | null = null;
+
 export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promise<string>, notify: (message: string) => void): void {
   const button = document.querySelector<HTMLButtonElement>("#voice-query");
   if (!button) return;
   let isListening = false;
   let isProcessing = false;
-  const originalLabel = button.textContent || "🔊 از سای‌سای بپرس";
+  const originalLabel = "🎙 فرمان صوتی";
+  if (stopVoiceCommandSession) {
+    button.textContent = "✕ توقف فرمان صوتی";
+    button.setAttribute("aria-pressed", "true");
+    button.classList.add("voice-command-active");
+  }
   const resetVoiceButton = () => {
     isListening = false;
+    isProcessing = false;
     button.disabled = false;
     button.textContent = originalLabel;
     button.removeAttribute("aria-pressed");
+    button.classList.remove("voice-command-active");
+    stopVoiceCommandSession = null;
   };
   button.addEventListener("click", async () => {
-    if (isListening) {
-      // A second tap cancels listening and restores the button immediately.
-      isListening = false;
-      button.textContent = originalLabel;
-      button.removeAttribute("aria-pressed");
-      await SpeechRecognition.stop().catch(() => undefined);
-      notify("شنیدن صدا لغو شد");
+    if (stopVoiceCommandSession) {
+      stopVoiceCommandSession();
+      resetVoiceButton();
+      notify("فرمان صوتی خاموش شد");
       return;
     }
     if (isProcessing) return;
@@ -393,65 +460,44 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
     }
     const permission = await SpeechRecognition.requestPermissions().catch(() => null);
     if (permission && permission.speechRecognition !== "granted") {
-      notify("اجازه دسترسی به میکروفون و تشخیص صدا لازم است");
+      notify("برای استفاده از فرمان صوتی، اجازه تشخیص گفتار لازم است");
       return;
     }
-    isProcessing = true;
     isListening = true;
+    isProcessing = true;
+    stopVoiceCommandSession = () => { isListening = false; void SpeechRecognition.stop().catch(() => undefined); };
     button.disabled = false;
     button.setAttribute("aria-pressed", "true");
-    button.textContent = "✕ لغو شنیدن";
+    button.classList.add("voice-command-active");
+    button.textContent = "✕ توقف فرمان صوتی";
+    notify("فرمان صوتی روشن است؛ بگویید: سای‌سای موجودی، سای‌سای بدهکاران یا سای‌سای ماشین حساب. برای خاموش‌کردن دوباره همین دکمه را بزنید.");
     try {
       await prepareSpeechRecognition();
-      if (!isListening) return;
-      let question = "";
-      let lastError: unknown = null;
-      // Android's recognizer can intermittently return ERROR_NO_MATCH for Persian.
-      // Retry once after resetting the recognizer instead of immediately showing its English error.
-      for (let attempt = 0; attempt < 2 && !question; attempt++) {
+      while (isListening) {
         try {
-          if (attempt > 0) {
-            await SpeechRecognition.stop().catch(() => undefined);
-            await new Promise(resolve => setTimeout(resolve, 350));
-          }
           const result = await SpeechRecognition.start({
             language: "fa-IR",
             maxResults: 3,
             partialResults: false,
             popup: false,
-            prompt: attempt === 0 ? "سؤال خود را واضح و به فارسی از سای‌سای بپرسید" : "دوباره گوش می‌دهم؛ سؤال را کوتاه و واضح بگویید"
+            prompt: "فرمان فارسی برای سای‌سای بگویید"
           });
-          if (!isListening) return;
-          question = result.matches?.find(item => item.trim().length > 0)?.trim() || "";
-          if (!question) lastError = new Error("NO_MATCH");
+          if (!isListening) break;
+          const question = result.matches?.find(item => item.trim().length > 0)?.trim() || "";
+          if (!question) continue;
+          const answer = await onAnswer(question);
+          if (!isListening) break;
+          await speakSaiSai(answer);
+          notify(answer);
         } catch (error) {
-          lastError = error;
-          const message = error instanceof Error ? error.name + " " + error.message : String(error);
-          if (!/no.?match|didn.t understand|try again|speech|recognition|error.?7/i.test(message) || attempt === 1) throw error;
+          if (!isListening || /cancel|abort/i.test(error instanceof Error ? error.name + error.message : String(error))) break;
+          // Keep the hands-free mode active if Android's recognizer intermittently fails.
+          await new Promise(resolve => setTimeout(resolve, 450));
+          await SpeechRecognition.stop().catch(() => undefined);
         }
-      }
-      await SpeechRecognition.stop().catch(() => undefined);
-      if (!isListening) return;
-      isListening = false;
-      button.textContent = originalLabel;
-      button.removeAttribute("aria-pressed");
-      if (!question) {
-        const message = lastError instanceof Error ? lastError.name + " " + lastError.message : String(lastError || "");
-        if (/didn.t understand|try again|no.?match|error.?7/i.test(message) || message === "NO_MATCH") {
-          throw new Error("صدایتان واضح تشخیص داده نشد. یک‌بار دیگر نزدیک میکروفون و در محیط آرام سؤال کنید.");
-        }
-        throw new Error("سؤالی تشخیص داده نشد؛ لطفاً دوباره تلاش کنید.");
-      }
-      const answer = await onAnswer(question);
-      const spoken = await speakSaiSai(answer);
-      notify(spoken ? answer : answer + "\n\nبرای شنیدن پاسخ، موتور تبدیل متن به گفتار فارسی را در تنظیمات گوشی فعال کنید.");
-    } catch (error) {
-      if (!/cancel|abort/i.test(error instanceof Error ? error.name + error.message : String(error))) {
-        notify("تشخیص صوتی در دسترس نبود؛ می‌توانید سؤال را به‌صورت متنی و آفلاین بپرسید.");
-        openOfflineQuestionPrompt(onAnswer, notify);
       }
     } finally {
-      isProcessing = false;
+      await SpeechRecognition.stop().catch(() => undefined);
       resetVoiceButton();
     }
   });
