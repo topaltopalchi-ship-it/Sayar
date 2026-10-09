@@ -267,6 +267,7 @@ function layout(content: string, subscription: Subscription): void {
       <header class="topbar">
         <div class="brand-block"><img class="brand-logo" src="/icon-192.svg" alt="لوگوی سای‌سای"><div><span class="eyebrow">مدیریت مالی و فروش</span><h1>سای‌سای</h1></div></div>
         <div class="header-actions">
+          <label class="header-currency" aria-label="انتخاب واحد پول"><span>واحد پول</span><select id="header-currency-unit"><option value="toman" ${getCurrencyUnit() === "toman" ? "selected" : ""}>تومان</option><option value="rial" ${getCurrencyUnit() === "rial" ? "selected" : ""}>ریال</option></select></label>
           <span class="plan-pill ${subscription.status}">${subscription.status === "active" ? (subscription.isTrial ? "دوره رایگان ۳۰ روزه" : "اشتراک فعال") : "اشتراک لازم است"}</span>
           <button class="icon-button" id="settings" aria-label="حالت کاربری">⚙</button>
         </div>
@@ -277,6 +278,7 @@ function layout(content: string, subscription: Subscription): void {
       </nav>
       <div id="toast" class="toast" role="status" aria-live="polite"></div>
     </main>`;
+  document.querySelector<HTMLSelectElement>("#header-currency-unit")?.addEventListener("change", async event => { const unit = (event.currentTarget as HTMLSelectElement).value === "toman" ? "toman" : "rial"; setCurrencyUnit(unit); await render(); showToast("واحد پول سیستم روی " + (unit === "toman" ? "تومان" : "ریال") + " تنظیم شد"); });
   document.querySelector<HTMLButtonElement>("#settings")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", settingsModal()); bindSettingsModal(); });
   document.querySelectorAll<HTMLButtonElement>("[data-subscribe]").forEach(b => b.addEventListener("click", subscribe));
 }
