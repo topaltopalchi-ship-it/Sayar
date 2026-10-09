@@ -103,6 +103,10 @@ body{background:radial-gradient(circle at 12% 0,#223657 0,#10182a 34%,#090e1b 78
 
 /* Report filters: readable text on dark theme */
 .report-range{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+.report-change-range{position:fixed;z-index:45;left:16px;bottom:calc(102px + env(safe-area-inset-bottom));border:1px solid #4b78ba;border-radius:999px;background:#1c3150;color:#f4f8ff;padding:11px 16px;font:700 13px Tahoma,Arial,sans-serif;box-shadow:0 6px 22px #0006;cursor:pointer}
+#report-range-panel{scroll-margin-top:18px}
+@media(min-width:761px){.report-change-range{left:calc(50% - 360px)}}
+
 .report-range button{border:1px solid #30415f;border-radius:14px;background:#162238;color:#eef4ff;padding:13px 10px;font-weight:700;font-size:12px;min-height:48px}
 .report-range button:hover,.report-range button:focus{border-color:#4d91ff;background:#1b3150;color:#fff;outline:none}
 .report-custom-range{display:grid;gap:8px}
