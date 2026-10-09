@@ -652,3 +652,10 @@ body{
 .calculator-keys button { min-height: 48px; border: 1px solid var(--border, rgba(148,163,184,.22)); border-radius: 12px; background: rgba(148,163,184,.10); color: inherit; font: inherit; font-size: 1.05rem; font-weight: 700; cursor: pointer; }
 .calculator-keys button:active { transform: scale(.97); }
 .calculator-keys button[data-calc-key="/"], .calculator-keys button[data-calc-key="*"], .calculator-keys button[data-calc-key="-"], .calculator-keys button[data-calc-key="+"] { background: rgba(45,212,191,.15); }
+
+
+.voice-quick-card.voice-command-active, .voice-command-active {
+  border-color: rgba(45, 212, 191, .9) !important;
+  background: linear-gradient(135deg, rgba(13, 148, 136, .22), rgba(37, 99, 235, .2)) !important;
+  box-shadow: 0 0 0 2px rgba(45, 212, 191, .14), 0 8px 24px rgba(13, 148, 136, .12);
+}
