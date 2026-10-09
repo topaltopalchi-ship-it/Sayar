@@ -428,21 +428,22 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
   if (!button) return;
   let isListening = false;
   let isProcessing = false;
-  const originalLabel = button.textContent || "🔊 از سای‌سای بپرس";
+  const originalLabel = "🎙 فرمان صوتی";
   const resetVoiceButton = () => {
     isListening = false;
+    isProcessing = false;
     button.disabled = false;
     button.textContent = originalLabel;
     button.removeAttribute("aria-pressed");
+    button.classList.remove("voice-command-active");
   };
   button.addEventListener("click", async () => {
     if (isListening) {
-      // A second tap cancels listening and restores the button immediately.
       isListening = false;
-      button.textContent = originalLabel;
-      button.removeAttribute("aria-pressed");
+      button.textContent = "در حال توقف…";
       await SpeechRecognition.stop().catch(() => undefined);
-      notify("شنیدن صدا لغو شد");
+      resetVoiceButton();
+      notify("فرمان صوتی خاموش شد");
       return;
     }
     if (isProcessing) return;
@@ -453,65 +454,43 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
     }
     const permission = await SpeechRecognition.requestPermissions().catch(() => null);
     if (permission && permission.speechRecognition !== "granted") {
-      notify("اجازه دسترسی به میکروفون و تشخیص صدا لازم است");
+      notify("برای استفاده از فرمان صوتی، اجازه تشخیص گفتار لازم است");
       return;
     }
-    isProcessing = true;
     isListening = true;
+    isProcessing = true;
     button.disabled = false;
     button.setAttribute("aria-pressed", "true");
-    button.textContent = "✕ لغو شنیدن";
+    button.classList.add("voice-command-active");
+    button.textContent = "✕ توقف فرمان صوتی";
+    notify("فرمان صوتی روشن است؛ بگویید: سای‌سای موجودی، سای‌سای بدهکاران یا سای‌سای ماشین حساب. برای خاموش‌کردن دوباره همین دکمه را بزنید.");
     try {
       await prepareSpeechRecognition();
-      if (!isListening) return;
-      let question = "";
-      let lastError: unknown = null;
-      // Android's recognizer can intermittently return ERROR_NO_MATCH for Persian.
-      // Retry once after resetting the recognizer instead of immediately showing its English error.
-      for (let attempt = 0; attempt < 2 && !question; attempt++) {
+      while (isListening) {
         try {
-          if (attempt > 0) {
-            await SpeechRecognition.stop().catch(() => undefined);
-            await new Promise(resolve => setTimeout(resolve, 350));
-          }
           const result = await SpeechRecognition.start({
             language: "fa-IR",
             maxResults: 3,
             partialResults: false,
             popup: false,
-            prompt: attempt === 0 ? "سؤال خود را واضح و به فارسی از سای‌سای بپرسید" : "دوباره گوش می‌دهم؛ سؤال را کوتاه و واضح بگویید"
+            prompt: "فرمان فارسی برای سای‌سای بگویید"
           });
-          if (!isListening) return;
-          question = result.matches?.find(item => item.trim().length > 0)?.trim() || "";
-          if (!question) lastError = new Error("NO_MATCH");
+          if (!isListening) break;
+          const question = result.matches?.find(item => item.trim().length > 0)?.trim() || "";
+          if (!question) continue;
+          const answer = await onAnswer(question);
+          if (!isListening) break;
+          await speakSaiSai(answer);
+          notify(answer);
         } catch (error) {
-          lastError = error;
-          const message = error instanceof Error ? error.name + " " + error.message : String(error);
-          if (!/no.?match|didn.t understand|try again|speech|recognition|error.?7/i.test(message) || attempt === 1) throw error;
+          if (!isListening || /cancel|abort/i.test(error instanceof Error ? error.name + error.message : String(error))) break;
+          // Keep the hands-free mode active if Android's recognizer intermittently fails.
+          await new Promise(resolve => setTimeout(resolve, 450));
+          await SpeechRecognition.stop().catch(() => undefined);
         }
-      }
-      await SpeechRecognition.stop().catch(() => undefined);
-      if (!isListening) return;
-      isListening = false;
-      button.textContent = originalLabel;
-      button.removeAttribute("aria-pressed");
-      if (!question) {
-        const message = lastError instanceof Error ? lastError.name + " " + lastError.message : String(lastError || "");
-        if (/didn.t understand|try again|no.?match|error.?7/i.test(message) || message === "NO_MATCH") {
-          throw new Error("صدایتان واضح تشخیص داده نشد. یک‌بار دیگر نزدیک میکروفون و در محیط آرام سؤال کنید.");
-        }
-        throw new Error("سؤالی تشخیص داده نشد؛ لطفاً دوباره تلاش کنید.");
-      }
-      const answer = await onAnswer(question);
-      const spoken = await speakSaiSai(answer);
-      notify(spoken ? answer : answer + "\n\nبرای شنیدن پاسخ، موتور تبدیل متن به گفتار فارسی را در تنظیمات گوشی فعال کنید.");
-    } catch (error) {
-      if (!/cancel|abort/i.test(error instanceof Error ? error.name + error.message : String(error))) {
-        notify("تشخیص صوتی در دسترس نبود؛ می‌توانید سؤال را به‌صورت متنی و آفلاین بپرسید.");
-        openOfflineQuestionPrompt(onAnswer, notify);
       }
     } finally {
-      isProcessing = false;
+      await SpeechRecognition.stop().catch(() => undefined);
       resetVoiceButton();
     }
   });
