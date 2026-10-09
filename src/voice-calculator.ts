@@ -82,7 +82,7 @@ async function listenAndCalculate(modal: HTMLElement): Promise<void> {
     const expression=expressionFromSpeech(text);
     const value=calculate(expression);
     modal.querySelector<HTMLElement>("#calc-expression")!.textContent=text;
-    modal.querySelector<HTMLElement>("#calc-result")!.textContent=formatResult(value);
+    modal.querySelector<HTMLElement>("#calc-result")!.textContent=formatResult(value); void speakSaiSai("نتیجه " + formatResult(value));
     speakSaiSai("نتیجه " + formatResult(value));
     window.setTimeout(() => { if (document.body.contains(modal)) void listenAndCalculate(modal); }, 900);
   } catch(e) { alert(e instanceof Error?e.message:"محاسبه صوتی ناموفق بود"); }
