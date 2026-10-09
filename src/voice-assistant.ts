@@ -332,16 +332,39 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
     button.textContent = "🎙 در حال شنیدن…";
     try {
       await prepareSpeechRecognition();
-      const result = await SpeechRecognition.start({
-        language: "fa-IR",
-        maxResults: 1,
-        partialResults: false,
-        popup: false,
-        prompt: "سؤال خود را از سای‌سای بپرسید"
-      });
+      let question = "";
+      let lastError: unknown = null;
+      // Android's recognizer can intermittently return ERROR_NO_MATCH for Persian.
+      // Retry once after resetting the recognizer instead of immediately showing its English error.
+      for (let attempt = 0; attempt < 2 && !question; attempt++) {
+        try {
+          if (attempt > 0) {
+            await SpeechRecognition.stop().catch(() => undefined);
+            await new Promise(resolve => setTimeout(resolve, 350));
+          }
+          const result = await SpeechRecognition.start({
+            language: "fa-IR",
+            maxResults: 3,
+            partialResults: false,
+            popup: false,
+            prompt: attempt === 0 ? "سؤال خود را واضح و به فارسی از سای‌سای بپرسید" : "دوباره گوش می‌دهم؛ سؤال را کوتاه و واضح بگویید"
+          });
+          question = result.matches?.find(item => item.trim().length > 0)?.trim() || "";
+          if (!question) lastError = new Error("NO_MATCH");
+        } catch (error) {
+          lastError = error;
+          const message = error instanceof Error ? error.name + " " + error.message : String(error);
+          if (!/no.?match|didn.t understand|try again|speech|recognition|error.?7/i.test(message) || attempt === 1) throw error;
+        }
+      }
       await SpeechRecognition.stop().catch(() => undefined);
-      const question = result.matches?.[0]?.trim() || "";
-      if (!question) throw new Error("سؤالی تشخیص داده نشد");
+      if (!question) {
+        const message = lastError instanceof Error ? lastError.name + " " + lastError.message : String(lastError || "");
+        if (/didn.t understand|try again|no.?match|error.?7/i.test(message) || message === "NO_MATCH") {
+          throw new Error("صدایتان واضح تشخیص داده نشد. یک‌بار دیگر نزدیک میکروفون و در محیط آرام سؤال کنید.");
+        }
+        throw new Error("سؤالی تشخیص داده نشد؛ لطفاً دوباره تلاش کنید.");
+      }
       const answer = await onAnswer(question);
       speakSaiSai(answer);
       notify(answer);
