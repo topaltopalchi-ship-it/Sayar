@@ -423,12 +423,19 @@ function isCalculatorVoiceCommand(text: string): boolean {
   return /ماشینحساب|حسابگر|ماشینحسابروبیار|ماشینحسابروبازکن/.test(normalized);
 }
 
+let stopVoiceCommandSession: (() => void) | null = null;
+
 export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promise<string>, notify: (message: string) => void): void {
   const button = document.querySelector<HTMLButtonElement>("#voice-query");
   if (!button) return;
   let isListening = false;
   let isProcessing = false;
   const originalLabel = "🎙 فرمان صوتی";
+  if (stopVoiceCommandSession) {
+    button.textContent = "✕ توقف فرمان صوتی";
+    button.setAttribute("aria-pressed", "true");
+    button.classList.add("voice-command-active");
+  }
   const resetVoiceButton = () => {
     isListening = false;
     isProcessing = false;
@@ -436,12 +443,11 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
     button.textContent = originalLabel;
     button.removeAttribute("aria-pressed");
     button.classList.remove("voice-command-active");
+    stopVoiceCommandSession = null;
   };
   button.addEventListener("click", async () => {
-    if (isListening) {
-      isListening = false;
-      button.textContent = "در حال توقف…";
-      await SpeechRecognition.stop().catch(() => undefined);
+    if (stopVoiceCommandSession) {
+      stopVoiceCommandSession();
       resetVoiceButton();
       notify("فرمان صوتی خاموش شد");
       return;
@@ -459,6 +465,7 @@ export function bindVoiceQuestionAssistant(onAnswer: (question: string) => Promi
     }
     isListening = true;
     isProcessing = true;
+    stopVoiceCommandSession = () => { isListening = false; void SpeechRecognition.stop().catch(() => undefined); };
     button.disabled = false;
     button.setAttribute("aria-pressed", "true");
     button.classList.add("voice-command-active");
