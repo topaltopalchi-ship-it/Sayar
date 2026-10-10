@@ -1786,5 +1786,12 @@ void (async () => {
   } catch (error) {
     console.error("Sayar startup repair/setup failed", error);
   }
+  
+if (localStorage.getItem("sai-sai-unlocked") === "1") {
   await render();
-})();
+} else {
+  authScreen(() => {
+    localStorage.setItem("sai-sai-unlocked", "1");
+    void render();
+  });
+}
