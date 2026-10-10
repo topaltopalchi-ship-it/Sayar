@@ -132,6 +132,32 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew assembleRelease bundleRelease --no-daemon
 
+      - name: Generate Bazaar BIN signature
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          curl -fL --retry 3 -o bundlesigner-0.1.13.jar https://github.com/cafebazaar/bundle-signer/releases/download/v0.1.13/bundlesigner-0.1.13.jar
+          mkdir -p bazaar-bin
+          java -jar bundlesigner-0.1.13.jar genbin -v \
+            --bundle android/app/build/outputs/bundle/release/*.aab \
+            --bin bazaar-bin \
+            --v2-signing-enabled true \
+            --v3-signing-enabled false \
+            --ks android/app/sai-sai-upload.jks \
+            --ks-pass env:KEYSTORE_PASSWORD \
+            --ks-key-alias "$KEY_ALIAS" \
+            --key-pass env:KEY_PASSWORD
+          test -n "$(find bazaar-bin -maxdepth 1 -type f -name '*.bin' -print -quit)"
+
+      - name: Upload Bazaar BIN
+        uses: actions/upload-artifact@v4
+        with:
+          name: sai-sai-bazaar-bin
+          path: bazaar-bin/*.bin
+          if-no-files-found: error
+
       - name: Verify APK signature
         run: |
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" verify --verbose android/app/build/outputs/apk/release/*.apk
