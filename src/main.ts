@@ -1804,10 +1804,22 @@ return receiptCommand ? ("دریافت " + rial(commandAmount) + " از " + comm
   }));
   document.querySelector("#more-backup")?.addEventListener("click", async () => {
     const [products, parties, transactions, expenses, accounts, accountEntries, checks, movements, orders] = await Promise.all([listProducts(), listParties(), listTransactions(), listExpenses(), listAccounts(), (await import("./db")).listAccountEntries(), (await import("./db")).listChecks(), listMovements(), listOrders()]);
-    const payload = { version: 3, exportedAt: Date.now(), products, parties, transactions, expenses, accounts, accountEntries, checks, movements, orders };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `sai-sai-backup-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
-    showToast("فایل پشتیبان آماده شد");
+    const payload = { app: "sai-sai", version: 3, exportedAt: Date.now(), products, parties, transactions, expenses, accounts, accountEntries, checks, movements, orders };
+    const json = JSON.stringify(payload, null, 2);
+    const filename = `sai-sai-backup-${new Date().toISOString().slice(0,10)}.json`;
+    if (nativeApp()) {
+      const bytes = new TextEncoder().encode(json);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      await shareBase64File(filename, btoa(binary), "نسخه پشتیبان سای‌سای");
+    } else {
+      const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename; a.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    showToast("نسخه پشتیبان آماده شد؛ فایل را ذخیره کنید");
   });
   document.querySelector("#more-restore")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", backupRestoreModal()); const m=document.querySelector<HTMLElement>("#backup-restore-modal")!; m.querySelector("#backup-restore-close")?.addEventListener("click",()=>m.remove()); m.querySelector("#backup-restore-submit")?.addEventListener("click",async()=>{ try { const input=m.querySelector<HTMLInputElement>("#backup-file")!; const file=input.files?.[0]; if(!file) throw new Error("فایل پشتیبان را انتخاب کنید"); if(!confirm("اطلاعات فعلی با این پشتیبان جایگزین می‌شود. ادامه می‌دهید؟")) return; const data=JSON.parse(await file.text()); if(!Array.isArray(data.products)||!Array.isArray(data.parties)||!Array.isArray(data.transactions)) throw new Error("فایل پشتیبان معتبر نیست"); const db=await import("./db"); await db.restoreBackup(data); m.remove(); showToast("بازیابی با موفقیت انجام شد"); await render(); } catch(e){showToast(e instanceof Error?e.message:"بازیابی ناموفق بود");} }); });
 
