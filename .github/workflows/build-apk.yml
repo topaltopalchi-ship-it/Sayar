@@ -52,13 +52,19 @@ jobs:
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Prepare signing key
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
+            echo "::error::Add all Android signing secrets in repository Settings > Secrets and variables > Actions."
+            exit 1
+          fi
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/saisai-release.keystore"
           test -s "$RUNNER_TEMP/saisai-release.keystore"
-
       - name: Sign APK
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -76,12 +82,6 @@ jobs:
           test -n "$APKSIGNER"
           "$APKSIGNER" sign --ks "$RUNNER_TEMP/saisai-release.keystore" --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" --key-pass "pass:$ANDROID_KEY_PASSWORD" --ks-key-alias "$ANDROID_KEY_ALIAS" --out "$APK_DIR/SaiSai-signed.apk" "$INPUT_APK"
           "$APKSIGNER" verify --verbose "$APK_DIR/SaiSai-signed.apk"
-
-      - name: Stop if release signing secrets are missing
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 == '' || secrets.ANDROID_KEYSTORE_PASSWORD == '' || secrets.ANDROID_KEY_ALIAS == '' || secrets.ANDROID_KEY_PASSWORD == '' }}
-        run: |
-          echo "::error::Add ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD in repository Settings > Secrets and variables > Actions."
-          exit 1
 
       - name: Upload signed APK artifact
         uses: actions/upload-artifact@v4
