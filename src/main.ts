@@ -678,7 +678,20 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
     const amount = lineData().reduce((sum, x) => sum + Math.max(0, x.quantity * x.unitPrice - x.discount), 0);
     total.textContent = rial(amount);
   };
-  lines.addEventListener("click", event => {\n    const target = event.target as HTMLElement;\n    if (!target.closest(".sale-scan-barcode")) return;\n    void scanBarcode().then(code => {\n      if (!code) return;\n      const found = products.find(p => p.sku.trim().toLocaleLowerCase() === code.toLocaleLowerCase());\n      if (!found) { showToast(`بارکد ${code} ثبت نشده؛ ابتدا کالا را در انبار با همین کد ثبت کنید`); return; }\n      const row = target.closest<HTMLElement>("[data-sale-line]");\n      const select = row?.querySelector<HTMLSelectElement>(".sale-line-product");\n      if (select) { select.value = found.id; select.dispatchEvent(new Event("change", { bubbles: true })); }\n      update(); showToast(`کالا پیدا شد: ${found.name}`);\n    }).catch(error => showToast(error instanceof Error ? error.message : "اسکن بارکد ناموفق بود"));\n  });\n  lines.addEventListener("input", update);
+  lines.addEventListener("click", event => {
+    const target = event.target as HTMLElement;
+    if (!target.closest(".sale-scan-barcode")) return;
+    void scanBarcode().then(code => {
+      if (!code) return;
+      const found = products.find(p => p.sku.trim().toLocaleLowerCase() === code.toLocaleLowerCase());
+      if (!found) { showToast(`بارکد ${code} ثبت نشده؛ ابتدا کالا را در انبار با همین کد ثبت کنید`); return; }
+      const row = target.closest<HTMLElement>("[data-sale-line]");
+      const select = row?.querySelector<HTMLSelectElement>(".sale-line-product");
+      if (select) { select.value = found.id; select.dispatchEvent(new Event("change", { bubbles: true })); }
+      update(); showToast(`کالا پیدا شد: ${found.name}`);
+    }).catch(error => showToast(error instanceof Error ? error.message : "اسکن بارکد ناموفق بود"));
+  });
+  lines.addEventListener("input", update);
   lines.addEventListener("change", update);
   modal.querySelector("#sale-add-line")?.addEventListener("click", () => {
     lines.insertAdjacentHTML("beforeend", saleLineHtml({ productId: products[0].id, quantity: 1, unitPrice: products[0].salePrice, discount: 0 }, lines.children.length));
@@ -1013,7 +1026,8 @@ async function saveVoiceProduct(draft: VoiceProductDraft): Promise<void> {
 
 function bindProductModal(): void {
   const modal = document.querySelector<HTMLDivElement>("#product-modal")!;
-  modal.querySelector("#product-close")?.addEventListener("click", () => modal.remove());\n  modal.querySelector("#product-scan-barcode")?.addEventListener("click", () => void scanBarcode().then(code => { const input = modal.querySelector<HTMLInputElement>("#p-sku"); if (code && input) { input.value = code; input.dispatchEvent(new Event("input", { bubbles: true })); showToast("بارکد وارد شد؛ مشخصات کالا را ذخیره کنید"); } }).catch(error => showToast(error instanceof Error ? error.message : "اسکن بارکد ناموفق بود")));
+  modal.querySelector("#product-close")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#product-scan-barcode")?.addEventListener("click", () => void scanBarcode().then(code => { const input = modal.querySelector<HTMLInputElement>("#p-sku"); if (code && input) { input.value = code; input.dispatchEvent(new Event("input", { bubbles: true })); showToast("بارکد وارد شد؛ مشخصات کالا را ذخیره کنید"); } }).catch(error => showToast(error instanceof Error ? error.message : "اسکن بارکد ناموفق بود")));
   if (!modal.dataset.editId) bindVoiceProductAssistant(async draft => { modal.remove(); await saveVoiceProduct(draft); }, showToast, async drafts => { modal.remove(); for (const draft of drafts) await saveVoiceProduct(draft); showToast(`${drafts.length} کالا ثبت شد`); });
   modal.querySelector("#product-submit")?.addEventListener("click", async () => {
     try {
