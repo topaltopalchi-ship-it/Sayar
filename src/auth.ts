@@ -19,27 +19,73 @@ export function clearPin(): void {
 export function authScreen(onSuccess: () => void): void {
   const existing = hasPin();
   const title = existing ? "ورود به سای‌سای" : "ساخت رمز ورود سای‌سای";
-  const action = existing ? "ورود" : "ساخت رمز";
+  const action = existing ? "ورود" : "ثبت رمز";
 
-  document.body.innerHTML += `
-    <div id="auth-lock" class="modal-backdrop">
-      <section class="modal">
-        <h2>${title}</h2>
-        <p class="muted">برای محافظت از اطلاعات مالی خود یک رمز ۴ تا ۶ رقمی وارد کنید.</p>
-        <input id="auth-pin" type="password" inputmode="numeric" maxlength="6" placeholder="رمز ورود">
-        <button id="auth-submit" class="primary-button wide">${action}</button>
-      </section>
-    </div>`;
+  document.querySelector("#auth-lock")?.remove();
 
-  document.querySelector("#auth-submit")?.addEventListener("click", () => {
-    const input = document.querySelector<HTMLInputElement>("#auth-pin");
-    const pin = input?.value.trim() ?? "";
-    if (!/^\d{4,6}$/.test(pin)) return;
+  const wrapper = document.createElement("div");
+  wrapper.id = "auth-lock";
+  wrapper.className = "modal-backdrop";
 
-    if (existing && !checkPin(pin)) return;
-    if (!existing) savePin(pin);
+  wrapper.innerHTML = `
+    <section class="modal">
+      <h2>${title}</h2>
+      <p class="muted">
+        ${existing
+          ? "رمز ورود خود را وارد کنید."
+          : "یک رمز ۴ تا ۶ رقمی برای محافظت از اطلاعات انتخاب کنید."}
+      </p>
+      <input
+        id="auth-pin"
+        type="password"
+        inputmode="numeric"
+        maxlength="6"
+        placeholder="رمز ورود"
+        autocomplete="off"
+      />
+      <p id="auth-error" class="muted" role="alert"></p>
+      <button id="auth-submit" class="primary-button wide">
+        ${action}
+      </button>
+    </section>
+  `;
 
-    document.querySelector("#auth-lock")?.remove();
+  document.body.appendChild(wrapper);
+
+  const input = wrapper.querySelector<HTMLInputElement>("#auth-pin")!;
+  const error = wrapper.querySelector<HTMLElement>("#auth-error")!;
+  const button = wrapper.querySelector<HTMLButtonElement>("#auth-submit")!;
+
+  const submit = () => {
+    const pin = input.value.trim();
+
+    if (!/^\d{4,6}$/.test(pin)) {
+      error.textContent = "رمز باید ۴ تا ۶ رقم باشد.";
+      return;
+    }
+
+    if (existing && !checkPin(pin)) {
+      error.textContent = "رمز واردشده اشتباه است.";
+      input.value = "";
+      input.focus();
+      return;
+    }
+
+    if (!existing) {
+      savePin(pin);
+    }
+
+    wrapper.remove();
     onSuccess();
+  };
+
+  button.addEventListener("click", submit);
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      submit();
+    }
   });
+
+  input.focus();
 }
