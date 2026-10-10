@@ -68,6 +68,16 @@ function settingsModal(): string {
 function bindSettingsModal(): void {
   const modal = document.querySelector<HTMLDivElement>("#settings-modal");
   if (!modal) return;
+modal.insertAdjacentHTML(
+  "beforeend",
+  `<button class="secondary-button wide" id="auth-logout">خروج از حساب</button>`
+);
+
+modal.querySelector("#auth-logout")?.addEventListener("click", () => {
+  localStorage.removeItem("sai-sai-unlocked");
+  modal.remove();
+  location.reload();
+}); 
   modal.querySelector("#settings-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#pricing-settings")?.addEventListener("click", async () => { modal.remove(); document.body.insertAdjacentHTML("beforeend", pricingSettingsModal()); bindPricingSettingsModal(); });
   modal.querySelector("#subscription-settings")?.addEventListener("click", async () => { modal.remove(); const subscription = await getSubscription().catch(() => ({ status: "none", plan: "none", expiresAt: null } as Subscription)); showSubscription(subscription); });
