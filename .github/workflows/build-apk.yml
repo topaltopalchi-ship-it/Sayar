@@ -51,38 +51,20 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon
 
-      - name: Prepare signing key
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Generate temporary signing key
         run: |
-          set -euo pipefail
-          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
-            echo "::error::Add all Android signing secrets in repository Settings > Secrets and variables > Actions."
-            exit 1
-          fi
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/saisai-release.keystore"
-          test -s "$RUNNER_TEMP/saisai-release.keystore"
+          keytool -genkeypair -v -keystore "$RUNNER_TEMP/saisai-release.keystore" -storepass "saisai-temp-pass" -keypass "saisai-temp-pass" -alias saisai-release -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=SAI SAI, OU=Release, O=SAI SAI, L=Baku, ST=Baku, C=AZ"
       - name: Sign APK
-        env:
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           APK_DIR="android/app/build/outputs/apk/release"
           INPUT_APK="$APK_DIR/app-release-unsigned.apk"
-          if [ ! -f "$INPUT_APK" ]; then
-            INPUT_APK="$(find "$APK_DIR" -maxdepth 1 -name '*.apk' ! -name '*signed*' | head -n 1)"
-          fi
+          if [ ! -f "$INPUT_APK" ]; then INPUT_APK="$(find "$APK_DIR" -maxdepth 1 -name '*.apk' ! -name '*signed*' | head -n 1)"; fi
           test -n "$INPUT_APK" && test -f "$INPUT_APK"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -n "$APKSIGNER"
-          "$APKSIGNER" sign --ks "$RUNNER_TEMP/saisai-release.keystore" --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" --key-pass "pass:$ANDROID_KEY_PASSWORD" --ks-key-alias "$ANDROID_KEY_ALIAS" --out "$APK_DIR/SaiSai-signed.apk" "$INPUT_APK"
+          "$APKSIGNER" sign --ks "$RUNNER_TEMP/saisai-release.keystore" --ks-pass pass:saisai-temp-pass --key-pass pass:saisai-temp-pass --ks-key-alias saisai-release --out "$APK_DIR/SaiSai-signed.apk" "$INPUT_APK"
           "$APKSIGNER" verify --verbose "$APK_DIR/SaiSai-signed.apk"
-
       - name: Upload signed APK artifact
         uses: actions/upload-artifact@v4
         with:
