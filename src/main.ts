@@ -403,8 +403,27 @@ function getInvoiceBranding(): InvoiceBranding {
   } catch { return { showSignature: true, showStamp: true, showSlogan: true }; }
 }
 function saveInvoiceBranding(value: InvoiceBranding): void { localStorage.setItem(INVOICE_BRANDING_KEY, JSON.stringify(value)); }
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error("خواندن فایل ناموفق بود")); reader.readAsDataURL(file); });
+async function fileToDataUrl(file: File): Promise<string> {
+  if (!file.type.startsWith("image/")) throw new Error("لطفاً یک فایل تصویری انتخاب کنید");
+  const raw = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("خواندن فایل ناموفق بود"));
+    reader.readAsDataURL(file);
+  });
+  // Resize large phone photos before localStorage to avoid quota failures.
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error("باز کردن تصویر ناموفق بود")); img.src = raw;
+  });
+  const scale = Math.min(1, 1200 / Math.max(image.naturalWidth, image.naturalHeight));
+  if (scale === 1 && raw.length < 700_000) return raw;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("پردازش تصویر در دسترس نیست");
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL(file.type === "image/jpeg" || file.type === "image/webp" ? "image/jpeg" : "image/png", 0.82);
 }
 function invoiceBrandingModal(): string {
   const b = getInvoiceBranding();
@@ -422,7 +441,9 @@ function invoiceBrandingModal(): string {
     '<button class="primary-button wide" id="branding-save">ذخیره تنظیمات</button></section></div>';
 }
 function bindInvoiceBrandingModal(): void {
-  const modal = document.querySelector<HTMLDivElement>("#invoice-branding-modal")!;
+  const modal = document.querySelector<HTMLDivElement>("#invoice-branding-modal");
+  if (!modal) return;
+  modal.style.zIndex = "10000";
   let b = getInvoiceBranding();
   const handle = async (id: string, key: "signature" | "stamp" | "slogan") => {
     const input = modal.querySelector<HTMLInputElement>("#" + id);
@@ -433,8 +454,21 @@ function bindInvoiceBrandingModal(): void {
     try {
       await handle("branding-signature", "signature"); await handle("branding-stamp", "stamp"); await handle("branding-slogan", "slogan");
       b = { ...b, showSignature: modal.querySelector<HTMLInputElement>("#show-signature")!.checked, showStamp: modal.querySelector<HTMLInputElement>("#show-stamp")!.checked, showSlogan: modal.querySelector<HTMLInputElement>("#show-slogan")!.checked };
-      saveInvoiceBranding(b); modal.remove(); showToast("تنظیمات فاکتور ذخیره شد");
-    } catch (e) { showToast(e instanceof Error ? e.message : "ذخیره تنظیمات ناموفق بود"); }
+      saveInvoiceBranding(b);
+      const invoice = document.querySelector<HTMLElement>(".invoice-document, .invoice-preview, #invoice-preview");
+      if (invoice) {
+        const signatureSlot = invoice.querySelector<HTMLElement>(".invoice-signature-slot");
+        const stampSlot = invoice.querySelector<HTMLElement>(".invoice-stamp-slot");
+        if (signatureSlot) signatureSlot.innerHTML = b.showSignature && b.signature ? '<img class="invoice-signature" src="' + b.signature + '" alt="امضا">' : '<span>امضا</span>';
+        if (stampSlot) stampSlot.innerHTML = b.showStamp && b.stamp ? '<img class="invoice-stamp" src="' + b.stamp + '" alt="مهر">' : '<span>مهر</span>';
+        let slogan = invoice.querySelector<HTMLElement>(".invoice-slogan");
+        if (b.showSlogan && b.slogan) {
+          if (!slogan) { slogan = document.createElement("div"); slogan.className = "invoice-slogan"; (invoice.querySelector(".invoice-signatures") || invoice).insertAdjacentElement("beforebegin", slogan); }
+          slogan.innerHTML = '<img src="' + b.slogan + '" alt="شعار">';
+        } else slogan?.remove();
+      }
+      modal.remove(); showToast("تنظیمات فاکتور ذخیره شد");
+    } catch (e) { showToast(e instanceof DOMException && e.name === "QuotaExceededError" ? "حافظهٔ برنامه پر است؛ تصویر کوچک‌تری انتخاب کنید" : e instanceof Error ? e.message : "ذخیره تنظیمات ناموفق بود"); }
   });
   [["remove-signature","signature"],["remove-stamp","stamp"],["remove-slogan","slogan"]].forEach(([id,key]) => modal.querySelector("#"+id)?.addEventListener("click", () => { saveInvoiceBranding({ ...b, [key]: undefined }); modal.remove(); }));
 }
@@ -474,6 +508,7 @@ function invoiceModal(t: Transaction, productMap: Map<string, Product>, partyMap
         <div><span>پرداخت‌شده</span><b>${rial(t.paid)}</b></div>
         <div class="invoice-balance"><span>مانده</span><b>${rial(Math.max(0, t.amount - t.paid))}</b></div>
       </div>
+      ${branding.showSlogan && branding.slogan ? '<div class="invoice-slogan"><img src="' + branding.slogan + '" alt="شعار"></div>' : ""}
       <div class="invoice-signatures">
         <div class="invoice-signature-slot">${branding.showSignature && branding.signature ? '<img class="invoice-signature" src="' + branding.signature + '" alt="امضا">' : '<span>امضا</span>'}</div>
         <div class="invoice-stamp-slot">${branding.showStamp && branding.stamp ? '<img class="invoice-stamp" src="' + branding.stamp + '" alt="مهر">' : '<span>مهر</span>'}</div>
@@ -583,7 +618,7 @@ async function openInvoice(t: Transaction): Promise<void> {
       if (button) { button.disabled = false; button.textContent = "ارسال فاکتور"; }
     }
   });
-  invoice.querySelector("#invoice-branding-settings")?.addEventListener("click", () => { document.body.insertAdjacentHTML("beforeend", invoiceBrandingModal()); bindInvoiceBrandingModal(); });
+  invoice.querySelector("#invoice-branding-settings")?.addEventListener("click", () => { document.querySelector("#invoice-branding-modal")?.remove(); document.body.insertAdjacentHTML("beforeend", invoiceBrandingModal()); const modal = document.querySelector<HTMLElement>("#invoice-branding-modal"); if (modal) modal.style.zIndex = "10000"; bindInvoiceBrandingModal(); });
 }
 
 function saleLineHtml(line: TransactionLine, index: number): string {
