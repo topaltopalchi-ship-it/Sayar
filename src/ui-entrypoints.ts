@@ -1,5 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 import { openVoiceCalculator } from "./voice-calculator";
+import { openSmartSecretary } from "./smart-secretary";
 
 function openNewProduct(): void {
   const nav = document.querySelector<HTMLElement>('[data-nav="inventory"]');
@@ -41,6 +42,19 @@ function addCalculatorEntryPoint(): void {
   quick.appendChild(card);
 }
 
+function addSecretaryEntryPoint(): void {
+  if (document.querySelector("#quick-smart-secretary")) return;
+  const quick = document.querySelector(".quick-grid");
+  if (!quick) return;
+  const card = document.createElement("button");
+  card.type = "button";
+  card.id = "quick-smart-secretary";
+  card.className = "quick-card";
+  card.innerHTML = "<b>🎙</b><span>منشی هوشمند</span><small>گفت‌وگوی صوتی و متنی</small>";
+  card.addEventListener("click", openSmartSecretary);
+  quick.appendChild(card);
+}
+
 function addVoiceStatus(): void {
   if (!Capacitor.isNativePlatform() || document.querySelector("#voice-service-status")) return;
   const voiceButtons = document.querySelectorAll("#voice-sale,#voice-query,#voice-product");
@@ -53,7 +67,7 @@ function addVoiceStatus(): void {
   host.parentElement?.insertBefore(note, host);
 }
 
-function refreshEntryPoints(): void { addDashboardEntryPoint(); addInventoryShortcut(); addCalculatorEntryPoint(); addVoiceStatus(); }
+function refreshEntryPoints(): void { addDashboardEntryPoint(); addInventoryShortcut(); addCalculatorEntryPoint(); addSecretaryEntryPoint(); addVoiceStatus(); }
 
 window.addEventListener("sayar-open-calculator", () => openVoiceCalculator());
 const observer = new MutationObserver(refreshEntryPoints);
