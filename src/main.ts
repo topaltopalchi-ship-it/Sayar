@@ -1,4 +1,5 @@
 import "./style.css";
+import { scanBarcode } from "./barcode-scanner";
 import { authScreen } from "./auth";
 import { Capacitor } from "@capacitor/core";
 import { App } from "@capacitor/app";
@@ -629,7 +630,7 @@ async function openInvoice(t: Transaction): Promise<void> {
 function saleLineHtml(line: TransactionLine, index: number): string {
   return `
     <div class="sale-line" data-sale-line>
-      <label class="field"><span>کالا</span><select class="sale-line-product" data-index="${index}">${products.map(p => `<option value="${p.id}" ${p.id === line.productId ? "selected" : ""}>${p.name} — ${rial(p.salePrice)} / ${p.unit}</option>`).join("")}</select></label>
+      <label class="field"><span>کالا</span><button type="button" class="secondary-button wide sale-scan-barcode">▦ اسکن بارکد</button><select class="sale-line-product" data-index="${index}">${products.map(p => `<option value="${p.id}" ${p.id === line.productId ? "selected" : ""}>${p.name} — ${rial(p.salePrice)} / ${p.unit}</option>`).join("")}</select></label>
       <div class="form-grid">
         <label class="field"><span>مقدار</span><input class="sale-line-quantity" type="text" inputmode="decimal" value="${line.quantity}"></label>
         <label class="field"><span>قیمت واحد (${getCurrencyLabel()})</span><input class="sale-line-price" type="text" inputmode="numeric" value="${moneyInputValue(line.unitPrice)}"></label>
@@ -676,7 +677,7 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
     const amount = lineData().reduce((sum, x) => sum + Math.max(0, x.quantity * x.unitPrice - x.discount), 0);
     total.textContent = rial(amount);
   };
-  lines.addEventListener("input", update);
+  lines.addEventListener("click", event => {\n    const target = event.target as HTMLElement;\n    if (!target.closest(".sale-scan-barcode")) return;\n    void scanBarcode().then(code => {\n      if (!code) return;\n      const found = products.find(p => p.sku.trim().toLocaleLowerCase() === code.toLocaleLowerCase());\n      if (!found) { showToast(`بارکد ${code} ثبت نشده؛ ابتدا کالا را در انبار با همین کد ثبت کنید`); return; }\n      const row = target.closest<HTMLElement>("[data-sale-line]");\n      const select = row?.querySelector<HTMLSelectElement>(".sale-line-product");\n      if (select) { select.value = found.id; select.dispatchEvent(new Event("change", { bubbles: true })); }\n      update(); showToast(`کالا پیدا شد: ${found.name}`);\n    }).catch(error => showToast(error instanceof Error ? error.message : "اسکن بارکد ناموفق بود"));\n  });\n  lines.addEventListener("input", update);
   lines.addEventListener("change", update);
   modal.querySelector("#sale-add-line")?.addEventListener("click", () => {
     lines.insertAdjacentHTML("beforeend", saleLineHtml({ productId: products[0].id, quantity: 1, unitPrice: products[0].salePrice, discount: 0 }, lines.children.length));
@@ -993,7 +994,7 @@ function bindAdjustmentModal(): void {
 function productModal(product?: Product): string {
   return `<div class="modal-backdrop" id="product-modal"><section class="modal"><button class="modal-close" id="product-close">×</button><span class="eyebrow">کاتالوگ کالا</span><h2>${product ? "ویرایش کالا" : "افزودن کالا"}</h2>
     <label class="field"><span>نام کالا</span><input id="p-name" placeholder="مثلاً برنج ایرانی" value="${product?.name || ""}"></label>
-    <div class="form-grid"><label class="field"><span>کد کالا</span><input id="p-sku" placeholder="اختیاری" value="${product?.sku || ""}"></label><label class="field"><span>واحد</span><select id="p-unit">${["عدد","کیلوگرم","گرم","لیتر","متر","بسته"].map(u => `<option ${product?.unit === u ? "selected" : ""}>${u}</option>`).join("")}</select></label></div>
+    <div class="form-grid"><label class="field"><span>بارکد / کد کالا</span><input id="p-sku" placeholder="بارکد را وارد یا اسکن کنید" value="${product?.sku || ""}"><button type="button" class="secondary-button wide" id="product-scan-barcode">▦ اسکن با دوربین</button></label><label class="field"><span>واحد</span><select id="p-unit">${["عدد","کیلوگرم","گرم","لیتر","متر","بسته"].map(u => `<option ${product?.unit === u ? "selected" : ""}>${u}</option>`).join("")}</select></label></div>
     <div class="form-grid"><label class="field"><span>قیمت خرید (${getCurrencyLabel()})</span><input id="p-buy" type="number" min="0" value="${moneyInputValue(product?.purchasePrice ?? 0)}"></label><label class="field"><span>قیمت فروش (${getCurrencyLabel()})</span><input id="p-sale" type="number" min="0" value="${moneyInputValue(product?.salePrice ?? 0)}"></label></div>
     <div class="form-grid"><label class="field"><span>مبنای قیمت بازار</span><select id="p-market-basis"><option value="none" ${product?.marketBasis === "none" || !product?.marketBasis ? "selected" : ""}>بدون شاخص</option><option value="dollar" ${product?.marketBasis === "dollar" ? "selected" : ""}>دلار</option><option value="gold" ${product?.marketBasis === "gold" ? "selected" : ""}>طلا</option><option value="market" ${product?.marketBasis === "market" ? "selected" : ""}>شاخص بازار</option></select></label><label class="field"><span>نرخ مرجع هنگام خرید</span><input id="p-market-reference" type="number" min="0" value="${product?.marketReferenceRate ?? 0}"></label></div><div class="form-grid"><label class="field"><span>سود هدف (%)</span><input id="p-margin" type="number" min="0" value="${product?.targetMarginPercent ?? getMarketSettings().defaultMarginPercent}"></label><label class="field"><span>حداقل سود (%)</span><input id="p-min-margin" type="number" min="0" value="${product?.minMarginPercent ?? getMarketSettings().minMarginPercent}"></label></div><label class="field"><span>حداقل موجودی (هشدار)</span><input id="p-low" type="number" min="0" step="0.001" value="${product?.lowStock ?? 5}"></label><label class="field"><span>تأمین‌کننده این کالا</span><select id="p-supplier"><option value="">بدون تأمین‌کننده</option>${parties.filter(p => p.type === "supplier" || p.type === "both").map(p => `<option value="${p.id}" ${product?.supplierId === p.id ? "selected" : ""}>${p.name}${p.phone ? " · " + p.phone : ""}</option>`).join("")}</select></label>
     ${product ? "" : '<label class="field"><span>موجودی اولیه</span><input id="p-initial-stock" type="text" inputmode="decimal" autocomplete="off" value="0" placeholder="مثلاً 20"></label>'}
@@ -1011,7 +1012,7 @@ async function saveVoiceProduct(draft: VoiceProductDraft): Promise<void> {
 
 function bindProductModal(): void {
   const modal = document.querySelector<HTMLDivElement>("#product-modal")!;
-  modal.querySelector("#product-close")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#product-close")?.addEventListener("click", () => modal.remove());\n  modal.querySelector("#product-scan-barcode")?.addEventListener("click", () => void scanBarcode().then(code => { const input = modal.querySelector<HTMLInputElement>("#p-sku"); if (code && input) { input.value = code; input.dispatchEvent(new Event("input", { bubbles: true })); showToast("بارکد وارد شد؛ مشخصات کالا را ذخیره کنید"); } }).catch(error => showToast(error instanceof Error ? error.message : "اسکن بارکد ناموفق بود")));
   if (!modal.dataset.editId) bindVoiceProductAssistant(async draft => { modal.remove(); await saveVoiceProduct(draft); }, showToast, async drafts => { modal.remove(); for (const draft of drafts) await saveVoiceProduct(draft); showToast(`${drafts.length} کالا ثبت شد`); });
   modal.querySelector("#product-submit")?.addEventListener("click", async () => {
     try {
