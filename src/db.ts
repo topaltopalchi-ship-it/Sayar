@@ -578,9 +578,13 @@ export async function addSale(input: {
     if (line.quantity <= 0) throw new Error("مقدار کالا باید بیشتر از صفر باشد");
     requested.set(line.productId, (requested.get(line.productId) ?? 0) + Number(line.quantity));
   }
+  const products = await listProducts();
   for (const [productId, quantity] of requested) {
     const stock = await getStock(productId);
-    if (stock < quantity) throw new Error("موجودی کالا برای این فروش کافی نیست");
+    if (stock + 1e-9 < quantity) {
+      const productName = products.find(p => p.id === productId)?.name ?? "کالای انتخاب‌شده";
+      throw new Error(`موجودی «${productName}» کافی نیست؛ موجودی فعلی ${stock} و مقدار درخواستی ${quantity} است. ابتدا موجودی را اصلاح کنید.`);
+    }
   }
   return addTransaction({
     type: "sale", date: input.date, partyId: input.partyId, customerName: input.customerName?.trim() || undefined, accountId: input.accountId, description: input.description,
