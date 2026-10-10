@@ -506,3 +506,27 @@ body{background:radial-gradient(circle at 12% 0,#223657 0,#10182a 34%,#090e1b 78
 .jalali-calendar-day{border:1px solid var(--border,#334155);border-radius:10px;background:var(--surface,#111827);color:inherit}
 .jalali-calendar-day.selected{background:var(--primary,#2563eb);color:#fff;border-color:var(--primary,#2563eb)}
 #jalali-calendar-cancel{margin-top:14px}
+
+
+/* Ensure invoice action buttons have readable contrast on the light invoice sheet. */
+.invoice-modal .invoice-actions-footer .secondary-button,
+.invoice-modal #invoice-branding-settings {
+  background: #e8eef8 !important;
+  color: #172033 !important;
+  border: 1px solid #9aacc5 !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+}
+.invoice-modal .invoice-actions-footer .primary-button {
+  background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+  color: #ffffff !important;
+  border: 1px solid #2563eb !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+}
+.invoice-modal .invoice-actions-footer button:disabled,
+.invoice-modal #invoice-branding-settings:disabled {
+  background: #e2e8f0 !important;
+  color: #475569 !important;
+  opacity: 1 !important;
+}
