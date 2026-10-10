@@ -1,4 +1,5 @@
 import "./style.css";
+import "./ui-entrypoints";
 import { scanBarcode } from "./barcode-scanner";
 import { authScreen } from "./auth";
 import { Capacitor } from "@capacitor/core";
