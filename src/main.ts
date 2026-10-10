@@ -12,7 +12,7 @@ import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import {
   addParty, addProduct, updateProduct, deleteProduct, addSale, addSettlement, addExpense, addStockAdjustment, getDashboard, getStock, updateTransaction, deleteTransaction, updateExpense, deleteExpense,
-  listParties, updateParty, deleteParty, listProducts, listTransactions, listExpenses, listMovements, listOrders, calculateHistoricalCOGS, repairDataIntegrity, getPartyBalances
+  listParties, updateParty, deleteParty, listProducts, listTransactions, listExpenses, listMovements, listOrders, listChecks, calculateHistoricalCOGS, repairDataIntegrity, getPartyBalances
 } from "./db";
 import { createMonthlyCheckout, getSubscription, type Subscription } from "./billing";
 import { lineTotal, type Order, type Party, type Product, type Transaction, type TransactionLine } from "./domain";
@@ -1632,6 +1632,27 @@ return receiptCommand ? ("دریافت " + rial(commandAmount) + " از " + comm
     const normalized = (value: string) => value.replace(/[يى]/g, "ی").replace(/ك/g, "ک").trim();
     const party = parties.map(p => ({ p, n: normalized(p.name) })).filter(x => x.n && (q.includes(x.n) || x.n.split(/\s+/).some(part => part.length >= 3 && q.includes(part)))).sort((a,b) => b.n.length-a.n.length)[0]?.p;
     const product = products.map(p => ({ p, n: normalized(p.name) })).filter(x => x.n && (q.includes(x.n) || x.n.split(/\s+/).some(part => part.length >= 3 && q.includes(part)))).sort((a,b) => b.n.length-a.n.length)[0]?.p;
+    if (/قیمت دلار|دلار چنده|نرخ دلار|دلار امروز|قیمت ارز/.test(q)) {
+      return "برای اعلام قیمت دقیق دلار باید منبع آنلاین نرخ ارز تنظیم شود؛ در این نسخه قیمت لحظه‌ای متصل نیست و نمی‌خواهم عدد نادرست اعلام کنم.";
+    }
+    if (/لیست سفارش|فهرست سفارش|سفارشات|سفارش‌های من|وضعیت سفارش/.test(q)) {
+      const orders = await listOrders();
+      if (!orders.length) return "هنوز سفارشی ثبت نشده است.";
+      const statusLabel: Record<string,string> = { pending:"در انتظار", completed:"تکمیل‌شده", cancelled:"لغوشده", delivered:"تحویل‌شده" };
+      return "لیست سفارش‌ها، " + orders.length + " مورد: " + orders.slice(0,10).map((o,i) => (i+1)+") "+(o as any).description || "سفارش").join("؛ ");
+    }
+    if (/لیست چک(?:های|‌های)? دریافتی|چک‌های دریافتی|چک دریافتی|چکهای دریافتی/.test(q)) {
+      const checks = (await listChecks()).filter(c => c.direction === "received");
+      if (!checks.length) return "چک دریافتی ثبت‌شده‌ای ندارید.";
+      const statusLabel: Record<string,string> = { pending:"در انتظار", cleared:"وصول‌شده", bounced:"برگشتی", spent:"خرج‌شده", cancelled:"باطل‌شده" };
+      return "چک‌های دریافتی، " + checks.length + " فقره: " + checks.slice(0,10).map((c,i) => (i+1)+") شماره "+(c.number || "بدون شماره")+"، "+rial(c.amount)+"، سررسید "+new Intl.DateTimeFormat("fa-IR-u-ca-persian").format(new Date(c.dueDate))+"، "+(statusLabel[c.status] || c.status)).join("؛ ");
+    }
+    if (/لیست چک(?:های|‌های)? پرداختی|چک‌های پرداختی|چک پرداختی|چکهای پرداختی/.test(q)) {
+      const checks = (await listChecks()).filter(c => c.direction === "issued");
+      if (!checks.length) return "چک پرداختی ثبت‌شده‌ای ندارید.";
+      const statusLabel: Record<string,string> = { pending:"در انتظار", cleared:"پرداخت‌شده", bounced:"برگشتی", spent:"خرج‌شده", cancelled:"باطل‌شده" };
+      return "چک‌های پرداختی، " + checks.length + " فقره: " + checks.slice(0,10).map((c,i) => (i+1)+") شماره "+(c.number || "بدون شماره")+"، "+rial(c.amount)+"، سررسید "+new Intl.DateTimeFormat("fa-IR-u-ca-persian").format(new Date(c.dueDate))+"، "+(statusLabel[c.status] || c.status)).join("؛ ");
+    }
     if (party && /بدهکار|بدهی|طلب|حسابش|چقدر بده|چی بده|وضع حساب|حساب.*چطوره|حساب.*چطوری/.test(q)) {
       const balance = balances[party.id]?.balance ?? 0;
       if (balance > 0) return `${party.name} ${rial(balance)} بدهکار است.`;
