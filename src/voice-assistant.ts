@@ -313,16 +313,34 @@ export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise
     button.disabled = true;
     button.textContent = "🎙 در حال شنیدن…";
     try {
-      await prepareSpeechRecognition();
-      const result = await SpeechRecognition.start({
-        language: "fa-IR",
-        maxResults: 5,
-        partialResults: false,
-        popup: false,
-        prompt: "نام مشتری، نام کالا، تعداد و قیمت را واضح و نزدیک میکروفون بگویید",
-      });
-      const transcript = result.matches?.[0]?.trim() || "";
-      if (!transcript) throw new Error("صدایی تشخیص داده نشد");
+      const listenForSaleTurn = async (prompt: string): Promise<string> => {
+        let lastError: unknown = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            await prepareSpeechRecognition();
+            if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 350));
+            const result = await SpeechRecognition.start({
+              language: "fa-IR",
+              maxResults: 5,
+              partialResults: false,
+              popup: false,
+              prompt: attempt === 0 ? prompt : "دوباره گوش می‌دهم؛ نزدیک میکروفون و واضح به فارسی صحبت کنید",
+            });
+            const transcript = result.matches?.find(item => item.trim().length > 0)?.trim() || "";
+            if (transcript) return transcript;
+            lastError = new Error("NO_MATCH");
+          } catch (error) {
+            lastError = error;
+            const message = error instanceof Error ? error.name + " " + error.message : String(error);
+            if (!/no.?match|didn.t understand|try again|speech|recognition|error.?7/i.test(message) || attempt === 1) {
+              if (attempt === 1 && /no.?match|didn.t understand|try again|error.?7/i.test(message)) break;
+              throw error;
+            }
+          }
+        }
+        throw new Error("صدایتان تشخیص داده نشد. نزدیک میکروفون و در محیط آرام دوباره بگویید.");
+      };
+      const transcript = await listenForSaleTurn("نام مشتری، نام کالا، تعداد و قیمت را واضح و نزدیک میکروفون بگویید");
       const firstDraft = parseVoiceSale(transcript);
       const collectedItems: VoiceSaleItem[] = [...firstDraft.items];
       const transcripts = [transcript];
@@ -331,19 +349,13 @@ export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise
       // Record one item per listening turn, then collect the next until the user says they're done.
       for (let itemIndex = 1; itemIndex < 30; itemIndex++) {
         await speakSaiSai(`جنس شماره ${itemIndex + 1} را بگویید، همراه با تعداد و قیمت واحد. اگر تمام شد، بگویید تمام.`);
-        await prepareSpeechRecognition();
-        const nextResult = await SpeechRecognition.start({
-          language: "fa-IR",
-          maxResults: 5,
-          partialResults: false,
-          popup: false,
-          prompt: "جنس بعدی، تعداد و قیمت واحد را بگویید؛ برای پایان بگویید تمام",
-        });
-        const nextTranscript = nextResult.matches?.[0]?.trim() || "";
-        if (!nextTranscript) {
-          await speakSaiSai("صدایی تشخیص داده نشد. برای پایان دوباره بگویید تمام، یا جنس بعدی را بگویید.");
-          itemIndex--;
-          continue;
+        let nextTranscript = "";
+        try {
+          nextTranscript = await listenForSaleTurn("جنس بعدی، تعداد و قیمت واحد را بگویید؛ برای پایان بگویید تمام");
+        } catch {
+          // Don't loop forever on Android's intermittent Persian NO_MATCH response.
+          if (collectedItems.length) break;
+          throw new Error("جنس تشخیص داده نشد. دوباره ثبت فروش با صدا را بزنید و نزدیک میکروفون صحبت کنید.");
         }
         if (/(^|\s)(تمام|تموم|پایان|پایان فروش|فاکتور|ثبت فاکتور|دیگه ندارم|جنس دیگری نیست)(\s|$)/i.test(nextTranscript)) break;
         transcripts.push(nextTranscript);
