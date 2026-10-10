@@ -411,19 +411,24 @@ async function fileToDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(new Error("خواندن فایل ناموفق بود"));
     reader.readAsDataURL(file);
   });
-  // Resize large phone photos before localStorage to avoid quota failures.
+  // A compact, persistent data URL is important because invoice branding is stored locally.
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error("باز کردن تصویر ناموفق بود")); img.src = raw;
   });
-  const scale = Math.min(1, 1200 / Math.max(image.naturalWidth, image.naturalHeight));
-  if (scale === 1 && raw.length < 700_000) return raw;
+  const maxSide = 640;
+  const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+  if (scale === 1 && raw.length < 250_000) return raw;
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
   canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
   const context = canvas.getContext("2d");
   if (!context) throw new Error("پردازش تصویر در دسترس نیست");
+  // Preserve transparency for PNG signatures and stamps.
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL(file.type === "image/jpeg" || file.type === "image/webp" ? "image/jpeg" : "image/png", 0.82);
+  const outputType = file.type === "image/jpeg" ? "image/jpeg" : "image/png";
+  const result = canvas.toDataURL(outputType, 0.78);
+  if (result.length > 2_500_000) throw new Error("حجم تصویر هنوز زیاد است؛ لطفاً تصویر کوچک‌تری انتخاب کنید");
+  return result;
 }
 function invoiceBrandingModal(): string {
   const b = getInvoiceBranding();
