@@ -1,9 +1,12 @@
-name: Build Android APK
+name: Build and Release Signed Android APK
 
 on:
   workflow_dispatch:
   push:
     branches: [ main, master ]
+
+permissions:
+  contents: write
 
 jobs:
   build-apk:
@@ -46,25 +49,53 @@ jobs:
 
       - name: Build release APK
         working-directory: android
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease --no-daemon
 
-      - name: Sign APK for direct testing
+      - name: Prepare signing key
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/saisai-release.keystore"
+          test -s "$RUNNER_TEMP/saisai-release.keystore"
+
+      - name: Sign APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
           APK_DIR="android/app/build/outputs/apk/release"
-          UNSIGNED_APK="$APK_DIR/app-release-unsigned.apk"
-          KEYSTORE="$RUNNER_TEMP/sayar-test.keystore"
-          keytool -genkeypair -v -keystore "$KEYSTORE" -storepass android -keypass android -alias sayar-test -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Sayar Test, OU=Testing, O=Sayar, L=Baku, ST=Baku, C=AZ"
+          INPUT_APK="$APK_DIR/app-release-unsigned.apk"
+          if [ ! -f "$INPUT_APK" ]; then
+            INPUT_APK="$(find "$APK_DIR" -maxdepth 1 -name '*.apk' ! -name '*signed*' | head -n 1)"
+          fi
+          test -n "$INPUT_APK" && test -f "$INPUT_APK"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -n "$APKSIGNER"
-          "$APKSIGNER" sign --ks "$KEYSTORE" --ks-pass pass:android --key-pass pass:android --out "$APK_DIR/app-release.apk" "$UNSIGNED_APK"
-          "$APKSIGNER" verify "$APK_DIR/app-release.apk"
+          "$APKSIGNER" sign --ks "$RUNNER_TEMP/saisai-release.keystore" --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" --key-pass "pass:$ANDROID_KEY_PASSWORD" --ks-key-alias "$ANDROID_KEY_ALIAS" --out "$APK_DIR/SaiSai-signed.apk" "$INPUT_APK"
+          "$APKSIGNER" verify --verbose "$APK_DIR/SaiSai-signed.apk"
 
-      - name: Show generated APK
-        run: find android/app/build/outputs/apk -type f -name "*.apk" -print
+      - name: Stop if release signing secrets are missing
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 == '' || secrets.ANDROID_KEYSTORE_PASSWORD == '' || secrets.ANDROID_KEY_ALIAS == '' || secrets.ANDROID_KEY_PASSWORD == '' }}
+        run: |
+          echo "::error::Add ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD in repository Settings > Secrets and variables > Actions."
+          exit 1
 
-      - name: Upload APK
+      - name: Upload signed APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Sayar-release-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
+          name: SaySai-signed-APK
+          path: android/app/build/outputs/apk/release/SaiSai-signed.apk
           if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.${{ github.run_number }}
+          name: SaySai v0.1.${{ github.run_number }}
+          generate_release_notes: true
+          files: android/app/build/outputs/apk/release/SaiSai-signed.apk
