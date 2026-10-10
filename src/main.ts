@@ -76,7 +76,6 @@ modal.insertAdjacentHTML(
 modal.querySelector("#auth-logout")?.addEventListener("click", () => {
   localStorage.removeItem("sai-sai-unlocked");
   modal.remove();
-  document.body.innerHTML = "";
 authScreen(() => {
   localStorage.setItem("sai-sai-unlocked", "1");
   void render();
