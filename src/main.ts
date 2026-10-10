@@ -1,4 +1,5 @@
 import "./style.css";
+import { authScreen } from "./auth";
 import { Capacitor } from "@capacitor/core";
 import { App } from "@capacitor/app";
 import { Filesystem, Directory } from "@capacitor/filesystem";
