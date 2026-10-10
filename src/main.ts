@@ -76,7 +76,11 @@ modal.insertAdjacentHTML(
 modal.querySelector("#auth-logout")?.addEventListener("click", () => {
   localStorage.removeItem("sai-sai-unlocked");
   modal.remove();
-  location.reload();
+  document.body.innerHTML = "";
+authScreen(() => {
+  localStorage.setItem("sai-sai-unlocked", "1");
+  void render();
+});
 }); 
   modal.querySelector("#settings-close")?.addEventListener("click", () => modal.remove());
   modal.querySelector("#pricing-settings")?.addEventListener("click", async () => { modal.remove(); document.body.insertAdjacentHTML("beforeend", pricingSettingsModal()); bindPricingSettingsModal(); });
