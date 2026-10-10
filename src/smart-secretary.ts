@@ -83,9 +83,18 @@ export function openSmartSecretary():void{
  document.querySelector("#secretary-form")?.addEventListener("submit",e=>{e.preventDefault();const input=document.querySelector<HTMLInputElement>("#secretary-input");if(input){const v=input.value;input.value="";void send(v);}});
  document.querySelector("#secretary-mic")?.addEventListener("click",async()=>{
   const button=document.querySelector<HTMLButtonElement>("#secretary-mic");if(!button)return;
-  try{const permission=await SpeechRecognition.requestPermissions();if(permission.speechRecognition!=="granted"){addMessage("assistant","برای استفاده از میکروفون، اجازه تشخیص گفتار را فعال کنید.");return;}
-   listening=true;button.disabled=true;button.textContent="در حال شنیدن…";await SpeechRecognition.start({language:"fa-IR",maxResults:1,partialResults:false,popup:false});
-  }catch{listening=false;button.disabled=false;button.textContent="🎙 صحبت کردن";addMessage("assistant","تشخیص صدا شروع نشد. اجازه میکروفون و سرویس گفتار گوشی را بررسی کنید.");}
+  try{
+   const available=await SpeechRecognition.available().catch(()=>({available:false}));
+   if(!available.available){addMessage("assistant","سرویس تشخیص گفتار روی گوشی در دسترس نیست. در تنظیمات گوشی، برنامه Google و سرویس «Speech Recognition and Synthesis» را فعال یا به‌روز کنید؛ سپس گوشی را یک‌بار راه‌اندازی مجدد کنید.");return;}
+   const permission=await SpeechRecognition.requestPermissions();
+   if(permission.speechRecognition!=="granted"){addMessage("assistant","مجوز تشخیص گفتار داده نشد. از تنظیمات گوشی > برنامه‌ها > سای‌سای، مجوز میکروفون را فعال کنید.");return;}
+   try{const state=await SpeechRecognition.isListening();if(state.listening)await SpeechRecognition.stop().catch(()=>undefined);}catch{}
+   listening=true;button.disabled=true;button.textContent="در حال شنیدن…";
+   await SpeechRecognition.start({language:"fa-IR",maxResults:1,partialResults:false,popup:false});
+  }catch(error){listening=false;button.disabled=false;button.textContent="🎙 صحبت کردن";
+   const detail=error instanceof Error?error.message:"";
+   addMessage("assistant",/permission|denied/i.test(detail)?"دسترسی میکروفون یا تشخیص گفتار رد شده است؛ مجوزهای سای‌سای را بررسی کنید.":"سرویس تشخیص گفتار فارسی شروع نشد. سرویس گفتار Google را فعال و به‌روز کنید؛ اگر باز هم کار نکرد، فعلاً سؤال را در کادر بنویسید.");
+  }
  });
  void SpeechRecognition.addListener("partialResults",e=>{const t=e.matches?.[0]?.trim();if(!t||!document.querySelector("#secretary-modal"))return;const input=document.querySelector<HTMLInputElement>("#secretary-input");if(input)input.value=t;});
  void SpeechRecognition.addListener("listeningState",e=>{if(e.status==="stopped"){listening=false;const b=document.querySelector<HTMLButtonElement>("#secretary-mic");if(b){b.disabled=false;b.textContent="🎙 صحبت کردن";}const input=document.querySelector<HTMLInputElement>("#secretary-input");if(input?.value.trim()){const v=input.value;input.value="";void send(v);}}});
