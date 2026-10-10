@@ -42,10 +42,13 @@ jobs:
         run: npx cap sync android
 
       - name: Install Android icon rendering dependencies
-        run: python3 -m pip install --break-system-packages cairosvg Pillow
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install cairosvg Pillow
 
       - name: Restore Sai Sai launcher logo
-        run: python3 scripts/restore-android-icon.py
+        run: .venv/bin/python scripts/restore-android-icon.py
 
       - name: Build release APK
         working-directory: android
