@@ -90,7 +90,11 @@ export function openSmartSecretary():void{
    if(permission.speechRecognition!=="granted"){addMessage("assistant","مجوز تشخیص گفتار داده نشد. از تنظیمات گوشی > برنامه‌ها > سای‌سای، مجوز میکروفون را فعال کنید.");return;}
    try{const state=await SpeechRecognition.isListening();if(state.listening)await SpeechRecognition.stop().catch(()=>undefined);}catch{}
    listening=true;button.disabled=true;button.textContent="در حال شنیدن…";
-   await SpeechRecognition.start({language:"fa-IR",maxResults:1,partialResults:false,popup:false});
+   const result=await SpeechRecognition.start({language:"fa-IR",maxResults:1,partialResults:false,popup:false});
+   const transcript=result.matches?.[0]?.trim()||"";
+   listening=false;button.disabled=false;button.textContent="🎙 صحبت کردن";
+   if(transcript){const input=document.querySelector<HTMLInputElement>("#secretary-input");if(input)input.value=transcript;await send(transcript);}
+   else addMessage("assistant","صدایی به متن تبدیل نشد. دوباره صحبت کنید یا سؤال را تایپ کنید.");
   }catch(error){listening=false;button.disabled=false;button.textContent="🎙 صحبت کردن";
    const detail=error instanceof Error?error.message:"";
    addMessage("assistant",/permission|denied/i.test(detail)?"دسترسی میکروفون یا تشخیص گفتار رد شده است؛ مجوزهای سای‌سای را بررسی کنید.":"سرویس تشخیص گفتار فارسی شروع نشد. سرویس گفتار Google را فعال و به‌روز کنید؛ اگر باز هم کار نکرد، فعلاً سؤال را در کادر بنویسید.");
