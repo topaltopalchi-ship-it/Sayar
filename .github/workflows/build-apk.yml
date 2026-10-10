@@ -51,24 +51,74 @@ jobs:
       - name: Restore Sai Sai launcher logo
         run: .venv/bin/python scripts/restore-android-icon.py
 
-      - name: Build release APK
+      - name: Check signing secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_B64" || (echo "ANDROID_KEYSTORE_BASE64 is missing" && exit 1)
+          test -n "$KEYSTORE_PASSWORD" || (echo "ANDROID_KEYSTORE_PASSWORD is missing" && exit 1)
+          test -n "$KEY_ALIAS" || (echo "ANDROID_KEY_ALIAS is missing" && exit 1)
+          test -n "$KEY_PASSWORD" || (echo "ANDROID_KEY_PASSWORD is missing" && exit 1)
+
+      - name: Install stable release keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > android/app/sai-sai-upload.jks
+          chmod 600 android/app/sai-sai-upload.jks
+
+      - name: Configure stable release signing
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path("android/app/build.gradle")
+          s = p.read_text()
+          signing = '''
+              signingConfigs {
+                  release {
+                      storeFile file("sai-sai-upload.jks")
+                      storePassword System.getenv("KEYSTORE_PASSWORD")
+                      keyAlias System.getenv("KEY_ALIAS")
+                      keyPassword System.getenv("KEY_PASSWORD")
+                  }
+              }
+          '''
+          if "signingConfigs {" not in s:
+              s = s.replace("  buildTypes {", signing + "  buildTypes {", 1)
+          if "signingConfig signingConfigs.release" not in s:
+              s, n = re.subn(r"(buildTypes\\s*\\{\\s*release\\s*\\{)", r"\\1\\n      signingConfig signingConfigs.release", s, count=1)
+              if n != 1:
+                  raise SystemExit("buildTypes.release not found")
+          p.write_text(s)
+          PY
+
+      - name: Build signed release APK
         working-directory: android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew assembleRelease --no-daemon
 
-      - name: Generate temporary signing key
-        run: |
-          keytool -genkeypair -v -keystore "$RUNNER_TEMP/saisai-release.keystore" -storepass "saisai-temp-pass" -keypass "saisai-temp-pass" -alias saisai-release -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=SAI SAI, OU=Release, O=SAI SAI, L=Baku, ST=Baku, C=AZ"
-      - name: Sign APK
+      - name: Verify and name signed APK
         run: |
           set -euo pipefail
           APK_DIR="android/app/build/outputs/apk/release"
-          INPUT_APK="$APK_DIR/app-release-unsigned.apk"
-          if [ ! -f "$INPUT_APK" ]; then INPUT_APK="$(find "$APK_DIR" -maxdepth 1 -name '*.apk' ! -name '*signed*' | head -n 1)"; fi
-          test -n "$INPUT_APK" && test -f "$INPUT_APK"
+          INPUT_APK="$APK_DIR/app-release.apk"
+          test -f "$INPUT_APK"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -n "$APKSIGNER"
-          "$APKSIGNER" sign --ks "$RUNNER_TEMP/saisai-release.keystore" --ks-pass pass:saisai-temp-pass --key-pass pass:saisai-temp-pass --ks-key-alias saisai-release --out "$APK_DIR/SaiSai-signed.apk" "$INPUT_APK"
-          "$APKSIGNER" verify --verbose "$APK_DIR/SaiSai-signed.apk"
+          "$APKSIGNER" verify --verbose "$INPUT_APK"
+          cp "$INPUT_APK" "$APK_DIR/SaiSai-signed.apk"
+
       - name: Upload signed APK artifact
         uses: actions/upload-artifact@v4
         with:
