@@ -1010,15 +1010,13 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const range = localStorage.getItem("sai-sai-report-range") || "month";
   const now = new Date(); now.setHours(23,59,59,999);
   const start = new Date(now); start.setHours(0,0,0,0);
-  if (range === "week") start.setDate(start.getDate() - 6);
-  else if (range === "all") start.setTime(0);
+  if (range === "week") { const day = start.getDay(); start.setDate(start.getDate() - ((day + 6) % 7)); }
   else if (range === "month") start.setDate(1);
+  else if (range === "lastmonth") { start.setMonth(start.getMonth() - 1, 1); const last = new Date(now.getFullYear(), now.getMonth(), 0); now.setTime(last.getTime()); now.setHours(23,59,59,999); }
+  else if (range === "year") start.setMonth(0, 1);
+  else if (range === "all") start.setTime(0);
   let from = start.getTime(), to = now.getTime();
-  if (range === "custom") {
-    const fromDate = jalaliToGregorianDate(localStorage.getItem("sai-sai-report-from") || "");
-    const toDate = jalaliToGregorianDate(localStorage.getItem("sai-sai-report-to") || "");
-    if (fromDate && toDate) { fromDate.setHours(0,0,0,0); toDate.setHours(23,59,59,999); from = fromDate.getTime(); to = toDate.getTime(); }
-  }
+  if (range === "custom") localStorage.setItem("sai-sai-report-range", "month");
   const inRange = (d: number) => d >= from && d <= to;
   const salesTx = transactions.filter(t => t.type === "sale" && inRange(t.date));
   const purchaseTx = transactions.filter(t => t.type === "purchase" && inRange(t.date));
@@ -1033,25 +1031,8 @@ async function reportsView(transactions: Transaction[]): Promise<string> {
   const expenseTotal = expenseTx.reduce((s,e)=>s+e.amount,0);
   const cost = salesTx.reduce((s,t)=>s+(cogs.get(t.id) ?? t.costOfGoods ?? 0),0);
   const gross = sales-cost, net=gross-expenseTotal;
-  const label = range==="today"?"امروز":range==="week"?"۷ روز اخیر":range==="all"?"همه":range==="custom"?"بازه انتخابی":"ماه جاری";
-  // Keep the visible value in yyyy/mm/dd form. The parser accepts both
-  // formatted and compact values, but the UI should always show separators.
-  const defaultFrom = formatJalaliInput(localStorage.getItem("sai-sai-report-from") || todayJalaliInput());
-  const defaultTo = formatJalaliInput(localStorage.getItem("sai-sai-report-to") || todayJalaliInput());
-
-  const dateParts = (prefix: "from" | "to", value: string) => {
-    const formatted = formatJalaliInput(value);
-    return `
-      <div class="field report-date">
-        <span>${prefix === "from" ? "از تاریخ شمسی" : "تا تاریخ شمسی"}</span>
-        <div class="jalali-date-control"><input id="report-${prefix}-date" class="report-date-input" data-report-date-input="${prefix}" type="text" inputmode="numeric" maxlength="10" value="${formatted}" placeholder="۱۴۰۵/۰۷/۱۶" aria-label="${prefix === "from" ? "از تاریخ" : "تا تاریخ"}"><button type="button" class="secondary-button jalali-calendar-open" data-calendar-target="report-${prefix}-date">تقویم</button></div>
-      </div>`;
-  };
-  const summary = `<section class="panel report-list" id="report-range-panel"><div class="report-range" role="group" aria-label="بازه گزارش"><button type="button" class="report-range-item" data-report-range="today">امروز</button><button type="button" class="report-range-item" data-report-range="week">۷ روز</button><button type="button" class="report-range-item" data-report-range="month">ماه جاری</button><button type="button" class="report-range-item" data-report-range="all">همه</button></div><form id="report-range-form" class="report-custom-range">
-  ${dateParts("from", defaultFrom)}
-  ${dateParts("to", defaultTo)}
-  <button type="submit" class="primary-button wide" id="report-apply-range">اعمال بازه</button>
-</form><p class="muted">بازه فعال: ${label}</p></section>`;
+  const label = range==="today"?"امروز":range==="week"?"این هفته":range==="lastmonth"?"ماه قبل":range==="year"?"امسال":range==="all"?"همه":range==="custom"?"بازه دلخواه":"این ماه";
+  const summary = `<section class="panel report-list" id="report-range-panel"><div class="report-range" role="group" aria-label="بازه گزارش"><button type="button" class="report-range-item" data-report-range="today">امروز</button><button type="button" class="report-range-item" data-report-range="week">این هفته</button><button type="button" class="report-range-item" data-report-range="month">این ماه</button><button type="button" class="report-range-item" data-report-range="lastmonth">ماه قبل</button><button type="button" class="report-range-item" data-report-range="year">امسال</button><button type="button" class="report-range-item" data-report-range="all">همه</button></div><p class="muted">بازه فعال: ${label}</p></section>`;
   const stats = `<section class="stats-grid">${stat("فروش",rial(sales),"primary")}${stat("بهای تمام‌شده",rial(cost),"warning")}${stat("سود ناخالص",rial(gross),"success")}${stat("سود خالص",rial(net),"success")}</section>`;
   const cash = `<section class="panel report-list"><div><span>خرید</span><b>${rial(purchases)}</b></div><div><span>هزینه</span><b>${rial(expenseTotal)}</b></div><div><span>دریافت</span><b>${rial(receipts)}</b></div><div><span>پرداخت</span><b>${rial(payments)}</b></div><div><span>خالص جریان نقدی</span><b>${rial(receipts-payments-expenseTotal)}</b></div><div><span>تعداد فروش</span><b>${money.format(salesTx.length)}</b></div></section>`;
   const expenseRows = expenseTx.length
@@ -1493,11 +1474,6 @@ function bindReportControls(): void {
     showToast("بازه گزارش اعمال شد");
   };
 
-  document.querySelectorAll<HTMLButtonElement>(".jalali-calendar-open").forEach(button => button.addEventListener("click", () => {
-    const target = button.dataset.calendarTarget || "";
-    const input = document.getElementById(target) as HTMLInputElement | null;
-    if (input) openJalaliCalendar(target, input.value);
-  }));
   document.querySelector("#report-range-form")?.addEventListener("submit", event => {
     event.preventDefault();
     void applyReportRange();
