@@ -553,3 +553,30 @@ body{background:radial-gradient(circle at 12% 0,#223657 0,#10182a 34%,#090e1b 78
 #invoice-branding-modal .branding-preview img { max-width: 100%; max-height: 120px; object-fit: contain; }
 .invoice-slogan { display: flex; justify-content: center; margin: 14px 0; }
 .invoice-slogan img { display: block; max-width: min(100%, 240px); max-height: 90px; object-fit: contain; }
+
+
+/* Fix: keep the pricing & capital protection form scrollable above Android system navigation. */
+#pricing-settings-modal.modal-backdrop {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: max(14px, env(safe-area-inset-top, 0px)) 12px max(32px, calc(env(safe-area-inset-bottom, 0px) + 24px)) !important;
+}
+#pricing-settings-modal > .modal {
+  flex: 0 0 auto;
+  max-height: none !important;
+  margin: 0 auto;
+  padding-bottom: max(28px, calc(env(safe-area-inset-bottom, 0px) + 20px)) !important;
+}
+#pricing-settings-modal .form-grid {
+  gap: 12px;
+}
+#pricing-settings-modal .field input {
+  min-height: 48px;
+  font-size: 16px;
+}
