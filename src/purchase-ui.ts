@@ -71,7 +71,14 @@ export function openPurchaseModal(products: Product[], parties: Party[], rial: M
   [q, price, discount, paid].forEach(input => input.addEventListener("input", updateTotal));
   modal.querySelector<HTMLButtonElement>("#purchase-close")!.addEventListener("click", () => modal.remove());
 
-  modal.querySelector<HTMLButtonElement>("#purchase-submit")!.addEventListener("click", async () => {
+  const submitButton = modal.querySelector<HTMLButtonElement>("#purchase-submit")!;
+  submitButton.type = "button";
+  submitButton.addEventListener("click", async (event) => {
+    event.preventDefault();
+    if (submitButton.disabled) return;
+    submitButton.disabled = true;
+    const originalText = submitButton.textContent || "ثبت خرید و افزایش موجودی";
+    submitButton.textContent = "در حال ثبت خرید…";
     try {
       const p = products.find(item => item.id === product.value);
       const quantity = Number(q.value);
@@ -107,6 +114,8 @@ export function openPurchaseModal(products: Product[], parties: Party[], rial: M
       done(existing ? "خرید ویرایش شد" : "خرید ثبت شد؛ موجودی " + quantity + " " + p.unit + " افزایش یافت");
     } catch (error) {
       done(error instanceof Error ? error.message : "ثبت ناموفق بود");
+      submitButton.disabled = false;
+      submitButton.textContent = originalText;
     }
   });
   updateTotal();
