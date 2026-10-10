@@ -1639,7 +1639,7 @@ return receiptCommand ? ("دریافت " + rial(commandAmount) + " از " + comm
       const orders = await listOrders();
       if (!orders.length) return "هنوز سفارشی ثبت نشده است.";
       const statusLabel: Record<string,string> = { pending:"در انتظار", completed:"تکمیل‌شده", cancelled:"لغوشده", delivered:"تحویل‌شده" };
-      return "لیست سفارش‌ها، " + orders.length + " مورد: " + orders.slice(0,10).map((o,i) => (i+1)+") "+(o as any).description || "سفارش").join("؛ ");
+      return "لیست سفارش‌ها، " + orders.length + " مورد: " + orders.slice(0,10).map((o,i) => (i+1)+") "+(o.customerName || "بدون نام مشتری")+"، تعداد "+o.quantity+"، وضعیت "+({pending:"در انتظار",completed:"تکمیل‌شده",cancelled:"لغوشده"}[o.status] || o.status)+"، موعد "+new Intl.DateTimeFormat("fa-IR-u-ca-persian").format(new Date(o.deliveryDate))+(o.note ? "، "+o.note : "")).join("؛ ");
     }
     if (/لیست چک(?:های|‌های)? دریافتی|چک‌های دریافتی|چک دریافتی|چکهای دریافتی/.test(q)) {
       const checks = (await listChecks()).filter(c => c.direction === "received");
