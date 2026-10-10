@@ -644,7 +644,7 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
     submitButton.textContent = "در حال ثبت فاکتور…";
     try {
       const customerName = modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value.trim();
-      if (!customerName) throw new Error("نام مشتری الزامی است");
+      // Customer name is optional; allow quick cash sales without entering a name.
       const data = lineData();
       if (!data.length || data.some(x => !x.p || x.quantity <= 0 || x.unitPrice <= 0 || x.discount < 0 || x.discount > x.quantity * x.unitPrice)) throw new Error("کالا، مقدار، قیمت و تخفیف همه اقلام را بررسی کنید");
       const pricingSettings = getMarketSettings();
