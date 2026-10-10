@@ -41,16 +41,21 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Ensure Android speech recognition permission
+      - name: Ensure Android camera and speech permissions
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p = Path("android/app/src/main/AndroidManifest.xml")
           s = p.read_text()
-          permission = '    <uses-permission android:name="android.permission.RECORD_AUDIO" />'
-          if "android.permission.RECORD_AUDIO" not in s:
-              s = s.replace("<application", permission + "\n    <application", 1)
-              p.write_text(s)
+          permissions = [
+              "android.permission.CAMERA",
+              "android.permission.RECORD_AUDIO",
+              "android.permission.MODIFY_AUDIO_SETTINGS",
+          ]
+          for name in permissions:
+              if name not in s:
+                  s = s.replace("<application", f'    <uses-permission android:name="{name}" />\\n    <application', 1)
+          p.write_text(s)
           PY
 
       - name: Apply Say-Say app icon

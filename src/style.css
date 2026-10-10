@@ -635,3 +635,45 @@ body{background:radial-gradient(circle at 12% 0,#223657 0,#10182a 34%,#090e1b 78
 }
 #secretary-mic { min-height: 46px; }
 #secretary-mic:disabled { opacity: .65; }
+
+
+/* Smart secretary: fit the usable phone viewport and keep the conversation scrollable. */
+#secretary-modal.modal-backdrop {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden !important;
+  padding: max(8px, env(safe-area-inset-top, 0px)) 10px max(8px, env(safe-area-inset-bottom, 0px)) !important;
+}
+#secretary-modal .secretary-modal {
+  width: min(100%, 560px) !important;
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px) !important;
+  min-height: 0;
+  overflow: hidden;
+  padding: clamp(14px, 3.5vw, 24px);
+  gap: clamp(7px, 1.5vh, 12px);
+}
+#secretary-modal .secretary-modal > .muted,
+#secretary-modal .secretary-modal > small { margin: 0; }
+#secretary-modal .secretary-messages {
+  flex: 1 1 auto;
+  min-height: 72px;
+  max-height: none;
+  height: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+#secretary-modal .secretary-form { flex: 0 0 auto; min-width: 0; }
+#secretary-modal #secretary-input { font-size: 16px; }
+#secretary-modal #secretary-mic { flex: 0 0 auto; }
+@media (max-height: 620px) {
+  #secretary-modal .secretary-modal { gap: 6px; padding: 12px; }
+  #secretary-modal .secretary-modal > .muted,
+  #secretary-modal .secretary-modal > small { font-size: 10px; line-height: 1.5; }
+  #secretary-modal .secretary-modal h2 { font-size: 18px; }
+  #secretary-modal .secretary-messages { min-height: 48px; padding: 8px; }
+  #secretary-modal #secretary-mic { min-height: 40px; padding: 8px; }
+}
