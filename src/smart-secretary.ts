@@ -25,7 +25,7 @@ function addMessage(role: ChatMessage["role"], text: string): void {
 function localReply(text: string): string {
   const q = text.trim();
   if (/^(سلام|درود|صبح بخیر|عصر بخیر)/.test(q)) return "سلام! منشی سای‌سای آماده‌ام. چه کاری برایتان انجام بدهم؟";
-  if (/ساعت|تاریخ|امروز/.test(q)) return `امروز ${new Intl.DateTimeFormat("fa-IR-u-ca-persian", { dateStyle: "full" }).format(new Date()) است. برای ساعت دقیق، ساعت گوشی را بررسی کنید.`;
+  if (/ساعت|تاریخ|امروز/.test(q)) return "امروز " + new Intl.DateTimeFormat("fa-IR-u-ca-persian").format(new Date()) + " است. برای ساعت دقیق، ساعت گوشی را بررسی کنید.";
   if (/یادآور|یادم بنداز|یادآوری/.test(q)) return "بخش گفت‌وگو آماده است؛ برای یادآوری واقعی باید زمان و اجازه اعلان‌ها مشخص شود. اتصال یادآورها در مرحله بعد اضافه می‌شود.";
   return "پیامتان را دریافت کردم. گفت‌وگوی فعلی هنوز به مدل هوش مصنوعی متصل نیست؛ برای پاسخ هوشمند واقعی باید یک بک‌اند امن وصل کنیم تا کلید API داخل برنامه اندروید قرار نگیرد.";
 }
