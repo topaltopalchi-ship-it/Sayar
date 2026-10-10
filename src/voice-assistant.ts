@@ -323,8 +323,48 @@ export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise
       });
       const transcript = result.matches?.[0]?.trim() || "";
       if (!transcript) throw new Error("صدایی تشخیص داده نشد");
-      const draft = parseVoiceSale(transcript);
-      speakSaiSai("صدایتان را شنیدم. اطلاعات فروش آماده بررسی است.");
+      const firstDraft = parseVoiceSale(transcript);
+      const collectedItems: VoiceSaleItem[] = [...firstDraft.items];
+      const transcripts = [transcript];
+      let customerName = firstDraft.customerName;
+      let paid = firstDraft.paid;
+      // Record one item per listening turn, then collect the next until the user says they're done.
+      for (let itemIndex = 1; itemIndex < 30; itemIndex++) {
+        await speakSaiSai(`جنس شماره ${itemIndex + 1} را بگویید، همراه با تعداد و قیمت واحد. اگر تمام شد، بگویید تمام.`);
+        await prepareSpeechRecognition();
+        const nextResult = await SpeechRecognition.start({
+          language: "fa-IR",
+          maxResults: 5,
+          partialResults: false,
+          popup: false,
+          prompt: "جنس بعدی، تعداد و قیمت واحد را بگویید؛ برای پایان بگویید تمام",
+        });
+        const nextTranscript = nextResult.matches?.[0]?.trim() || "";
+        if (!nextTranscript) {
+          await speakSaiSai("صدایی تشخیص داده نشد. برای پایان دوباره بگویید تمام، یا جنس بعدی را بگویید.");
+          itemIndex--;
+          continue;
+        }
+        if (/(^|\\s)(تمام|تموم|پایان|پایان فروش|فاکتور|ثبت فاکتور|دیگه ندارم|جنس دیگری نیست)(\\s|$)/i.test(nextTranscript)) break;
+        transcripts.push(nextTranscript);
+        const nextDraft = parseVoiceSale(nextTranscript);
+        if (nextDraft.items.length) collectedItems.push(...nextDraft.items);
+        else if (nextDraft.productHint) collectedItems.push({ productHint: nextDraft.productHint, quantity: nextDraft.quantity || 1, unitPrice: nextDraft.unitPrice || 0 });
+        if (!customerName && nextDraft.customerName) customerName = nextDraft.customerName;
+        if (nextDraft.paid > 0) paid = nextDraft.paid;
+        await speakSaiSai(`جنس ${itemIndex + 1} دریافت شد.`);
+      }
+      const draft: VoiceSaleDraft = {
+        ...firstDraft,
+        transcript: transcripts.join("؛ "),
+        customerName,
+        paid,
+        items: collectedItems,
+        productHint: collectedItems[0]?.productHint || firstDraft.productHint,
+        quantity: collectedItems[0]?.quantity || firstDraft.quantity,
+        unitPrice: collectedItems[0]?.unitPrice || firstDraft.unitPrice,
+      };
+      speakSaiSai(`${draft.items.length} قلم کالا شنیده شد. حالا فاکتور را بررسی کنید.`);
       const m = showVoiceModal(
         '<div class="modal-backdrop" id="voice-sale-modal"><section class="modal" role="dialog" aria-modal="true">' +
         '<button class="modal-close" id="voice-close">×</button><span class="eyebrow">ثبت فروش با صدا</span><h2>اطلاعات فروش</h2>' +
