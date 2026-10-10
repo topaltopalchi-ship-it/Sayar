@@ -677,3 +677,48 @@ body{background:radial-gradient(circle at 12% 0,#223657 0,#10182a 34%,#090e1b 78
   #secretary-modal .secretary-messages { min-height: 48px; padding: 8px; }
   #secretary-modal #secretary-mic { min-height: 40px; padding: 8px; }
 }
+
+
+/* High-contrast fixes for the dark smart-secretary dialog on Android. */
+#secretary-modal .secretary-messages {
+  background: #111c2e !important;
+  border-color: #334155 !important;
+}
+#secretary-modal .secretary-message.assistant {
+  background: #243247 !important;
+  color: #f8fafc !important;
+  border: 1px solid #475569 !important;
+  opacity: 1 !important;
+}
+#secretary-modal .secretary-message.user {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+#secretary-modal #secretary-input {
+  background: #263449 !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffffff !important;
+  border-color: #64748b !important;
+  opacity: 1 !important;
+}
+#secretary-modal #secretary-input::placeholder {
+  color: #cbd5e1 !important;
+  -webkit-text-fill-color: #cbd5e1 !important;
+  opacity: 1 !important;
+}
+#secretary-modal .secretary-modal > .muted,
+#secretary-modal .secretary-modal > small {
+  color: #cbd5e1 !important;
+  opacity: 1 !important;
+}
+#secretary-modal #secretary-mic,
+#secretary-modal .secretary-form button {
+  opacity: 1 !important;
+  color: #ffffff !important;
+}
+#secretary-modal #secretary-mic {
+  background: #17263b !important;
+  border: 1px solid #475569 !important;
+}
