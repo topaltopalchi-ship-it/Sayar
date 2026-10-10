@@ -345,7 +345,7 @@ export function bindVoiceAssistant(onConfirm: (draft: VoiceSaleDraft) => Promise
           itemIndex--;
           continue;
         }
-        if (/(^|\\s)(تمام|تموم|پایان|پایان فروش|فاکتور|ثبت فاکتور|دیگه ندارم|جنس دیگری نیست)(\\s|$)/i.test(nextTranscript)) break;
+        if (/(^|\s)(تمام|تموم|پایان|پایان فروش|فاکتور|ثبت فاکتور|دیگه ندارم|جنس دیگری نیست)(\s|$)/i.test(nextTranscript)) break;
         transcripts.push(nextTranscript);
         const nextDraft = parseVoiceSale(nextTranscript);
         if (nextDraft.items.length) collectedItems.push(...nextDraft.items);
