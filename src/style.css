@@ -525,3 +525,31 @@ body{background:radial-gradient(circle at 12% 0,#223657 0,#10182a 34%,#090e1b 78
   opacity: 1 !important;
   text-shadow: none !important;
 }
+
+
+/* Invoice branding dialog must sit above the invoice view and be independently scrollable. */
+#invoice-branding-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 10000 !important;
+  display: block !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  padding: max(16px, env(safe-area-inset-top)) 12px max(20px, env(safe-area-inset-bottom)) !important;
+  background: #020617d9 !important;
+  -webkit-overflow-scrolling: touch;
+}
+#invoice-branding-modal .modal {
+  position: relative;
+  width: min(100%, 560px) !important;
+  max-height: none !important;
+  margin: 0 auto !important;
+  overflow: visible !important;
+  padding-bottom: max(24px, env(safe-area-inset-bottom)) !important;
+}
+#invoice-branding-modal .modal-close { position: sticky; top: 0; z-index: 2; }
+#invoice-branding-modal .branding-preview img { max-width: 100%; max-height: 120px; object-fit: contain; }
+.invoice-slogan { display: flex; justify-content: center; margin: 14px 0; }
+.invoice-slogan img { display: block; max-width: min(100%, 240px); max-height: 90px; object-fit: contain; }
