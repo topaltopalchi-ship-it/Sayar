@@ -597,7 +597,7 @@ function saleModal(existing?: Transaction): string {
       <label class="field"><span>مبلغ پرداختی (${getCurrencyLabel()})</span><input id="sale-paid" type="text" inputmode="numeric" autocomplete="off" value="${moneyInputValue(existing?.paid ?? 0)}"></label>
       <label class="field"><span>دریافت به</span><select id="sale-account"><option value="">بدون انتخاب حساب</option>${accountOptions}</select></label>
       <div class="sale-summary"><span>مبلغ فاکتور</span><strong id="sale-total">۰ ریال</strong></div>
-      <button class="primary-button wide" id="sale-submit">${existing ? "ذخیره تغییرات فاکتور" : "ثبت فاکتور و کاهش موجودی"}</button>
+      <button type="button" class="primary-button wide" id="sale-submit">${existing ? "ذخیره تغییرات فاکتور" : "ثبت فاکتور و کاهش موجودی"}</button>
     </section></div>`;
 }
 
@@ -636,7 +636,12 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
     }
   });
   modal.querySelector("#sale-close")?.addEventListener("click", () => modal.remove());
-  modal.querySelector("#sale-submit")?.addEventListener("click", async () => {
+  modal.querySelector<HTMLButtonElement>("#sale-submit")?.addEventListener("click", async event => {
+    event.preventDefault();
+    const submitButton = modal.querySelector<HTMLButtonElement>("#sale-submit");
+    if (!submitButton || submitButton.disabled) return;
+    submitButton.disabled = true;
+    submitButton.textContent = "در حال ثبت فاکتور…";
     try {
       const customerName = modal.querySelector<HTMLInputElement>("#sale-customer-name")!.value.trim();
       if (!customerName) throw new Error("نام مشتری الزامی است");
@@ -660,7 +665,15 @@ async function openSaleModal(existing?: Transaction): Promise<void> {
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
       try { await openInvoice(savedSale); } catch (error) { showToast(error instanceof Error ? `فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود: ${error.message}` : "فاکتور ثبت شد، اما نمایش فاکتور ناموفق بود"); }
       showToast(`${existing ? "فاکتور ویرایش شد" : "فروش ثبت شد"}؛ مانده ${rial(amount - paidValue)}`);
-    } catch (e) { showToast(e instanceof Error ? e.message : "ثبت فروش ناموفق بود"); }
+    } catch (e) {
+      console.error("Saysay sale submission failed", e);
+      showToast(e instanceof Error ? e.message : "ثبت فروش ناموفق بود");
+    } finally {
+      if (modal.isConnected && submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = existing ? "ذخیره تغییرات فاکتور" : "ثبت فاکتور و کاهش موجودی";
+      }
+    }
   });
   update();
 }
